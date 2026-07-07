@@ -1,0 +1,61 @@
+{
+  "action": "enrich",
+  "meta": {},
+  "ok": true,
+  "result": {
+    "confidence": "medium",
+    "frontmatter_patch": {
+      "type": "project"
+    },
+    "input": {
+      "given_title": null,
+      "intent": "research dump",
+      "path": "_e2e-test/openclaw-research.md",
+      "source_type": null
+    },
+    "link_insertions": [
+      {
+        "anchor_text": "OpenClaw",
+        "confidence": 0.95,
+        "mode": "inline",
+        "occurs_at_line": 1,
+        "target": "OpenClaw.md",
+        "target_path": "OpenClaw.md"
+      },
+      {
+        "anchor_text": "VPS migration",
+        "confidence": 0.9,
+        "mode": "inline",
+        "occurs_at_line": 1,
+        "target": "OpenClaw VPS migration.md",
+        "target_path": "OpenClaw VPS migration.md"
+      }
+    ],
+    "related_candidates": [
+      {
+        "confidence": 0.85,
+        "reason": "medium-confidence inline link demoted",
+        "target": "Openclaw Claude dot MD.md",
+        "target_path": "Openclaw Claude dot MD.md"
+      },
+      {
+        "confidence": 0.85,
+        "reason": "medium-confidence inline link demoted",
+        "target": "OpenClaw Sandboxing.md",
+        "target_path": "OpenClaw Sandboxing.md"
+      },
+      {
+        "confidence": 0.9,
+        "reason": "Details the Docker isolation aspect of the VPS migration mentioned in the note.",
+        "target": "OpenClaw VPS Migration Plan With Docker.md",
+        "target_path": "OpenClaw VPS Migration Plan With Docker.md"
+      }
+    ],
+    "suggested_path": "_e2e-test/openclaw-research.md",
+    "title": "OpenClaw Project Overview",
+    "title_changed": true,
+    "warnings": [
+      "The note contains duplicated text at the beginning ('OpenClaw is a sandboxing project. Its plugin model keeps components modular. The VPS migration moved')."
+    ]
+  }
+}

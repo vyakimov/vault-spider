@@ -1,0 +1,56 @@
+{
+  "action": "enrich",
+  "meta": {},
+  "ok": true,
+  "result": {
+    "confidence": "high",
+    "frontmatter_patch": {
+      "source_type": "transcript",
+      "type": "transcript"
+    },
+    "input": {
+      "given_title": null,
+      "intent": "interview import",
+      "path": "_e2e-test/interview-transcript.md",
+      "source_type": "transcript"
+    },
+    "link_insertions": [
+      {
+        "anchor_text": "OpenClaw",
+        "confidence": 0.99,
+        "mode": "inline",
+        "occurs_at_line": 1,
+        "target": "OpenClaw",
+        "target_path": "OpenClaw.md"
+      },
+      {
+        "anchor_text": "sandboxing",
+        "confidence": 0.9,
+        "mode": "inline",
+        "occurs_at_line": 2,
+        "target": "OpenClaw Sandboxing",
+        "target_path": "OpenClaw Sandboxing.md"
+      },
+      {
+        "anchor_text": "VPS migration",
+        "confidence": 0.95,
+        "mode": "inline",
+        "occurs_at_line": 2,
+        "target": "OpenClaw VPS migration",
+        "target_path": "OpenClaw VPS migration.md"
+      }
+    ],
+    "related_candidates": [
+      {
+        "confidence": 0.85,
+        "reason": "Provides technical context for the VPS migration discussed in the interview.",
+        "target": "OpenClaw VPS Migration Plan With Docker",
+        "target_path": "OpenClaw VPS Migration Plan With Docker.md"
+      }
+    ],
+    "suggested_path": "_e2e-test/interview-transcript.md",
+    "title": "OpenClaw Interview Transcript",
+    "title_changed": true,
+    "warnings": []
+  }
+}

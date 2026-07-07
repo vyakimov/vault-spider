@@ -1,0 +1,149 @@
+{
+  "create": {
+    "action": "create-note",
+    "meta": {
+      "backend": "obsidian-cli",
+      "dry_run": false,
+      "timing_ms": 11
+    },
+    "ok": true,
+    "result": {
+      "changed": true,
+      "path": "_e2e-test/openclaw-research.md"
+    }
+  },
+  "enrich_ok": true,
+  "plan_confidence": "medium",
+  "merge_dry": {
+    "action": "merge-frontmatter",
+    "meta": {
+      "backend": "obsidian-cli",
+      "dry_run": true,
+      "timing_ms": 13
+    },
+    "ok": true,
+    "result": {
+      "changed": true,
+      "diffs": {
+        "type": {
+          "current": null,
+          "proposed": "project"
+        }
+      },
+      "fields_touched": [
+        "type"
+      ],
+      "skipped": {}
+    }
+  },
+  "merge": {
+    "action": "merge-frontmatter",
+    "meta": {
+      "backend": "obsidian-cli",
+      "dry_run": false,
+      "timing_ms": 11
+    },
+    "ok": true,
+    "result": {
+      "changed": true,
+      "fields_touched": [
+        "type"
+      ],
+      "skipped": {}
+    }
+  },
+  "links_dry": {
+    "action": "add-links",
+    "meta": {
+      "backend": "obsidian-cli",
+      "dry_run": true,
+      "timing_ms": 4
+    },
+    "ok": true,
+    "result": {
+      "changed": true,
+      "links": [
+        {
+          "applied": true,
+          "line": 1,
+          "target": "OpenClaw.md"
+        },
+        {
+          "applied": true,
+          "line": 1,
+          "target": "OpenClaw VPS migration.md"
+        }
+      ],
+      "path": "_e2e-test/openclaw-research.md"
+    }
+  },
+  "links": {
+    "action": "add-links",
+    "meta": {
+      "backend": "obsidian-cli",
+      "dry_run": false,
+      "timing_ms": 9
+    },
+    "ok": true,
+    "result": {
+      "changed": true,
+      "links": [
+        {
+          "applied": true,
+          "line": 1,
+          "target": "OpenClaw.md"
+        },
+        {
+          "applied": true,
+          "line": 1,
+          "target": "OpenClaw VPS migration.md"
+        }
+      ],
+      "path": "_e2e-test/openclaw-research.md"
+    }
+  },
+  "related": {
+    "action": "insert-related",
+    "meta": {
+      "backend": "obsidian-cli",
+      "dry_run": false,
+      "timing_ms": 12
+    },
+    "ok": true,
+    "result": {
+      "added": [
+        "Openclaw Claude dot MD.md",
+        "OpenClaw Sandboxing.md",
+        "OpenClaw VPS Migration Plan With Docker.md"
+      ],
+      "already_present": [],
+      "changed": true,
+      "path": "_e2e-test/openclaw-research.md"
+    }
+  },
+  "rename": {
+    "action": "rename-note",
+    "meta": {
+      "backend": "obsidian-cli",
+      "dry_run": false,
+      "timing_ms": 16
+    },
+    "ok": true,
+    "result": {
+      "changed": true,
+      "links_updated_by": "obsidian",
+      "path_after": "_e2e-test/OpenClaw Project Overview.md",
+      "path_before": "_e2e-test/openclaw-research.md"
+    }
+  },
+  "invariants": {
+    "final_path": "_e2e-test/OpenClaw Project Overview.md",
+    "id_preserved": true,
+    "created_preserved": true,
+    "id0": "01KWY17N6R56VZ9QS76P4EP8SR",
+    "created0": "2026-07-07T12:16:00+02:00",
+    "id1": "01KWY17N6R56VZ9QS76P4EP8SR",
+    "created1": "2026-07-07T12:16:00+02:00",
+    "custom_probe_survived": null
+  }
+}

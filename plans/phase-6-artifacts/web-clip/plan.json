@@ -1,0 +1,57 @@
+{
+  "action": "enrich",
+  "meta": {},
+  "ok": true,
+  "result": {
+    "confidence": "medium",
+    "frontmatter_patch": {
+      "source_type": "web",
+      "source_url": "https://example.com/openclaw-article",
+      "type": "reference"
+    },
+    "input": {
+      "given_title": null,
+      "intent": "web clip",
+      "path": "_e2e-test/web-clip.md",
+      "source_type": "web"
+    },
+    "link_insertions": [
+      {
+        "anchor_text": "OpenClaw sandboxing",
+        "confidence": 0.95,
+        "mode": "inline",
+        "occurs_at_line": 1,
+        "target": "OpenClaw Sandboxing.md",
+        "target_path": "OpenClaw Sandboxing.md"
+      },
+      {
+        "anchor_text": "VPS migration",
+        "confidence": 0.9,
+        "mode": "inline",
+        "occurs_at_line": 1,
+        "target": "OpenClaw VPS migration.md",
+        "target_path": "OpenClaw VPS migration.md"
+      }
+    ],
+    "related_candidates": [
+      {
+        "confidence": 0.95,
+        "reason": "The clipping is fundamentally about the OpenClaw system.",
+        "target": "OpenClaw.md",
+        "target_path": "OpenClaw.md"
+      },
+      {
+        "confidence": 0.85,
+        "reason": "Provides specific details on the VPS migration approach mentioned in the note.",
+        "target": "OpenClaw VPS Migration Plan With Docker.md",
+        "target_path": "OpenClaw VPS Migration Plan With Docker.md"
+      }
+    ],
+    "suggested_path": "_e2e-test/web-clip.md",
+    "title": "OpenClaw Sandboxing and VPS Migration",
+    "title_changed": true,
+    "warnings": [
+      "The note content is extremely brief and consists of a duplicated sentence."
+    ]
+  }
+}
