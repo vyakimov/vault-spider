@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -27,7 +25,6 @@ class OpenRouterClient:
         embedding_model: str,
         chat_model: str,
         rerank_model: Optional[str] = None,
-        judge_model: Optional[str] = None,
         base_url: str = "https://openrouter.ai/api/v1",
         http_referer: Optional[str] = None,
         app_title: Optional[str] = None,
@@ -39,7 +36,6 @@ class OpenRouterClient:
         self.embedding_model = embedding_model
         self.chat_model = chat_model
         self.rerank_model = rerank_model
-        self.judge_model = judge_model
         self.base_url = base_url.rstrip("/")
         self.http_referer = http_referer
         self.app_title = app_title
@@ -54,7 +50,6 @@ class OpenRouterClient:
             ),
             chat_model=os.environ.get("OPENROUTER_CHAT_MODEL", "openai/gpt-4o-mini"),
             rerank_model=os.environ.get("OPENROUTER_RERANK_MODEL") or None,
-            judge_model=os.environ.get("OPENROUTER_JUDGE_MODEL", "minimax/minimax-m2.7") or None,
             base_url=os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
             http_referer=os.environ.get("OPENROUTER_HTTP_REFERER"),
             app_title=os.environ.get("OPENROUTER_APP_TITLE", "Vault RAG"),
@@ -194,136 +189,3 @@ class OpenRouterClient:
         if content is None or content == "":
             content = message.get("reasoning") or ""
         return str(content)
-
-    _JUDGE_SYSTEM_PROMPT = (
-        "You are a strict relevance judge for a personal notes search system. "
-        "Given a user query and a candidate note, decide how well the note actually "
-        "answers the query. Topical overlap is not enough; the note must contain "
-        "information that helps answer the query. Respond with JSON only."
-    )
-
-    _JUDGE_USER_TEMPLATE = (
-        "Query:\n{query}\n\n"
-        "Candidate note:\n{document}\n\n"
-        "Rate the note on this scale:\n"
-        "1 = not relevant (no useful information for this query)\n"
-        "2 = mentions the topic but does not help answer the query\n"
-        "3 = partially helpful (some useful context but does not answer)\n"
-        "4 = mostly answers the query\n"
-        "5 = directly and fully answers the query\n\n"
-        'Respond with JSON of the form {{"score": <integer 1-5>, '
-        '"reasoning": "<one short sentence>"}}.'
-    )
-
-    def _judge_one(
-        self,
-        query: str,
-        document: str,
-        max_document_chars: int,
-    ) -> Dict[str, Any]:
-        truncated = document if len(document) <= max_document_chars else (
-            document[:max_document_chars] + "\n...[truncated]"
-        )
-        user_prompt = self._JUDGE_USER_TEMPLATE.format(query=query, document=truncated)
-        raw = self.chat(
-            system_prompt=self._JUDGE_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            temperature=0.0,
-            max_tokens=1024,
-            model=self.judge_model,
-        )
-        try:
-            parsed = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            return {"score": None, "reasoning": raw}
-        score = parsed.get("score")
-        try:
-            score_int = int(score) if score is not None else None
-        except (TypeError, ValueError):
-            score_int = None
-        return {"score": score_int, "reasoning": parsed.get("reasoning", "")}
-
-    @staticmethod
-    def _score_to_grade(avg: float) -> str:
-        # Map average raw score [1, 5] to an A-F letter (6 equal-width buckets).
-        if avg != avg:  # NaN
-            return "F"
-        bucket = int((avg - 1.0) / (4.0 / 6.0))
-        bucket = max(0, min(5, bucket))
-        return "FEDCBA"[bucket]
-
-    def judge_relevance(
-        self,
-        query: str,
-        documents: List[str],
-        ids: List[str],
-        num_votes: int = 6,
-        max_workers: int = 32,
-        max_document_chars: int = 4000,
-    ) -> pd.DataFrame:
-        """Score (query, document) pairs with an LLM judge.
-
-        Each document is judged ``num_votes`` times in parallel; the raw 1-5
-        scores are averaged and mapped to an A-F letter grade.
-
-        Returns a DataFrame indexed by id with columns:
-          - judge_raw: average raw score in [1, 5] (or NaN when every vote failed to parse)
-          - judge_votes: list of successful per-vote raw scores (1-5)
-          - judge_score: float in [0, 1], linear mapping of judge_raw
-          - judge_grade: letter grade A-F (F when all votes failed)
-          - judge_reasoning: one representative explanation from the model
-        """
-        if not self.judge_model:
-            raise OpenRouterError("No judge model configured")
-        if not documents:
-            return pd.DataFrame(
-                columns=["judge_raw", "judge_votes", "judge_score", "judge_grade", "judge_reasoning"]
-            )
-
-        votes = max(1, int(num_votes))
-        tasks = [(doc_idx, doc) for doc_idx, doc in enumerate(documents) for _ in range(votes)]
-        workers = max(1, min(max_workers, len(tasks)))
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            results = list(
-                executor.map(
-                    lambda pair: self._judge_one(query, pair[1], max_document_chars),
-                    tasks,
-                )
-            )
-
-        votes_by_doc: Dict[int, List[int]] = {i: [] for i in range(len(documents))}
-        reasons_by_doc: Dict[int, List[str]] = {i: [] for i in range(len(documents))}
-        for (doc_idx, _), result in zip(tasks, results):
-            raw_score = result.get("score")
-            if raw_score is not None:
-                try:
-                    votes_by_doc[doc_idx].append(max(1, min(5, int(raw_score))))
-                except (TypeError, ValueError):
-                    pass
-            reasoning = result.get("reasoning") or ""
-            if reasoning:
-                reasons_by_doc[doc_idx].append(reasoning)
-
-        rows = []
-        for doc_idx, doc_id in enumerate(ids):
-            doc_votes = votes_by_doc[doc_idx]
-            if not doc_votes:
-                avg_raw = float("nan")
-                judge_score = float("nan")
-                grade = "F"
-            else:
-                avg_raw = sum(doc_votes) / len(doc_votes)
-                judge_score = (avg_raw - 1.0) / 4.0
-                grade = self._score_to_grade(avg_raw)
-            reasoning = reasons_by_doc[doc_idx][0] if reasons_by_doc[doc_idx] else ""
-            rows.append(
-                {
-                    "id": doc_id,
-                    "judge_raw": avg_raw,
-                    "judge_votes": doc_votes,
-                    "judge_score": judge_score,
-                    "judge_grade": grade,
-                    "judge_reasoning": reasoning,
-                }
-            )
-        return pd.DataFrame(rows).set_index("id")

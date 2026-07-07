@@ -27,14 +27,19 @@ class DatabaseReader:
 
         payload = self.collection.get(include=["metadatas"])
         metadatas = payload.get("metadatas") or []
+        document_metas = [
+            metadata
+            for metadata in metadatas
+            if metadata.get("granularity", "document") == "document"
+        ]
         folders = {
             metadata.get("folder", "")
-            for metadata in metadatas
+            for metadata in document_metas
             if metadata.get("folder")
         }
         tags = set()
         dated_notes = 0
-        for metadata in metadatas:
+        for metadata in document_metas:
             tag_string = metadata.get("tags", "")
             if tag_string:
                 tags.update(tag.strip() for tag in tag_string.split(",") if tag.strip())
@@ -42,7 +47,8 @@ class DatabaseReader:
                 dated_notes += 1
 
         return {
-            "total_documents": self.collection.count(),
+            "total_documents": len(document_metas),
+            "total_entries": self.collection.count(),
             "unique_folders": len(folders),
             "unique_tags": len(tags),
             "dated_notes": dated_notes,

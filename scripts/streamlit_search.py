@@ -4,25 +4,14 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from datetime import datetime
 from typing import Dict
 
 import streamlit as st
-from rank_bm25 import BM25Okapi
 
-try:
-    from scripts.config import BM25_CONFIG, SEARCH_CONFIG
-    from scripts.streamlit_models import get_database_and_searcher
-except ImportError:
-    try:
-        from .scripts.config import BM25_CONFIG, SEARCH_CONFIG  # pyright: ignore
-        from .scripts.streamlit_models import get_database_and_searcher  # pyright: ignore
-    except ImportError:
-        script_dir = os.path.join(os.getcwd(), "scripts")
-        sys.path.insert(0, script_dir)
-        from config import BM25_CONFIG, SEARCH_CONFIG  # pyright: ignore
-        from streamlit_models import get_database_and_searcher  # pyright: ignore
+from vault_rag.config import SEARCH_CONFIG
+from vault_rag.retrieval.evidence import build_retrieval_output
+from streamlit_models import get_store_and_searcher
 
 
 st.set_page_config(
@@ -50,7 +39,6 @@ st.markdown(
     .score-badge.semantic { background-color: #f3e5f5; border-color: #ce93d8; }
     .score-badge.fused { background-color: #fff3e0; border-color: #ffcc80; }
     .score-badge.reranked { background-color: #fff4e6; border-color: #ffd699; }
-    .score-badge.judge { background-color: #fce4ec; border-color: #f48fb1; }
     .score-badge.recency { background-color: #e0f2f1; border-color: #80cbc4; }
     </style>
     """,
@@ -58,80 +46,57 @@ st.markdown(
 )
 
 
-def create_bm25_index(builder, k1: float, b: float):
-    return BM25Okapi(builder.tokenized_documents, k1=k1, b=b)
+def display_candidate(index: int, candidate: Dict[str, object]):
+    title = candidate.get("title", "(untitled)")
+    path = candidate.get("path", "")
+    heading = candidate.get("heading", "")
+    scores = candidate.get("scores", {})
+    final_score = float(scores.get("final", 0.0))
 
-
-def display_result(
-    index: int,
-    document: str,
-    metadata: Dict[str, str],
-    scores: Dict[str, float],
-    judge_raw: float | None = None,
-    judge_grade: str | None = None,
-    judge_reasoning: str = "",
-):
-    title = metadata.get("title", "(untitled)")
-    path = metadata.get("path", "")
-    date = metadata.get("date", "")
-    tags = metadata.get("tags", "")
-    final_score = scores.get("combined", 0.0)
-
-    with st.expander(f"📄 {index + 1}. {title} · {final_score:.4f}", expanded=(index < 3)):
-        footer = " • ".join(part for part in [path, date, tags] if part)
+    label = f"📄 {index + 1}. {title}"
+    if heading:
+        label += f" › {heading}"
+    with st.expander(f"{label} · {final_score:.4f}", expanded=(index < 3)):
+        footer_parts = [path]
+        if candidate.get("line_start"):
+            footer_parts.append(f"L{candidate['line_start']}–{candidate['line_end']}")
+        footer = " • ".join(part for part in footer_parts if part)
         if footer:
             st.caption(footer)
 
         chips = []
-        for key, label, css_class in [
-            ("keyword", "Keyword", "keyword"),
+        for key, label_text, css_class in [
+            ("bm25", "Keyword", "keyword"),
             ("semantic", "Semantic", "semantic"),
             ("fused", "Fused", "fused"),
-            ("reranked", "Reranked", "reranked"),
-            ("judge", "Judge", "judge"),
-            ("recency", "Recency", "recency"),
+            ("reranker", "Reranker", "reranked"),
+            ("final", "Final", "primary"),
         ]:
-            if key in scores:
-                value = scores[key]
-                if key == "judge" and judge_raw is not None:
-                    raw_str = f"{float(judge_raw):.2f}".rstrip("0").rstrip(".") or "0"
-                    grade_part = judge_grade or "?"
-                    chips.append(
-                        f"<span class='score-badge {css_class}'>{label}: {grade_part} ({raw_str}/5)</span>"
-                    )
-                else:
-                    chips.append(
-                        f"<span class='score-badge {css_class}'>{label}: {value:.2f}</span>"
-                    )
-        chips.append(
-            f"<span class='score-badge primary'>Final: {final_score:.2f}</span>"
-        )
+            value = scores.get(key)
+            if value is None:
+                continue
+            chips.append(
+                f"<span class='score-badge {css_class}'>{label_text}: {float(value):.2f}</span>"
+            )
         st.markdown(
             f"<div class='scores-row'>{''.join(chips)}</div>", unsafe_allow_html=True
         )
+        if candidate.get("why"):
+            st.caption(f"Why: {candidate['why']}")
 
-        if judge_reasoning:
-            st.caption(f"Judge: {judge_reasoning}")
-
-        st.markdown(document)
-        relevant = st.checkbox(
-            "Use this note for synthesis",
-            key=f"relevant_{index}",
-            value=st.session_state.last_results["relevant"][index],
-        )
-        st.session_state.last_results["relevant"][index] = relevant
+        st.markdown(candidate.get("excerpt", ""))
 
 
 def main():
     st.title("🗂️ Vault RAG")
     st.caption("Retrieve Markdown notes from `input/Vault 14` using BM25, embeddings, reranking, and recency.")
 
-    builder, searcher, init_error = get_database_and_searcher()
+    store, searcher, init_error = get_store_and_searcher()
     if init_error:
         st.error(init_error)
         st.stop()
 
-    assert builder is not None
+    assert store is not None
     assert searcher is not None
 
     if "last_results" not in st.session_state:
@@ -141,61 +106,22 @@ def main():
 
     with st.sidebar:
         st.header("⚙️ Configuration")
-        stats = builder.get_collection_stats()
+        stats = store.get_collection_stats()
         st.metric("Total Notes", int(stats.get("total_documents", 0)))
+        st.caption(f"Section entries: {int(stats.get('section_entries', 0))}")
         st.caption(f"Embedding model: `{stats.get('embedding_model', 'unknown')}`")
 
         st.divider()
-        st.subheader("BM25")
-        k1 = st.slider("k1", 0.0, 3.0, float(BM25_CONFIG.get("k1", 1.2)), 0.1)
-        b = st.slider("b", 0.0, 1.0, float(BM25_CONFIG.get("b", 0.75)), 0.05)
-        if k1 != BM25_CONFIG.get("k1", 1.2) or b != BM25_CONFIG.get("b", 0.75):
-            if st.button("Update BM25 Index"):
-                searcher.bm25 = create_bm25_index(builder, k1, b)
-                st.success("BM25 index updated.")
-
-        st.divider()
-        st.subheader("Hybrid Retrieval")
-        semantic_weight = st.slider(
-            "Semantic Weight",
-            0.0,
-            1.0,
-            float(SEARCH_CONFIG.get("semantic_weight", 0.5)),
-            0.05,
-        )
-        top_k = st.number_input(
-            "Candidate Pool",
-            min_value=1,
-            max_value=1000,
-            value=int(SEARCH_CONFIG.get("default_top_k", 150)),
-            step=1,
+        st.subheader("Retrieval")
+        mode = st.radio("Mode", ["fast", "thorough"], horizontal=True)
+        granularity = st.radio(
+            "Granularity", ["document", "section", "mixed"], horizontal=True
         )
         n_results = st.number_input(
             "Displayed Results",
             min_value=1,
             max_value=100,
             value=int(SEARCH_CONFIG.get("n_results", 10)),
-            step=1,
-        )
-
-        st.divider()
-        st.subheader("Recency")
-        use_recency = st.checkbox(
-            "Enable Recency Boost",
-            value=bool(SEARCH_CONFIG.get("recency_boost_enabled", True)),
-        )
-        recency_weight = st.slider(
-            "Recency Weight",
-            0.0,
-            1.0,
-            float(SEARCH_CONFIG.get("recency_weight", 0.2)),
-            0.05,
-        )
-        recency_decay_days = st.number_input(
-            "Recency Half-life (days)",
-            min_value=1,
-            max_value=3650,
-            value=int(SEARCH_CONFIG.get("recency_decay_days", 365.0)),
             step=1,
         )
 
@@ -216,23 +142,25 @@ def main():
     if search_button and query:
         st.session_state.llm_response = None
         with st.spinner("Retrieving vault notes..."):
-            results = searcher.hybrid_search(
+            result = searcher.hybrid_search(
                 query=query,
-                top_k=int(top_k),
-                semantic_weight=semantic_weight,
-                number_of_results=int(n_results),
-                recency_boost_enabled=use_recency,
-                recency_weight=recency_weight,
-                recency_decay_days=float(recency_decay_days),
+                mode=mode,
+                granularity=granularity,
+                n_results=int(n_results),
             )
-            st.session_state.last_results = results
+            st.session_state.last_results = build_retrieval_output(
+                query, mode, granularity, result.rows, store
+            )
 
     if st.session_state.last_results is None:
         return
 
     results = st.session_state.last_results
-    strategy = results.get("debug_info", {}).get("combine_strategy", "rrf")
-    st.success(f"Retrieved {len(results['documents'])} notes.")
+    candidates = results.get("candidates", [])
+    st.success(
+        f"Retrieved {len(candidates)} candidates "
+        f"({results.get('mode')} · {results.get('granularity')})."
+    )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -242,43 +170,8 @@ def main():
         if st.button("🤖 Synthesize With OpenRouter", type="primary", use_container_width=True):
             st.switch_page("./streamlit_llm.py")
 
-    judge_scores_list = results.get("judge_scores") or []
-    judge_raw_list = results.get("judge_raw_scores") or []
-    judge_grades_list = results.get("judge_grades") or []
-    judge_reasonings_list = results.get("judge_reasonings") or []
-    for index, document in enumerate(results["documents"]):
-        scores: Dict[str, float] = {
-            "combined": results["boosted_scores"][index],
-            "keyword": results["keyword_scores"][index],
-            "semantic": results["semantic_scores"][index],
-            "fused": results["fused_scores"][index],
-        }
-        if index < len(results.get("reranked_scores", [])):
-            scores["reranked"] = results["reranked_scores"][index]
-        if index < len(results.get("recency_boost_factor", [])):
-            scores["recency"] = results["recency_boost_factor"][index]
-        judge_raw = None
-        judge_grade = None
-        judge_reasoning = ""
-        if index < len(judge_scores_list):
-            judge_score = judge_scores_list[index]
-            if judge_score is not None and judge_score == judge_score:  # not NaN
-                scores["judge"] = float(judge_score)
-                if index < len(judge_raw_list):
-                    judge_raw = judge_raw_list[index]
-                if index < len(judge_grades_list):
-                    judge_grade = judge_grades_list[index]
-                if index < len(judge_reasonings_list):
-                    judge_reasoning = judge_reasonings_list[index] or ""
-        display_result(
-            index,
-            document,
-            results["metadatas"][index],
-            scores,
-            judge_raw=judge_raw,
-            judge_grade=judge_grade,
-            judge_reasoning=judge_reasoning,
-        )
+    for index, candidate in enumerate(candidates):
+        display_candidate(index, candidate)
 
     st.divider()
     export_content = json.dumps(results, indent=2)

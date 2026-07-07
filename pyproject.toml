@@ -11,11 +11,22 @@ dependencies = [
   "pandas-stubs",
   "pyright",
   "python-dotenv",
+  "python-ulid",
   "PyYAML==6.0.2",
   "rank-bm25",
   "rich",
   "streamlit",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vault_rag"]
+
+[project.scripts]
+vault-rag = "vault_rag.cli:main"
 
 [dependency-groups]
 dev = [
@@ -24,4 +35,3 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["scripts"]

@@ -6,14 +6,9 @@ from typing import Optional, Tuple
 
 import streamlit as st
 
-try:
-    from scripts.database_builder import DatabaseBuilder
-    from scripts.openrouter_client import OpenRouterClient
-    from scripts.searcher import Searcher
-except ImportError:
-    from database_builder import DatabaseBuilder
-    from openrouter_client import OpenRouterClient
-    from searcher import Searcher
+from vault_rag.index.store import IndexStore
+from vault_rag.llm.openrouter import OpenRouterClient
+from vault_rag.retrieval.searcher import Searcher
 
 
 @st.cache_resource
@@ -22,26 +17,17 @@ def get_openrouter_client() -> OpenRouterClient:
 
 
 @st.cache_resource
-def get_database_and_searcher() -> Tuple[Optional[DatabaseBuilder], Optional[Searcher], Optional[str]]:
+def get_store_and_searcher() -> Tuple[Optional[IndexStore], Optional[Searcher], Optional[str]]:
     try:
         provider = get_openrouter_client()
-        builder = DatabaseBuilder(provider=provider)
-        if builder.collection.count() == 0:
+        store = IndexStore(provider=provider)
+        if store.collection.count() == 0:
             return (
                 None,
                 None,
-                "No notes found in the database. Please run `uv run scripts/build_database.py` first.",
+                'No notes found in the index. Run `uv run vault-rag sync --root "./input/Vault 14"` first.',
             )
-
-        searcher = Searcher(
-            collection=builder.collection,
-            documents=builder.documents,
-            document_ids=builder.document_ids,
-            metadatas=builder.metadatas,
-            bm25=builder.bm25,
-            tokenized_documents=builder.tokenized_documents,
-            provider=provider,
-        )
-        return builder, searcher, None
-    except Exception as exc:
-        return None, None, f"Error initializing database: {exc}"
+        searcher = Searcher(store, granularity="document", provider=provider)
+        return store, searcher, None
+    except Exception as exc:  # noqa: BLE001
+        return None, None, f"Error initializing index: {exc}"

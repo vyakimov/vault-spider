@@ -1,27 +1,17 @@
 from __future__ import annotations
 
-import os
-import sys
 from typing import Dict, Optional
 
 import streamlit as st
 
-try:
-    from scripts.database_reader import DatabaseReader
-except ImportError:
-    try:
-        from .scripts.database_reader import DatabaseReader  # pyright: ignore
-    except ImportError:
-        script_dir = os.path.join(os.getcwd(), "scripts")
-        sys.path.insert(0, script_dir)
-        from database_reader import DatabaseReader  # type: ignore
+from vault_rag.index.reader import DatabaseReader
 
 
 @st.cache_resource
 def get_reader() -> Optional[DatabaseReader]:
     try:
         return DatabaseReader()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to initialize database: {exc}")
         return None
 
@@ -48,11 +38,11 @@ def show_document(reader: DatabaseReader, doc_id: str, scores: Optional[Dict[str
         if scores:
             chips = []
             for label, key in [
-                ("Keyword", "keyword"),
+                ("Keyword", "bm25"),
                 ("Semantic", "semantic"),
                 ("Fused", "fused"),
-                ("Reranked", "reranked"),
-                ("Boosted", "boosted"),
+                ("Reranker", "reranker"),
+                ("Final", "final"),
             ]:
                 if scores.get(key) is not None:
                     chips.append(f"`{label}: {scores[key]}`")
@@ -70,7 +60,7 @@ def main():
 
     with st.sidebar:
         st.subheader("Lookup By ID")
-        input_id = st.text_input("Document ID", value="")
+        input_id = st.text_input("Entry ID", value="")
         go = st.button("Load", use_container_width=True)
         st.divider()
         stats = reader.get_collection_stats()
@@ -93,21 +83,30 @@ def main():
 
     if "last_results" in st.session_state and st.session_state["last_results"]:
         results = st.session_state["last_results"]
-        st.info(f"Showing notes for query: {results['debug_info']['query']}")
-        for index, doc_id in enumerate(results["ids"]):
-            scores: Dict[str, str] = {
-                "keyword": f"{results['keyword_scores'][index]:.3f}",
-                "semantic": f"{results['semantic_scores'][index]:.3f}",
-                "fused": f"{results['fused_scores'][index]:.3f}",
-                "reranked": f"{results['reranked_scores'][index]:.3f}",
-                "boosted": f"{results['boosted_scores'][index]:.3f}",
+        st.info(f"Showing notes for query: {results.get('query', '')}")
+        seen = set()
+        index = 0
+        for candidate in results.get("candidates", []):
+            note_id = candidate.get("note_id")
+            if note_id in seen:
+                continue
+            seen.add(note_id)
+            scores = {
+                key: f"{value:.3f}"
+                for key, value in candidate.get("scores", {}).items()
+                if value is not None
             }
-            show_document(reader, doc_id, scores, index=index)
+            show_document(reader, f"{note_id}::doc", scores, index=index)
             st.divider()
+            index += 1
         return
 
     st.write("No note selected. Showing a small sample.")
-    sample = reader.collection.get(limit=10, include=["metadatas", "documents"])
+    sample = reader.collection.get(
+        where={"granularity": "document"},
+        limit=10,
+        include=["metadatas", "documents"],
+    )
     for index, doc_id in enumerate(sample.get("ids", [])):
         show_document(reader, doc_id, index=index)
         st.divider()

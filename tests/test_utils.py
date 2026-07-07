@@ -1,10 +1,10 @@
-"""Tests for pure helpers in utils.py."""
+"""Tests for pure helpers in vault_rag.utils."""
 
 from __future__ import annotations
 
 from nltk.stem import PorterStemmer
 
-from utils import (
+from vault_rag.utils import (
     DEFAULT_STOP_WORDS,
     decimal_to_base,
     hash_string,
@@ -53,7 +53,6 @@ class TestTokenizeForBm25:
         tokens = tokenize_for_bm25(
             "The running dogs are jumping.", DEFAULT_STOP_WORDS, stemmer
         )
-        # "the" and "are" are stop words; "running" -> "run", "jumping" -> "jump".
         assert "the" not in tokens
         assert "are" not in tokens
         assert "run" in tokens

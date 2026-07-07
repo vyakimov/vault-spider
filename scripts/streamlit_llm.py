@@ -5,14 +5,9 @@ from typing import Dict
 
 import streamlit as st
 
-try:
-    from scripts.answer import build_context, generate_prompts, parse_llm_json
-    from scripts.database_reader import DatabaseReader
-    from scripts.streamlit_models import get_openrouter_client
-except ImportError:
-    from answer import build_context, generate_prompts, parse_llm_json
-    from database_reader import DatabaseReader
-    from streamlit_models import get_openrouter_client
+from vault_rag.index.reader import DatabaseReader
+from vault_rag.synthesis.answer import synthesize
+from streamlit_models import get_openrouter_client
 
 
 client = get_openrouter_client()
@@ -26,12 +21,14 @@ if "llm_response" not in st.session_state:
     st.session_state["llm_response"] = None
 
 
-def transform_citations_to_links(answer: str, index_dict: Dict[str, str], base_url: str = "streamlit_db") -> str:
+def transform_citations_to_links(
+    answer: str, key_to_docid: Dict[str, str], base_url: str = "streamlit_db"
+) -> str:
     def replace_group(match):
         citation_keys = [part.strip() for part in match.group(1).split(",")]
         links = []
         for citation_key in citation_keys:
-            doc_id = index_dict.get(citation_key)
+            doc_id = key_to_docid.get(citation_key)
             if doc_id:
                 links.append(f"[{citation_key}]({base_url}?doc_id={doc_id})")
             else:
@@ -61,36 +58,33 @@ def show_document_dialog(doc_id: str, citation_key: str):
     st.markdown(document)
 
 
-def write_response(response: str, index_dict: Dict[str, str]):
-    parsed = parse_llm_json(response)
-    if not parsed:
-        st.error("Failed to parse response JSON")
-        st.code(response)
-        return
+def write_response(synth: Dict[str, object]):
+    citations = synth.get("citations", []) or []
+    key_to_docid = {c["key"]: f"{c['note_id']}::doc" for c in citations}
 
-    answer = transform_citations_to_links(parsed.get("answer", ""), index_dict)
-    citations = parsed.get("citations", [])
-    confidence = parsed.get("confidence", "Unknown")
-
-    st.markdown(answer)
-    st.markdown(f"**Confidence:** {confidence}")
+    answer = transform_citations_to_links(str(synth.get("answer", "")), key_to_docid)
+    st.markdown(answer or "_(no answer)_")
+    st.markdown(f"**Confidence:** {synth.get('confidence', 'unknown')}")
+    if synth.get("abstained"):
+        st.warning("The model abstained: the notes did not contain enough information.")
+    for warning in synth.get("warnings", []) or []:
+        st.caption(f"⚠️ {warning}")
 
     if citations:
         st.markdown("**Citations**")
-        cols = st.columns(min(len(citations), 6) + 1)
+        cols = st.columns(min(len(citations), 6))
         for index, citation in enumerate(citations[:6]):
-            doc_id = index_dict.get(citation)
+            doc_id = key_to_docid.get(citation["key"])
             with cols[index]:
-                if doc_id and st.button(f"📄 {citation}", key=f"cite_{citation}"):
-                    show_document_dialog(doc_id, citation)
+                if doc_id and st.button(f"📄 {citation['key']}", key=f"cite_{citation['key']}"):
+                    show_document_dialog(doc_id, citation["key"])
 
 
 if st.session_state["last_results"] is None:
     st.write("Run a retrieval first.")
 else:
-    results = st.session_state["last_results"]
-    query = results["debug_info"]["query"]
-    context, index_dict = build_context(results)
+    retrieval_output = st.session_state["last_results"]
+    query = retrieval_output.get("query", "")
 
     with st.chat_message("user"):
         st.write(query)
@@ -101,14 +95,13 @@ else:
             st.session_state["llm_response"] = None
             st.rerun()
 
-    st.caption(f"Using {len(index_dict)} notes for synthesis.")
+    st.caption(f"Using up to {len(retrieval_output.get('candidates', []))} candidates for synthesis.")
 
     if st.session_state["llm_response"] is None:
-        system_prompt, user_prompt = generate_prompts(query, context)
         with st.spinner("Synthesizing..."):
-            st.session_state["llm_response"] = client.chat(
-                system_prompt, user_prompt, max_tokens=4096
+            st.session_state["llm_response"] = synthesize(
+                client, retrieval_output, question=query, max_tokens=4096
             )
 
     with st.chat_message("assistant"):
-        write_response(st.session_state["llm_response"], index_dict)
+        write_response(st.session_state["llm_response"])

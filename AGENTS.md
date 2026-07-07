@@ -4,24 +4,39 @@ This repository is **Vault RAG**, a retrieval system for Markdown notes stored i
 
 ## Project Overview
 
-The project indexes `.md` files from the vault into ChromaDB, builds a BM25 index, and exposes hybrid retrieval with optional OpenRouter-based reranking and answer generation.
+The project indexes `.md` files from the vault into ChromaDB, builds BM25 indexes, and exposes
+hybrid retrieval and answer synthesis with stable JSON contracts. It is organized as the
+`vault_rag` Python package with a JSON-only CLI (`vault-rag`) plus a Streamlit UI.
+
+One note is indexed as **one `document`-granularity entry plus N `section` entries** (section
+splitting is deterministic, heading-based). Both live in a single Chroma collection, distinguished
+by the `granularity` metadata field.
 
 ## Key Commands
 
-- `uv run scripts/build_database.py`
-  - Recursively ingests Markdown notes from `input/Vault 14`
-  - Parses frontmatter, derives note metadata, generates embeddings through OpenRouter, and stores documents in ChromaDB
-- `uv run scripts/ask_question.py "your question" [-o output.txt]`
-  - Runs hybrid search against the indexed notes
-  - Prints note titles, paths, and score breakdowns
+- `uv run vault-rag schema`
+  - Prints the machine-readable command + contract schema (`version: 1`).
+- `uv run vault-rag sync --root "./input/Vault 14" [--reset]`
+  - Incremental sync: adds new notes, re-embeds changed notes, deletes removed notes.
+  - `--reset` rebuilds the collection from scratch (needed once after an entry-shape change).
+- `uv run vault-rag retrieve --query "..." [--mode fast|thorough] [--granularity document|section|mixed] [-n 10]`
+  - Returns the retrieval output contract (candidates with score breakdown). Defaults: `fast`, `document`.
+  - `fast` skips reranking; `thorough` reranks the top candidates.
+- `uv run vault-rag synthesize --query "..." [--mode thorough] [--granularity mixed] [--retrieval file.json] [--n-context 8]`
+  - Retrieves (defaults `thorough`/`mixed`) then synthesizes a cited answer. `--retrieval` reuses a
+    prior `retrieve` envelope/contract and skips retrieval. Abstains when the notes lack the answer.
 - `uv run streamlit run scripts/streamlit_app.py`
-  - Starts the Streamlit UI for search, note browsing, and answer generation
-- `uv run scripts/tune_parameters.py --k1 ... --b ... --sw ... -q "query1" ...`
-  - Lightweight search-parameter tuning helper
+  - Streamlit UI: Retrieve (mode + granularity selectors), Synthesize, Notes browser.
+- `uv run pytest`
+  - Network-free test suite (uses a fake provider; no API key required).
+
+All CLI output is a single JSON envelope on stdout: `{"ok": bool, "action", "result", "meta"}` on
+success, `{"ok": false, "action", "error": {"type", "message", "details"}}` on failure (exit 1).
+Error types: `invalid_arguments`, `index_empty`, `provider_error`, `not_found`, `internal_error`.
 
 ## Environment
 
-Required environment variables:
+Required environment variables (loaded from `.env` via `python-dotenv`):
 
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_EMBEDDING_MODEL`
@@ -29,7 +44,7 @@ Required environment variables:
 
 Optional:
 
-- `OPENROUTER_RERANK_MODEL`
+- `OPENROUTER_RERANK_MODEL` (enables reranking in `thorough` mode)
 - `OPENROUTER_BASE_URL`
 - `OPENROUTER_HTTP_REFERER`
 - `OPENROUTER_APP_TITLE`
@@ -38,31 +53,35 @@ Install dependencies with `uv sync`.
 
 ## Architecture
 
-### Core Components
+The `vault_rag` package is layered:
 
-1. `scripts/vault_ingestion.py`
-   - Reads Markdown notes from the vault
-   - Parses YAML frontmatter when present
-   - Resolves note dates using frontmatter, filename, then filesystem mtime
+1. `vault_rag/corpus/`
+   - `frontmatter.py` — YAML frontmatter split, tag normalization, datetime coercion.
+   - `identity.py` — note id resolution (frontmatter `id`/ULID, else path hash).
+   - `loader.py` — `load_notes(root)` → `Note` dataclasses (skips `#ignore`/`#secret` and
+     `.trash/`, `.obsidian/`, `Templates/`).
+   - `chunker.py` — deterministic `split_sections` plus `document_text` / `section_text`.
 
-2. `scripts/openrouter_client.py`
-   - Handles embeddings, reranking, and chat completions through OpenRouter
-   - Uses env-configured model identifiers
+2. `vault_rag/index/`
+   - `store.py` — `IndexStore` with `sync(root, reset)`; maintains the Chroma collection and two
+     in-memory BM25 indexes (document + section), diffing by `note_id` + `content_hash`.
+   - `reader.py` — read-only Chroma access for the Notes UI.
 
-3. `scripts/database_builder.py`
-   - Manages the ChromaDB collection lifecycle
-   - Stores note text plus scalar metadata
-   - Rebuilds BM25 in memory
+3. `vault_rag/retrieval/`
+   - `fusion.py` — pure RRF / z-score-sigmoid / min-max fusion.
+   - `searcher.py` — `Searcher.hybrid_search` (embeddings + BM25 + fusion + optional rerank +
+     recency); `fast`/`thorough` modes, `document`/`section`/`mixed` granularity.
+   - `evidence.py` — builds the retrieval output contract (candidate objects + deterministic `why`).
 
-4. `scripts/searcher.py`
-   - Combines Chroma vector search and BM25 keyword scores
-   - Supports RRF and z-score/sigmoid fusion
-   - Applies optional OpenRouter reranking and recency boosting
+4. `vault_rag/synthesis/`
+   - `answer.py` — `synthesize()` turns a retrieval contract into a cited answer with abstention;
+     robust JSON parsing / truncation repair.
 
-5. `scripts/streamlit_*.py`
-   - Search UI
-   - Note browser
-   - OpenRouter-backed answer page
+5. `vault_rag/llm/openrouter.py` — embeddings, rerank, and chat via OpenRouter.
+
+6. `vault_rag/cli.py` + `vault_rag/envelope.py` — the JSON CLI and envelope helpers.
+
+7. `scripts/streamlit_*.py` — Streamlit pages that import from `vault_rag`.
 
 ## Paths & Persistence
 
@@ -72,6 +91,9 @@ Install dependencies with `uv sync`.
 
 ## Development Notes
 
-- One Markdown file is indexed as one document
-- Metadata stored with each note includes title, path, folder, tags, and resolved date
-- The search stack depends on explicit OpenRouter calls; no local model loading remains in the repository
+- Intra-package imports are absolute (`from vault_rag.corpus import loader`); no import fallbacks.
+- Metadata stored per entry: `note_id`, `granularity`, `title`, `path`, `folder`, `tags`, `date`,
+  `created`, `updated`, `note_type`, `content_hash`, `heading`, `line_start`, `line_end`, `source`.
+- Retrieval/synthesis JSON contracts are stable; downstream tooling depends on them (see
+  `vault-rag schema`).
+- The LLM relevance judge was removed; abstention now lives in synthesis.
