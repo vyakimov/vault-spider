@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from nltk.stem import PorterStemmer
 
-from vault_rag.config import SEARCH_CONFIG
+from vault_rag.config import DEFAULT_SEARCH_PARAMS
 from vault_rag.llm.openrouter import OpenRouterClient, OpenRouterError
 from vault_rag.retrieval.fusion import (
     min_max_scale,
@@ -136,41 +136,18 @@ class Searcher:
         metadata_by_id = dict(zip(ids, metadatas))
         document_by_id = dict(zip(ids, documents))
 
-        semantic_wt = (
-            float(SEARCH_CONFIG.get("semantic_weight", 0.5))
-            if semantic_weight is None
-            else semantic_weight
+        params = DEFAULT_SEARCH_PARAMS.with_overrides(
+            semantic_weight=semantic_weight,
+            top_k=top_k,
+            n_results=n_results,
+            combine_strategy=combine_strategy,
+            rrf_k=rrf_k,
+            zsigmoid_temperature=zsigmoid_temperature,
+            recency_boost_enabled=recency_boost_enabled,
+            recency_weight=recency_weight,
+            recency_decay_days=recency_decay_days,
         )
-        n_res = int(SEARCH_CONFIG.get("n_results", 10)) if n_results is None else n_results
-        candidate_pool_size = (
-            int(SEARCH_CONFIG.get("default_top_k", 150)) if top_k is None else top_k
-        )
-        strategy = (
-            str(SEARCH_CONFIG.get("combine_strategy", "rrf"))
-            if combine_strategy is None
-            else combine_strategy
-        ).lower()
-        rrf_k_val = int(SEARCH_CONFIG.get("rrf_k", 60)) if rrf_k is None else rrf_k
-        zsig_temp = (
-            float(SEARCH_CONFIG.get("zsigmoid_temperature", 1.0))
-            if zsigmoid_temperature is None
-            else zsigmoid_temperature
-        )
-        use_recency = (
-            bool(SEARCH_CONFIG.get("recency_boost_enabled", True))
-            if recency_boost_enabled is None
-            else recency_boost_enabled
-        )
-        recency_wt = (
-            float(SEARCH_CONFIG.get("recency_weight", 0.2))
-            if recency_weight is None
-            else recency_weight
-        )
-        decay_days = (
-            float(SEARCH_CONFIG.get("recency_decay_days", 365.0))
-            if recency_decay_days is None
-            else recency_decay_days
-        )
+        strategy = params.combine_strategy.lower()
 
         allowed_ids = set(ids)
         if must_include_terms:
@@ -193,7 +170,7 @@ class Searcher:
         query_embedding = self.provider.embed_texts([query])[0]
         semantic_results = self.store.collection.query(
             query_embeddings=[query_embedding],
-            n_results=min(len(ids), candidate_pool_size),
+            n_results=min(len(ids), params.top_k),
             where={"granularity": data_granularity},
             include=["distances"],
         )
@@ -210,7 +187,7 @@ class Searcher:
 
         keyword_scores = self.calculate_keyword_scores(query, ids, documents, bm25)
         top_keyword_scores = keyword_scores.nlargest(
-            min(len(keyword_scores), candidate_pool_size)
+            min(len(keyword_scores), params.top_k)
         )
         # Sorted so downstream stable sorts break score ties deterministically
         # (set iteration order varies across processes).
@@ -229,24 +206,24 @@ class Searcher:
                 raw_scores["semantic_scores"],
                 raw_scores["keyword_scores"],
                 allowed_ids=candidate_ids,
-                weight=semantic_wt,
-                k=rrf_k_val,
+                weight=params.semantic_weight,
+                k=params.rrf_k,
             )
         elif strategy == "zsigmoid":
             fused = zscore_sigmoid_fusion(
                 raw_scores["semantic_scores"],
                 raw_scores["keyword_scores"],
                 allowed_ids=candidate_ids,
-                temperature=zsig_temp,
-                weight=semantic_wt,
+                temperature=params.zsigmoid_temperature,
+                weight=params.semantic_weight,
             )
         else:
             fused = pd.DataFrame(index=candidate_ids)
             fused["semantic_score"] = min_max_scale(raw_scores["semantic_scores"])
             fused["keyword_score"] = min_max_scale(raw_scores["keyword_scores"])
             fused["fused_score"] = (
-                fused["semantic_score"] * semantic_wt
-                + fused["keyword_score"] * (1.0 - semantic_wt)
+                fused["semantic_score"] * params.semantic_weight
+                + fused["keyword_score"] * (1.0 - params.semantic_weight)
             )
             fused = fused.sort_values("fused_score", ascending=False, kind="stable")
 
@@ -259,7 +236,7 @@ class Searcher:
         fused["reranked_score"] = fused["fused_score"]
         fused["rerank_rank"] = np.nan
         if mode == "thorough" and self.provider.rerank_model:
-            rerank_pool_size = min(len(fused), int(SEARCH_CONFIG.get("rerank_top_k", 30)))
+            rerank_pool_size = min(len(fused), params.rerank_top_k)
             rerank_input = fused.head(rerank_pool_size)
             try:
                 reranked = self.provider.rerank(
@@ -275,7 +252,7 @@ class Searcher:
                 fused.loc[reranked.index, "reranked_raw_score"] = reranked["score"]
                 ordered_ids = list(reranked.sort_values("score", ascending=False).index)
                 denom = max(len(ordered_ids) - 1, 1)
-                use_ranks = bool(SEARCH_CONFIG.get("rerank_use_ranks", True))
+                use_ranks = params.rerank_use_ranks
                 rank_scores = {}
                 rank_positions = {}
                 for position, doc_id in enumerate(ordered_ids):
@@ -291,16 +268,20 @@ class Searcher:
 
         fused["relevance_score"] = fused["reranked_score"]
 
-        if use_recency:
+        if params.recency_boost_enabled:
             recency_boost_factor = (
-                self.calculate_recency_scores(list(fused.index), metadata_by_id, decay_days)
+                self.calculate_recency_scores(
+                    list(fused.index), metadata_by_id, params.recency_decay_days
+                )
                 .reindex(fused.index)
                 .fillna(1.0)
             )
             fused["recency_boost_factor"] = recency_boost_factor
             fused["boosted_score"] = (
-                fused["relevance_score"] * (1.0 - recency_wt)
-                + fused["relevance_score"] * fused["recency_boost_factor"] * recency_wt
+                fused["relevance_score"] * (1.0 - params.recency_weight)
+                + fused["relevance_score"]
+                * fused["recency_boost_factor"]
+                * params.recency_weight
             )
         else:
             fused["recency_boost_factor"] = 1.0
@@ -339,20 +320,22 @@ class Searcher:
                     ),
                 }
             )
-            if len(rows) >= n_res:
+            if len(rows) >= params.n_results:
                 break
 
         elapsed_ms = (datetime.now(timezone.utc) - started).total_seconds() * 1000.0
         debug_info = {
             "combine_strategy": strategy,
-            "semantic_weight": semantic_wt,
-            "candidate_pool_size": candidate_pool_size,
-            "n_results": n_res,
-            "recency_boost_enabled": use_recency,
-            "recency_weight": recency_wt,
-            "recency_decay_days": decay_days,
-            "rrf_k": rrf_k_val if strategy == "rrf" else None,
-            "zsigmoid_temperature": zsig_temp if strategy == "zsigmoid" else None,
+            "semantic_weight": params.semantic_weight,
+            "candidate_pool_size": params.top_k,
+            "n_results": params.n_results,
+            "recency_boost_enabled": params.recency_boost_enabled,
+            "recency_weight": params.recency_weight,
+            "recency_decay_days": params.recency_decay_days,
+            "rrf_k": params.rrf_k if strategy == "rrf" else None,
+            "zsigmoid_temperature": (
+                params.zsigmoid_temperature if strategy == "zsigmoid" else None
+            ),
             "rerank_enabled": rerank_ran,
             "data_granularity": data_granularity,
         }

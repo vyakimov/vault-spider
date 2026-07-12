@@ -10,7 +10,7 @@ from typing import Dict
 import streamlit as st
 from streamlit_models import get_store_and_searcher
 
-from vault_rag.config import SEARCH_CONFIG
+from vault_rag.config import DEFAULT_SEARCH_PARAMS
 from vault_rag.retrieval.evidence import build_retrieval_output
 
 st.set_page_config(
@@ -120,7 +120,7 @@ def main():
             "Displayed Results",
             min_value=1,
             max_value=100,
-            value=int(SEARCH_CONFIG.get("n_results", 10)),
+            value=DEFAULT_SEARCH_PARAMS.n_results,
             step=1,
         )
 
