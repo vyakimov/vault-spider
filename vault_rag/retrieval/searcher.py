@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ from vault_rag.retrieval.fusion import (
     reciprocal_rank_fusion,
     zscore_sigmoid_fusion,
 )
+from vault_rag.retrieval.query_cache import QueryEmbeddingCache
 from vault_rag.utils import DEFAULT_STOP_WORDS, normalize_no_punct, tokenize_for_bm25
 
 
@@ -114,6 +116,25 @@ class Searcher:
         return pd.Series(recency_scores, name="boost_factor", dtype=float)
 
     # -- main pipeline --------------------------------------------------------
+
+    def _embed_query(self, query: str) -> List[float]:
+        chroma_path = getattr(self.store, "chroma_db_path", None)
+        if not chroma_path:
+            self._query_cache_status = "off"
+            return self.provider.embed_texts([query])[0]
+        if not hasattr(self, "_query_cache"):
+            self._query_cache = QueryEmbeddingCache(
+                os.path.join(chroma_path, "query_embedding_cache.json"),
+                self.store.provider.embedding_model,
+            )
+        cached = self._query_cache.get(query)
+        if cached is not None:
+            self._query_cache_status = "hit"
+            return cached
+        embedding = self.provider.embed_texts([query])[0]
+        self._query_cache.put(query, embedding)
+        self._query_cache_status = "miss"
+        return embedding
 
     def hybrid_search(
         self,
@@ -218,7 +239,7 @@ class Searcher:
         if not allowed_ids:
             raise ValueError("No documents match the required filters.")
 
-        query_embedding = self.provider.embed_texts([query])[0]
+        query_embedding = self._embed_query(query)
         semantic_results = self.store.collection.query(
             query_embeddings=[query_embedding],
             n_results=min(len(ids), params.top_k),
@@ -401,6 +422,7 @@ class Searcher:
                 }.items()
                 if value is not None
             },
+            "query_cache": self._query_cache_status,
         }
         return RetrievalResult(
             query=query,
