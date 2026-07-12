@@ -6,7 +6,7 @@ import ctypes
 import hashlib
 import re
 import string
-from typing import Any, Iterable, List
+from typing import Iterable, List
 
 WORD_RE = r"\b\w+\b"
 
@@ -44,28 +44,16 @@ conversion_d = {
 }
 
 
-def count_tokens(text: str, tokenizer: Any = None) -> int:
-    """Count tokens, falling back to a lightweight approximation when needed."""
-    if tokenizer is not None:
-        token_ids = tokenizer.encode(text, add_special_tokens=True)
-        return len(token_ids)
-    return max(1, len(text) // 4)
-
-
-def decimal_to_base(n: int, base: int = 62, conversion_table=conversion_d) -> str:
-    if base > (max(conversion_table.keys()) + 1):
-        conversion_table = None
+def decimal_to_base(n: int) -> str:
     if n == 0:
         return "0"
 
     digits = []
     while n:
-        digits.append(int(n % base))
-        n //= base
+        digits.append(int(n % 62))
+        n //= 62
 
-    if conversion_table is not None:
-        return "".join(conversion_table[x] for x in reversed(digits))
-    return "".join(str(x) if x < 10 else chr(x + 55) for x in reversed(digits))
+    return "".join(conversion_d[x] for x in reversed(digits))
 
 
 def hash_string(value: str) -> str:

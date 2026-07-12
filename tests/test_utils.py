@@ -26,6 +26,10 @@ class TestDecimalToBase:
 
 
 class TestHashString:
+    def test_golden_note_identity(self):
+        # Frozen: note identity depends on this exact output.
+        assert hash_string("folder/note.md") == "aS6BvOeyuVS"
+
     def test_deterministic(self):
         assert hash_string("hello") == hash_string("hello")
 
