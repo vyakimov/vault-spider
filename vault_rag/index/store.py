@@ -7,6 +7,7 @@ metadata field.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import PurePosixPath
 from typing import Dict, List, Optional, Tuple
 
@@ -176,7 +177,9 @@ class IndexStore:
         doc_metadata.update(
             {"granularity": "document", "heading": "", "line_start": 0, "line_end": 0}
         )
-        entries.append((f"{note.note_id}::doc", document_text(note), doc_metadata))
+        doc_text = document_text(note)
+        doc_metadata["entry_hash"] = hashlib.sha256(doc_text.encode("utf-8")).hexdigest()
+        entries.append((f"{note.note_id}::doc", doc_text, doc_metadata))
 
         for section in split_sections(note):
             section_metadata = self._base_metadata(note)
@@ -188,9 +191,11 @@ class IndexStore:
                     "line_end": section.line_end,
                 }
             )
-            entries.append(
-                (section.chunk_id, section_text(note, section), section_metadata)
-            )
+            text = section_text(note, section)
+            section_metadata["entry_hash"] = hashlib.sha256(
+                text.encode("utf-8")
+            ).hexdigest()
+            entries.append((section.chunk_id, text, section_metadata))
         return entries
 
     # -- sync -----------------------------------------------------------------
@@ -241,6 +246,7 @@ class IndexStore:
         would_add: List[str] = []
         would_update: List[str] = []
         would_delete: List[str] = []
+        reusable: Dict[str, List[float]] = {}
         added_notes = updated_notes = deleted_notes = unchanged = 0
 
         disk_note_ids = set()
@@ -257,6 +263,17 @@ class IndexStore:
             ):
                 # Path change with identical content (a moved note) must also
                 # re-index, or path/folder/title metadata goes stale.
+                old = self.collection.get(
+                    ids=group["ids"], include=["embeddings", "metadatas"]
+                )
+                old_embeddings = old.get("embeddings")
+                for embedding, metadata in zip(
+                    [] if old_embeddings is None else old_embeddings,
+                    old.get("metadatas") or [],
+                ):
+                    entry_hash = str(metadata.get("entry_hash", ""))
+                    if entry_hash and embedding is not None:
+                        reusable[entry_hash] = [float(value) for value in embedding]
                 ids_to_delete.extend(group["ids"])  # type: ignore[arg-type]
                 entries_to_add.extend(self._entries_for_note(note))
                 would_update.append(note.path)
@@ -291,8 +308,22 @@ class IndexStore:
             add_ids = [entry[0] for entry in entries_to_add]
             add_texts = [entry[1] for entry in entries_to_add]
             add_metas = [entry[2] for entry in entries_to_add]
-            embeddings = self.provider.embed_texts(add_texts, batch_size=32)
-            self._add_in_batches(add_ids, add_texts, add_metas, embeddings)
+            embeddings: List[Optional[List[float]]] = [None] * len(entries_to_add)
+            missing_indexes = []
+            missing_texts = []
+            for index, metadata in enumerate(add_metas):
+                cached = reusable.get(str(metadata.get("entry_hash", "")))
+                if cached is None:
+                    missing_indexes.append(index)
+                    missing_texts.append(add_texts[index])
+                else:
+                    embeddings[index] = cached
+            if missing_texts:
+                computed = self.provider.embed_texts(missing_texts, batch_size=32)
+                for index, embedding in zip(missing_indexes, computed):
+                    embeddings[index] = embedding
+            resolved_embeddings = [embedding for embedding in embeddings if embedding is not None]
+            self._add_in_batches(add_ids, add_texts, add_metas, resolved_embeddings)
 
         self._rehydrate_from_collection()
 

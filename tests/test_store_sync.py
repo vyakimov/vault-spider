@@ -108,6 +108,7 @@ def test_moving_a_note_updates_path_metadata(tmp_path, tiny_vault, fake_provider
     )
     store = build_store(tmp_path / "chroma", fake_provider)
     store.sync(str(tiny_vault))
+    fake_provider.embed_calls.clear()
 
     archive = tiny_vault / "Archive"
     archive.mkdir()
@@ -120,6 +121,33 @@ def test_moving_a_note_updates_path_metadata(tmp_path, tiny_vault, fake_provider
     paths = {m.get("path") for m in store.metadatas["document"]}
     assert "Archive/note_moved.md" in paths
     assert "note_moved.md" not in paths
+    assert len(fake_provider.embed_calls) == 1
+    assert len(fake_provider.embed_calls[0]) == 1
+
+
+def test_section_embeddings_are_reused_for_small_edits(
+    tmp_path, tiny_vault, fake_provider
+):
+    store = build_store(tmp_path / "chroma", fake_provider)
+    store.sync(str(tiny_vault))
+    initial_count = store.collection.count()
+    fake_provider.embed_calls.clear()
+
+    note = tiny_vault / "note_a.md"
+    note.write_text(
+        note.read_text(encoding="utf-8") + "Changed detail marker.\n",
+        encoding="utf-8",
+    )
+    result = store.sync(str(tiny_vault))
+
+    assert result["updated_notes"] == 1
+    assert len(fake_provider.embed_calls) == 1
+    embedded = fake_provider.embed_calls[0]
+    assert len(embedded) == 2
+    assert all("Changed detail marker." in text for text in embedded)
+    assert not any("# Overview\nAlpha overview paragraph." == text for text in embedded)
+    assert store.collection.count() == initial_count
+    assert store.granularity_data("section")[3] is not None
 
 
 def test_duplicate_frontmatter_ids_skip_later_note(tmp_path, fake_provider):
