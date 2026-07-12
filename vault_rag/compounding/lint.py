@@ -164,6 +164,7 @@ def lint_vault(root: str) -> Dict[str, Any]:
         "missing_frontmatter_fields": [],
         "invalid_timestamps": [],
         "duplicate_ids": [],
+        "duplicate_titles": [],
         "broken_wikilinks": [],
         "orphans": [],
         "stale_distilled": [],
@@ -201,6 +202,20 @@ def lint_vault(root: str) -> Dict[str, Any]:
     for note_id, paths in ids.items():
         if len(paths) >= 2:
             findings["duplicate_ids"].append({"id": note_id, "paths": sorted(paths)})
+
+    # duplicate_titles
+    titles: Dict[str, List[NoteInfo]] = {}
+    for note in notes:
+        titles.setdefault(note.title.lower(), []).append(note)
+    for title_notes in titles.values():
+        if len(title_notes) >= 2:
+            findings["duplicate_titles"].append(
+                {
+                    "title": title_notes[0].title,
+                    "paths": sorted(note.path for note in title_notes),
+                }
+            )
+    findings["duplicate_titles"].sort(key=lambda finding: str(finding["title"]).lower())
 
     # broken_wikilinks + link graph
     outgoing: Dict[str, set] = {note.path: set() for note in notes}
@@ -259,3 +274,76 @@ def lint_vault(root: str) -> Dict[str, Any]:
         "summary": summary,
         "findings": findings,
     }
+
+
+def fix_missing_frontmatter(root: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    from vault_rag.compounding.backfill_core import (
+        _as_str,
+        apply_changes_to_text,
+        detect_ambiguity,
+        git_context,
+        resolve_created,
+        resolve_id,
+        resolve_updated,
+    )
+
+    root_path = Path(root)
+    initial = lint_vault(root)
+    target_paths = {
+        finding["path"]
+        for finding in initial["findings"]["missing_frontmatter_fields"]
+    }
+    records = []
+    id_counts: Dict[str, int] = {}
+    for path, rel in _iter_note_files(root_path):
+        try:
+            raw = path.read_text(encoding="utf-8", errors="strict")
+        except (UnicodeDecodeError, OSError):
+            continue
+        frontmatter, body = split_frontmatter(raw)
+        if has_ignore_tag(body) or has_ignore_frontmatter_tag(
+            normalize_tags(frontmatter.get("tags"))
+        ):
+            continue
+        records.append((path, rel, raw, frontmatter))
+        if "id" in frontmatter:
+            note_id = str(frontmatter["id"]).strip()
+            id_counts[note_id] = id_counts.get(note_id, 0) + 1
+
+    git = git_context(root_path)
+    fixed: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    for path, rel, raw, frontmatter in records:
+        if rel not in target_paths:
+            continue
+        ambiguity = detect_ambiguity(frontmatter, raw, id_counts)
+        if ambiguity is not None:
+            skipped.append({"path": rel, "reason": ambiguity[0]})
+            continue
+        stat = path.stat()
+        changes = [
+            change
+            for change in (
+                resolve_id(frontmatter),
+                resolve_created(frontmatter, root_path, rel, git, stat),
+                resolve_updated(frontmatter, root_path, rel, git, stat),
+            )
+            if change is not None
+        ]
+        by_field = {change.field: change for change in changes}
+        created_value = (
+            by_field["created"].value
+            if "created" in by_field
+            else frontmatter.get("created")
+        )
+        if "updated" in by_field and created_value:
+            updated_dt = coerce_datetime(by_field["updated"].value)
+            created_dt = coerce_datetime(created_value)
+            if updated_dt is not None and created_dt is not None and updated_dt < created_dt:
+                by_field["updated"].value = _as_str(created_value)
+                by_field["updated"].warnings.append(
+                    "updated predated created; clamped to created"
+                )
+        path.write_text(apply_changes_to_text(raw, changes), encoding="utf-8")
+        fixed.append({"path": rel, "fields": [change.field for change in changes]})
+    return fixed, skipped

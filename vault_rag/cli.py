@@ -100,8 +100,9 @@ def _schema() -> Dict[str, Any]:
                 "args": {
                     "--root": "vault directory (required)",
                     "--format": "json|text (default json)",
+                    "--fix": "flag: write missing id/created/updated frontmatter",
                 },
-                "result": "lint_report",
+                "result": "lint_report (+fixed/fix_skipped with --fix)",
             },
             "enrich": {
                 "args": {
@@ -172,6 +173,7 @@ def _schema() -> Dict[str, Any]:
                     "missing_frontmatter_fields": "int",
                     "invalid_timestamps": "int",
                     "duplicate_ids": "int",
+                    "duplicate_titles": "int",
                     "broken_wikilinks": "int",
                     "orphans": "int",
                     "stale_distilled": "int",
@@ -476,11 +478,19 @@ def cmd_lint(args: argparse.Namespace) -> Dict[str, Any]:
     if not os.path.isdir(args.root):
         return failure("lint", "invalid_arguments", f"root directory not found: {args.root}")
 
-    from vault_rag.compounding.lint import lint_vault
+    from vault_rag.compounding.lint import fix_missing_frontmatter, lint_vault
 
     report = lint_vault(args.root)
+    if args.fix:
+        fixed, fix_skipped = fix_missing_frontmatter(args.root)
+        report = lint_vault(args.root)
+        report["fixed"] = fixed
+        report["fix_skipped"] = fix_skipped
     if args.format == "text":
-        sys.stdout.write(_lint_text(report) + "\n")
+        text = _lint_text(report)
+        if args.fix:
+            text += f"\nfixed: {len(report['fixed'])}"
+        sys.stdout.write(text + "\n")
         return {"ok": True, "_no_print": True}
     return success("lint", result=report)
 
@@ -552,6 +562,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_lint = sub.add_parser("lint", parents=[common], help="Read-only corpus health report")
     p_lint.add_argument("--root", required=True, help="Vault directory to lint")
     p_lint.add_argument("--format", choices=["json", "text"], default="json")
+    p_lint.add_argument(
+        "--fix", action="store_true", help="Write missing id/created/updated frontmatter"
+    )
 
     p_enrich = sub.add_parser(
         "enrich", parents=[common], help="Propose an enrichment plan (no mutations)"

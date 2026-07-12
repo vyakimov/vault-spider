@@ -33,8 +33,8 @@ by the `granularity` metadata field.
     under `<root>/<save-dir>`. Skips (with a warning) when the answer abstained, is low-confidence,
     has no citations, or the target exists. Distilled notes are regenerable pointers to their
     sources — raw notes always win on conflict. Run `vault-rag sync` afterward to index it.
-- `uv run vault-rag lint --root <dir> [--format json|text]`
-  - Read-only corpus health report (no LLM, no writes, no index needed): missing frontmatter
+- `uv run vault-rag lint --root <dir> [--format json|text] [--fix]`
+  - Read-only corpus health report unless `--fix`, which writes only missing `id`/`created`/`updated` frontmatter (no LLM or index needed): missing frontmatter
     fields, invalid/naive timestamps, duplicate ids, broken wikilinks, orphans, stale distilled notes.
 - `uv run vault-rag enrich --root <dir> (--note <path> | --stdin) [--intent ...] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]`
   - App-agnostic **enrichment planner**: retrieves a note's neighborhood and proposes a title,

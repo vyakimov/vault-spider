@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
 
+from vault_rag import cli
+from vault_rag.compounding.backfill_core import ULID_RE
 from vault_rag.compounding.lint import extract_wikilinks, lint_vault
+from vault_rag.corpus.frontmatter import coerce_datetime, split_frontmatter
 
 VALID_TS = "2025-01-01T00:00:00Z"
 
@@ -74,6 +78,21 @@ class TestExtractWikilinks:
 
 
 class TestLint:
+    def test_duplicate_titles_case_insensitive(self, tmp_path):
+        write(tmp_path / "first.md", "---\ntitle: Same\n---\nFirst.\n")
+        write(tmp_path / "second.md", "---\ntitle: same\n---\nSecond.\n")
+
+        report = lint_vault(str(tmp_path))
+
+        assert report["findings"]["duplicate_titles"] == [
+            {"title": "Same", "paths": ["first.md", "second.md"]}
+        ]
+
+    def test_unique_titles_have_no_finding(self, tmp_path):
+        write(tmp_path / "first.md", "---\ntitle: First\n---\nBody.\n")
+        write(tmp_path / "second.md", "---\ntitle: Second\n---\nBody.\n")
+        assert lint_vault(str(tmp_path))["findings"]["duplicate_titles"] == []
+
     def test_missing_frontmatter(self, lint_dir):
         report = lint_vault(str(lint_dir))
         paths = {f["path"] for f in report["findings"]["missing_frontmatter_fields"]}
@@ -129,3 +148,39 @@ class TestLint:
         # 9 markdown files, none ignored.
         assert report["notes_scanned"] == 9
         assert report["notes_ignored"] == 0
+
+
+def test_cli_fix_missing_contract_fields(capsys, tmp_path):
+    note = tmp_path / "missing.md"
+    body = "Body stays byte-identical.\nSecond line.\n"
+    write(note, body)
+
+    code = cli.main(["lint", "--root", str(tmp_path), "--fix"])
+    envelope = json.loads(capsys.readouterr().out)
+    updated_raw = note.read_text(encoding="utf-8")
+    frontmatter, _ = split_frontmatter(updated_raw)
+
+    assert code == 0
+    assert envelope["result"]["summary"]["missing_frontmatter_fields"] == 0
+    assert envelope["result"]["fixed"] == [
+        {"path": "missing.md", "fields": ["id", "created", "updated"]}
+    ]
+    assert ULID_RE.match(str(frontmatter["id"]))
+    assert coerce_datetime(frontmatter["created"]).tzinfo is not None
+    assert coerce_datetime(frontmatter["updated"]).tzinfo is not None
+    assert updated_raw.endswith(body)
+
+
+def test_cli_fix_skips_unparseable_frontmatter(capsys, tmp_path):
+    note = tmp_path / "bad.md"
+    original = "---\ntitle: [broken\n---\nBody.\n"
+    write(note, original)
+
+    code = cli.main(["lint", "--root", str(tmp_path), "--fix"])
+    envelope = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert envelope["result"]["fix_skipped"] == [
+        {"path": "bad.md", "reason": "frontmatter present but failed to parse"}
+    ]
+    assert note.read_text(encoding="utf-8") == original
