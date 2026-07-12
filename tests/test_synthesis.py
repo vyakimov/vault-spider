@@ -98,3 +98,45 @@ class TestSynthesize:
         assert result["answer"] == ""
         assert result["warnings"] == ["unparseable model output"]
         assert result["raw"] == "the model rambled without any json"
+
+    def test_long_sentences_with_citations_have_no_warning(self, fake_provider):
+        fake_provider.chat_response = json.dumps(
+            {
+                "answer": "This sufficiently long factual sentence is grounded in the source [S0].",
+                "citations": ["S0"],
+                "confidence": "High",
+                "abstained": False,
+            }
+        )
+        assert synthesize(fake_provider, retrieval_output())["warnings"] == []
+
+    def test_long_uncited_sentences_are_counted(self, fake_provider):
+        fake_provider.chat_response = json.dumps(
+            {
+                "answer": (
+                    "This first factual sentence is deliberately longer than forty characters. "
+                    "This second factual sentence is also deliberately longer than forty characters."
+                ),
+                "citations": [],
+                "confidence": "Medium",
+                "abstained": False,
+            }
+        )
+        assert synthesize(fake_provider, retrieval_output())["warnings"] == [
+            "2 sentence(s) lack citations"
+        ]
+
+    def test_abstained_and_empty_answers_skip_coverage_warning(self, fake_provider):
+        for answer, abstained in [
+            ("A deliberately long uncited sentence that would otherwise be flagged.", True),
+            ("", False),
+        ]:
+            fake_provider.chat_response = json.dumps(
+                {
+                    "answer": answer,
+                    "citations": [],
+                    "confidence": "Low",
+                    "abstained": abstained,
+                }
+            )
+            assert synthesize(fake_provider, retrieval_output())["warnings"] == []

@@ -179,6 +179,22 @@ def synthesize(
         if path and path not in notes_used:
             notes_used.append(path)
 
+    if not parsed.get("abstained") and str(parsed.get("answer", "")):
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(
+                r"(?<=[.!?])\s+", str(parsed.get("answer", ""))
+            )
+            if sentence.strip()
+        ]
+        uncited = [
+            sentence
+            for sentence in sentences
+            if len(sentence) >= 40 and not re.search(r"\[S\d+", sentence)
+        ]
+        if uncited:
+            warnings.append(f"{len(uncited)} sentence(s) lack citations")
+
     confidence = str(parsed.get("confidence", "") or "").strip().lower()
     return {
         "question": question,
