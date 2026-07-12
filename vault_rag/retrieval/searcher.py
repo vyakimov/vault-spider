@@ -65,6 +65,12 @@ class Searcher:
         query_tokens = tokenize_for_bm25(query, self.stop_words, self.stemmer)
         bm25_scores = bm25.get_scores(query_tokens)
         _, _, quoted_phrases = self.extract_important_terms(query)
+        if not quoted_phrases:
+            return pd.Series(
+                dict(zip(ids, (float(score) for score in bm25_scores))),
+                dtype=float,
+                name="keyword_scores",
+            )
 
         keyword_scores: Dict[str, float] = {}
         for doc_id, doc, base_score in zip(ids, documents, bm25_scores):
