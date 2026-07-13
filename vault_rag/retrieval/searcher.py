@@ -6,7 +6,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -48,15 +48,6 @@ class Searcher:
 
     # -- helpers --------------------------------------------------------------
 
-    def extract_important_terms(self, query: str) -> Tuple[Set[str], Set[str], List[str]]:
-        quoted_phrases = re.findall(r'"([^"]*)"', query)
-        clean_query = query
-        for phrase in quoted_phrases:
-            clean_query = clean_query.replace(f'"{phrase}"', "")
-        terms = set(clean_query.lower().split())
-        stemmed_terms = {self.stemmer.stem(term) for term in terms}
-        return terms, stemmed_terms, quoted_phrases
-
     def calculate_keyword_scores(
         self,
         query: str,
@@ -66,7 +57,7 @@ class Searcher:
     ) -> pd.Series:
         query_tokens = tokenize_for_bm25(query, self.stop_words, self.stemmer)
         bm25_scores = bm25.get_scores(query_tokens)
-        _, _, quoted_phrases = self.extract_important_terms(query)
+        quoted_phrases = re.findall(r'"([^"]*)"', query)
         if not quoted_phrases:
             return pd.Series(
                 dict(zip(ids, (float(score) for score in bm25_scores))),
@@ -125,7 +116,7 @@ class Searcher:
         if not hasattr(self, "_query_cache"):
             self._query_cache = QueryEmbeddingCache(
                 os.path.join(chroma_path, "query_embedding_cache.json"),
-                self.store.provider.embedding_model,
+                self.provider.embedding_model,
             )
         cached = self._query_cache.get(query)
         if cached is not None:

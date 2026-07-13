@@ -203,6 +203,10 @@ class IndexStore:
     def sync(
         self, root: str, reset: bool = False, dry_run: bool = False
     ) -> Dict[str, object]:
+        if reset and dry_run:
+            # Reset drops the collection before anything is predicted; a
+            # "dry run" that destroys data must be impossible.
+            raise ValueError("reset cannot be combined with dry_run")
         if reset:
             self._reset_collection()
 

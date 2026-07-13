@@ -6,6 +6,7 @@ from typing import Dict
 import streamlit as st
 from streamlit_models import get_openrouter_client
 
+from vault_rag import settings
 from vault_rag.index.reader import DatabaseReader
 from vault_rag.synthesis.answer import synthesize
 
@@ -37,7 +38,7 @@ def transform_citations_to_links(
 
 @st.dialog("Note Details", width="large")
 def show_document_dialog(doc_id: str, citation_key: str):
-    reader = DatabaseReader()
+    reader = DatabaseReader(settings.chroma_path())
     fetched = reader.collection.get(ids=[doc_id], include=["metadatas", "documents"])
     if not fetched or not fetched.get("ids"):
         st.warning("Document not found.")

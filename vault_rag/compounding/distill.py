@@ -7,26 +7,16 @@ notes always win on conflict; distilled notes are regenerable derived artifacts.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
 from ulid import ULID
 
-# Timestamp policy recorded in plans/phase-0-results.md: offset-aware local.
-TIMESTAMP_POLICY = "offset_local"
+from vault_rag.compounding.backfill_core import now_timestamp
 
 
 class EmptySlugError(ValueError):
     """Raised when a question slugifies to an empty string."""
-
-
-def now_timestamp() -> str:
-    now = datetime.now(timezone.utc)
-    if TIMESTAMP_POLICY == "utc_z":
-        return now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    # offset-aware local, colon in the offset (e.g. 2026-07-07T14:30:00+02:00)
-    return now.astimezone().isoformat(timespec="seconds")
 
 
 def slugify(question: str) -> str:

@@ -9,11 +9,11 @@ version.
 
 ```
 vault-rag schema
-vault-rag sync --root "./input/Vault 14" [--reset]
+vault-rag sync [--root <dir>] [--reset]      # --root defaults to config.yaml `vault.root`
 vault-rag retrieve --query "..." [--mode fast|thorough] [--granularity document|section|mixed] [-n 10]
 vault-rag synthesize --query "..." [--mode thorough] [--granularity mixed] [--retrieval file.json]
                      [--n-context 8] [--save --root <dir> [--save-dir Distilled]]
-vault-rag lint --root <dir> [--format json|text]
+vault-rag lint --root <dir> [--format json|text] [--fix] [--fix-timestamps]
 vault-rag enrich --root <dir> (--note <vault-rel-path> | --stdin)
                  [--intent "..."] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]
 ```

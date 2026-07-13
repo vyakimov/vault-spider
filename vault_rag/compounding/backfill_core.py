@@ -11,17 +11,18 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ulid import ULID
 
+from vault_rag import settings
 from vault_rag.corpus.frontmatter import coerce_datetime
 
-TIMESTAMP_POLICY = "offset_local"
 ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
 LEGACY_ID_FIELDS = ("uid", "ulid", "luid")
 
 
 def format_timestamp(dt: datetime) -> str:
+    """Render a timestamp per the configured policy (`timestamps.policy`)."""
     if dt.tzinfo is None:
         dt = dt.astimezone()
-    if TIMESTAMP_POLICY == "utc_z":
+    if settings.timestamp_policy() == "utc_z":
         return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return dt.astimezone().isoformat(timespec="seconds")
 

@@ -4,13 +4,14 @@ from typing import Dict, Optional
 
 import streamlit as st
 
+from vault_rag import settings
 from vault_rag.index.reader import DatabaseReader
 
 
 @st.cache_resource
 def get_reader() -> Optional[DatabaseReader]:
     try:
-        return DatabaseReader()
+        return DatabaseReader(settings.chroma_path())
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to initialize database: {exc}")
         return None

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from vault_rag.index.store import IndexStore
 
 
@@ -199,3 +201,15 @@ def test_dry_run_predicts_sync_without_mutation(
 
     assert (real["added_notes"], real["updated_notes"], real["deleted_notes"]) == (1, 1, 1)
     assert real["dry_run"] is False
+
+
+def test_dry_run_with_reset_is_refused(tmp_path, tiny_vault, fake_provider):
+    """A dry run must never be destructive; reset would drop the collection."""
+    store = build_store(tmp_path / "chroma", fake_provider)
+    store.sync(str(tiny_vault))
+    count = store.collection.count()
+
+    with pytest.raises(ValueError):
+        store.sync(str(tiny_vault), reset=True, dry_run=True)
+
+    assert store.collection.count() == count

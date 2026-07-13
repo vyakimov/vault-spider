@@ -10,7 +10,11 @@ import pytest
 
 from vault_rag import cli
 from vault_rag.compounding.backfill_core import ULID_RE
-from vault_rag.compounding.lint import extract_wikilinks, lint_vault
+from vault_rag.compounding.lint import (
+    extract_frontmatter_wikilinks,
+    extract_wikilinks,
+    lint_vault,
+)
 from vault_rag.corpus.frontmatter import coerce_datetime, split_frontmatter
 
 VALID_TS = "2025-01-01T00:00:00Z"
@@ -150,6 +154,173 @@ class TestLint:
         assert report["notes_ignored"] == 0
 
 
+class TestExtractFrontmatterWikilinks:
+    def test_reads_links_from_values(self):
+        block = 'parents: "[[Daily Notes]]"\ntags:\n  - x\n'
+        assert extract_frontmatter_wikilinks(block) == [("Daily Notes", 2)]
+
+    def test_no_links_is_empty(self):
+        assert extract_frontmatter_wikilinks("tags:\n  - x\n") == []
+
+
+class TestLinkResolution:
+    def test_attachment_links_are_not_broken(self, tmp_path):
+        """`[[diagram.png]]` names a real file — an attachment, not a missing note."""
+        (tmp_path / "!attachments").mkdir()
+        (tmp_path / "!attachments" / "diagram.png").write_bytes(b"\x89PNG")
+        write(tmp_path / "A.md", "Embedded ![[diagram.png]] and [[missing.png]].\n")
+
+        broken = lint_vault(str(tmp_path))["findings"]["broken_wikilinks"]
+
+        assert {b["target"] for b in broken} == {"missing.png"}
+
+    def test_hidden_dir_files_are_not_attachments(self, tmp_path):
+        """`.git/config` is not linkable; `[[config]]` must stay a broken link."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".git" / "config").write_text("[core]\n")
+        write(tmp_path / "A.md", "See [[config]].\n")
+
+        broken = lint_vault(str(tmp_path))["findings"]["broken_wikilinks"]
+
+        assert {b["target"] for b in broken} == {"config"}
+
+    def test_links_to_excalidraw_drawings_resolve(self, tmp_path):
+        """Drawings are skipped as notes, but they are real files — links to them still resolve."""
+        (tmp_path / "Excalidraw").mkdir()
+        (tmp_path / "Excalidraw" / "map0.excalidraw.md").write_text(
+            "---\nexcalidraw-plugin: parsed\n---\ncompressed\n"
+        )
+        write(tmp_path / "A.md", "See [[map0.excalidraw]] and [[map0.excalidraw.md]].\n")
+
+        assert lint_vault(str(tmp_path))["findings"]["broken_wikilinks"] == []
+
+    def test_alias_links_resolve(self, tmp_path):
+        write(tmp_path / "Obsidian MOC.md", "---\naliases:\n  - Obsidian\n---\nHub.\n")
+        write(tmp_path / "A.md", "See [[Obsidian]].\n")
+
+        report = lint_vault(str(tmp_path))
+
+        assert report["findings"]["broken_wikilinks"] == []
+        # The alias link is a real edge: neither note is an orphan.
+        assert report["findings"]["orphans"] == []
+
+    def test_multiword_alias_is_one_alias(self, tmp_path):
+        write(tmp_path / "PGx.md", "---\naliases:\n  - Pharmacogenetics Hub\n---\nHub.\n")
+        write(tmp_path / "A.md", "See [[Pharmacogenetics Hub]].\n")
+
+        assert lint_vault(str(tmp_path))["findings"]["broken_wikilinks"] == []
+
+    def test_frontmatter_link_counts_as_an_edge(self, tmp_path):
+        """A daily note whose only link is `parents:` is a child, not an orphan."""
+        write(tmp_path / "Daily Notes.md", "The hub.\n")
+        write(tmp_path / "2026-07-10.md", '---\nparents: "[[Daily Notes]]"\n---\n\n# 2026-07-10\n')
+
+        report = lint_vault(str(tmp_path))
+
+        assert report["findings"]["orphans"] == []
+        assert report["findings"]["broken_wikilinks"] == []
+
+    def test_broken_frontmatter_link_is_reported(self, tmp_path):
+        write(tmp_path / "note.md", '---\nparents: "[[Nowhere]]"\n---\nBody.\n')
+
+        broken = lint_vault(str(tmp_path))["findings"]["broken_wikilinks"]
+
+        assert len(broken) == 1
+        assert broken[0]["target"] == "Nowhere"
+        assert broken[0]["location"] == "frontmatter"
+
+    def test_body_links_are_located(self, tmp_path):
+        write(tmp_path / "note.md", "Link to [[Nowhere]].\n")
+        broken = lint_vault(str(tmp_path))["findings"]["broken_wikilinks"]
+        assert broken[0]["location"] == "body"
+
+
+class TestNewChecks:
+    def test_dangling_targets_rank_by_link_count(self, tmp_path):
+        write(tmp_path / "a.md", "[[Wanted]] and [[Other]].\n")
+        write(tmp_path / "b.md", "[[Wanted]] again.\n")
+
+        dangling = lint_vault(str(tmp_path))["findings"]["dangling_targets"]
+
+        assert dangling[0] == {
+            "target": "Wanted",
+            "count": 2,
+            "linked_from": ["a.md", "b.md"],
+        }
+        assert dangling[1]["target"] == "Other"
+
+    def test_empty_notes_rank_by_inbound_links(self, tmp_path):
+        write(tmp_path / "stub.md", "---\nid: x\n---\n")           # empty, 2 inbound
+        write(tmp_path / "lonely.md", "---\nid: y\n---\n\n")       # empty, 0 inbound
+        write(tmp_path / "a.md", "A real note that happens to link to [[stub]].\n")
+        write(tmp_path / "b.md", "Another real note linking to [[stub]] as well.\n")
+
+        empty = lint_vault(str(tmp_path))["findings"]["empty_notes"]
+
+        # The most-linked stub sorts first: it is the most valuable one to write.
+        assert [e["path"] for e in empty] == ["stub.md", "lonely.md"]
+        assert empty[0] == {"path": "stub.md", "chars": 0, "inbound": 2}
+
+    def test_note_with_content_is_not_empty(self, tmp_path):
+        write(tmp_path / "real.md", "This body is comfortably longer than the stub cutoff.\n")
+        assert lint_vault(str(tmp_path))["findings"]["empty_notes"] == []
+
+    def test_conflict_copies(self, tmp_path):
+        write(tmp_path / "Note.md", "Shared body text here.\nPlus one extra line.\n")
+        write(tmp_path / "Note 1.md", "Shared body text here.\n")
+        write(tmp_path / "Standalone 2.md", "No base note exists for this one.\n")
+
+        copies = lint_vault(str(tmp_path))["findings"]["conflict_copies"]
+
+        assert len(copies) == 1
+        assert copies[0]["path"] == "Note 1.md"
+        assert copies[0]["base_path"] == "Note.md"
+        assert 0.0 < copies[0]["similarity"] <= 1.0
+
+    def test_excalidraw_files_are_not_linted(self, tmp_path):
+        write(tmp_path / "Drawing.excalidraw.md", "---\nid: z\n---\ncompressed-json-blob\n")
+        report = lint_vault(str(tmp_path))
+        assert report["notes_scanned"] == 0
+        assert report["notes_ignored"] == 1
+
+
+def test_cli_fix_timestamps_normalizes_naive_values(capsys, tmp_path):
+    note = tmp_path / "daily.md"
+    body = "# 2026-07-10\n\nLogbook.\n"
+    write(note, f'---\nid: 01H\nparents: "[[x]]"\ndate: 2026-07-10T10:01\n---\n{body}')
+
+    code = cli.main(["lint", "--root", str(tmp_path), "--fix-timestamps"])
+    envelope = json.loads(capsys.readouterr().out)
+    frontmatter, _ = split_frontmatter(note.read_text(encoding="utf-8"))
+
+    assert code == 0
+    assert envelope["result"]["summary"]["invalid_timestamps"] == 0
+    assert envelope["result"]["fixed"][0]["path"] == "daily.md"
+    resolved = coerce_datetime(frontmatter["date"])
+    assert resolved.tzinfo is not None
+    # Local wall-clock time is preserved; only the offset is attached.
+    assert (resolved.hour, resolved.minute) == (10, 1)
+    # Untouched keys and the body survive byte-for-byte.
+    assert frontmatter["parents"] == "[[x]]"
+    assert note.read_text(encoding="utf-8").endswith(body)
+
+
+def test_cli_fix_timestamps_skips_unparseable(capsys, tmp_path):
+    note = tmp_path / "bad.md"
+    original = "---\nid: 01H\ncreated: yesterday\n---\nBody.\n"
+    write(note, original)
+
+    code = cli.main(["lint", "--root", str(tmp_path), "--fix-timestamps"])
+    envelope = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert envelope["result"]["fixed"] == []
+    assert envelope["result"]["fix_skipped"] == [
+        {"path": "bad.md", "field": "created", "reason": "unparseable"}
+    ]
+    assert note.read_text(encoding="utf-8") == original
+
+
 def test_cli_fix_missing_contract_fields(capsys, tmp_path):
     note = tmp_path / "missing.md"
     body = "Body stays byte-identical.\nSecond line.\n"
@@ -184,3 +355,27 @@ def test_cli_fix_skips_unparseable_frontmatter(capsys, tmp_path):
         {"path": "bad.md", "reason": "frontmatter present but failed to parse"}
     ]
     assert note.read_text(encoding="utf-8") == original
+
+
+def test_cli_lint_text_format_is_readable(capsys, tmp_path):
+    """`--format text` must render findings as lines, never as raw Python dicts."""
+    write(tmp_path / "a.md", "---\nid: x\n---\nLinks to [[Nowhere]] twice: [[Nowhere]].\n")
+    write(tmp_path / "stub.md", "---\nid: y\n---\n")
+
+    code = cli.main(["lint", "--root", str(tmp_path), "--format", "text"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "2x  [[Nowhere]]" in out          # aggregated, not one line per occurrence
+    assert "empty notes" in out
+    assert "{'path'" not in out              # no dict repr leaked into the report
+
+
+def test_cli_lint_text_reports_a_clean_vault(capsys, tmp_path):
+    fm = "---\nid: {}\ncreated: 2025-01-01T00:00:00Z\nupdated: 2025-01-01T00:00:00Z\n---\n"
+    write(tmp_path / "a.md", fm.format("x") + "A real note with enough body to not be a stub. See [[b]].\n")
+    write(tmp_path / "b.md", fm.format("y") + "Another real note with a decent body. See [[a]].\n")
+
+    cli.main(["lint", "--root", str(tmp_path), "--format", "text"])
+
+    assert "No findings. The vault is clean." in capsys.readouterr().out

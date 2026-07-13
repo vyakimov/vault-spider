@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+
+# Installation-specific configuration (paths, folder names). Ships as config.yaml.example.
+config.yaml
 **/.DS_Store
 CLAUDE.md
 chroma_db/
@@ -15,4 +18,6 @@ output/
 .uv-cache/
 .venv/
 .vectorcode/
-.claude/
+
+# Project history: personal narrative + real note content in phase-6-artifacts.
+plans/

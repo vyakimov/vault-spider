@@ -1,7 +1,7 @@
 ---
 name: vault
 description: >-
-  Search, answer from, and maintain the user's Obsidian vault (Vault 14) using
+  Search, answer from, and maintain the user's Obsidian vault using
   vault-rag (retrieval / synthesis / lint / enrich) and obsctl (safe note
   mutations). Use when the user asks what they know or wrote about something, or
   wants notes found, captured, enriched, filed, or vault health checked.
@@ -15,9 +15,9 @@ no ranking, YAML, or path logic (that lives in the CLIs). Every CLI prints one J
 
 ## Tools & preconditions
 
-- **`vault-rag`** — run from the repo (`/Users/vy/Documents/Development/vault-rag`) via
-  `uv run vault-rag ...`; needs `.env` (OpenRouter). Read-only against the vault except
-  `synthesize --save`. Corpus root for the live vault: `/Users/vy/Documents/Vault 14`.
+- **`vault-rag`** — run from the repo via `uv run vault-rag ...`; needs `.env` (OpenRouter) and
+  `config.yaml` (vault root, skip dirs). Read-only against the vault except `synthesize --save`.
+  The corpus root comes from `config.yaml` (`vault.root`), so `--root` can usually be omitted.
 - **`obsctl`** — on PATH; **needs the Obsidian app running.** All vault mutations go through it.
 - **`obsidian`** — the official CLI; read-only use here (`read`, `backlinks`, `unresolved`, `tags`).
   Errors print `Error:` text with exit 0.

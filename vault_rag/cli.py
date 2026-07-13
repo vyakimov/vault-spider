@@ -10,10 +10,14 @@ import sys
 from pathlib import PurePosixPath
 from typing import Any, Dict, Optional
 
+from vault_rag import settings
 from vault_rag.envelope import failure, print_json, success
 from vault_rag.llm.openrouter import OpenRouterClient, OpenRouterError
 
 SCHEMA_VERSION = 1
+
+# How many findings per check `--format text` prints before truncating.
+_LINT_TEXT_LIMIT = 15
 
 
 def get_provider() -> OpenRouterClient:
@@ -45,7 +49,7 @@ def _schema() -> Dict[str, Any]:
             "schema": {"args": {}, "result": "this document"},
             "sync": {
                 "args": {
-                    "--root": "vault directory (required)",
+                    "--root": "vault directory (required unless config.yaml sets vault.root)",
                     "--reset": "flag",
                     "--dry-run": "flag",
                 },
@@ -98,15 +102,16 @@ def _schema() -> Dict[str, Any]:
             },
             "lint": {
                 "args": {
-                    "--root": "vault directory (required)",
+                    "--root": "vault directory (required unless config.yaml sets vault.root)",
                     "--format": "json|text (default json)",
                     "--fix": "flag: write missing id/created/updated frontmatter",
+                    "--fix-timestamps": "flag: rewrite naive created/updated/date as offset-aware",
                 },
-                "result": "lint_report (+fixed/fix_skipped with --fix)",
+                "result": "lint_report (+fixed/fix_skipped with --fix/--fix-timestamps)",
             },
             "enrich": {
                 "args": {
-                    "--root": "corpus directory (required)",
+                    "--root": "corpus directory (required unless config.yaml sets vault.root)",
                     "--note": "vault-relative path (xor --stdin)",
                     "--stdin": "flag: enrich raw text from stdin",
                     "--intent": "free text",
@@ -175,6 +180,9 @@ def _schema() -> Dict[str, Any]:
                     "duplicate_ids": "int",
                     "duplicate_titles": "int",
                     "broken_wikilinks": "int",
+                    "dangling_targets": "int (unresolved targets, aggregated by link count)",
+                    "empty_notes": "int (stubs; sorted by inbound links desc)",
+                    "conflict_copies": "int ('Note 1.md' beside 'Note.md')",
                     "orphans": "int",
                     "stale_distilled": "int",
                 },
@@ -260,7 +268,7 @@ def _run_retrieval(store, provider, query, mode, granularity, n_results, args):
         until=args.until,
         must_include_terms=args.must_include_terms,
     )
-    output = build_retrieval_output(query, mode, granularity, result.rows, store)
+    output = build_retrieval_output(query, mode, granularity, result.rows)
     return output, result
 
 
@@ -456,21 +464,66 @@ def cmd_enrich(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def _lint_text(report: Dict[str, Any]) -> str:
+    findings = report["findings"]
+
+    def fmt(check: str, entry: Dict[str, Any]) -> str:
+        """One human line per finding — never a raw dict."""
+        if check == "broken_wikilinks":
+            where = f"{entry['path']}:{entry['line']}"
+            note = "" if entry.get("location") == "body" else " (frontmatter)"
+            return f"[[{entry['target']}]] <- {where}{note}"
+        if check == "dangling_targets":
+            linked = ", ".join(entry["linked_from"][:3])
+            more = f" (+{len(entry['linked_from']) - 3} more)" if len(entry["linked_from"]) > 3 else ""
+            return f"{entry['count']}x  [[{entry['target']}]] <- {linked}{more}"
+        if check == "empty_notes":
+            return f"{entry['inbound']} inbound, {entry['chars']} chars  {entry['path']}"
+        if check == "conflict_copies":
+            return f"{entry['path']}  (similarity {entry['similarity']} to {entry['base_path']})"
+        if check == "invalid_timestamps":
+            return f"{entry['path']}  {entry['field']}: {entry['value']!r} ({entry['problem']})"
+        if check == "missing_frontmatter_fields":
+            return f"{entry['path']}  missing: {', '.join(entry['missing'])}"
+        if check in ("duplicate_ids", "duplicate_titles"):
+            key = entry.get("id") or entry.get("title")
+            return f"{key}  -> {', '.join(entry['paths'])}"
+        if check == "orphans":
+            return str(entry["path"])
+        if check == "stale_distilled":
+            return f"{entry['path']}  {entry.get('warning', 'sources changed since it was written')}"
+        return str(entry)
+
     lines = [
         f"Vault lint: {report['root']}",
-        f"  notes scanned: {report['notes_scanned']}  ignored: {report['notes_ignored']}",
+        f"  {report['notes_scanned']} notes scanned, {report['notes_ignored']} ignored",
         "",
-        "Summary:",
     ]
-    for check, count in report["summary"].items():
-        lines.append(f"  {check:<28} {count}")
-    for check, entries in report["findings"].items():
-        if not entries:
-            continue
+
+    clean = [check for check, count in report["summary"].items() if not count]
+    problems = {check: count for check, count in report["summary"].items() if count}
+
+    if not problems:
+        lines.append("No findings. The vault is clean.")
+        return "\n".join(lines)
+
+    lines.append("Summary")
+    for check, count in sorted(problems.items(), key=lambda item: -item[1]):
+        lines.append(f"  {count:>5}  {check.replace('_', ' ')}")
+    if clean:
+        lines.append(f"  clean: {', '.join(check.replace('_', ' ') for check in sorted(clean))}")
+
+    # `dangling_targets` already aggregates `broken_wikilinks`; showing both is noise.
+    shown = [check for check in problems if check != "broken_wikilinks"]
+    for check in shown:
+        entries = findings[check]
         lines.append("")
-        lines.append(f"{check} (first 20):")
-        for entry in entries[:20]:
-            lines.append(f"  {entry}")
+        header = check.replace("_", " ")
+        if len(entries) > _LINT_TEXT_LIMIT:
+            header += f" (showing {_LINT_TEXT_LIMIT} of {len(entries)})"
+        lines.append(f"{header}:")
+        for entry in entries[:_LINT_TEXT_LIMIT]:
+            lines.append(f"  {fmt(check, entry)}")
+
     return "\n".join(lines)
 
 
@@ -478,17 +531,32 @@ def cmd_lint(args: argparse.Namespace) -> Dict[str, Any]:
     if not os.path.isdir(args.root):
         return failure("lint", "invalid_arguments", f"root directory not found: {args.root}")
 
-    from vault_rag.compounding.lint import fix_missing_frontmatter, lint_vault
+    from vault_rag.compounding.lint import (
+        fix_missing_frontmatter,
+        fix_naive_timestamps,
+        lint_vault,
+    )
 
-    report = lint_vault(args.root)
-    if args.fix:
-        fixed, fix_skipped = fix_missing_frontmatter(args.root)
+    # Fixes run first; the report always reflects the vault's final state.
+    if args.fix or args.fix_timestamps:
+        fixed: list = []
+        fix_skipped: list = []
+        if args.fix:
+            added, skipped = fix_missing_frontmatter(args.root)
+            fixed.extend(added)
+            fix_skipped.extend(skipped)
+        if args.fix_timestamps:
+            normalized, skipped = fix_naive_timestamps(args.root)
+            fixed.extend(normalized)
+            fix_skipped.extend(skipped)
         report = lint_vault(args.root)
         report["fixed"] = fixed
         report["fix_skipped"] = fix_skipped
+    else:
+        report = lint_vault(args.root)
     if args.format == "text":
         text = _lint_text(report)
-        if args.fix:
+        if args.fix or args.fix_timestamps:
             text += f"\nfixed: {len(report['fixed'])}"
         sys.stdout.write(text + "\n")
         return {"ok": True, "_no_print": True}
@@ -509,8 +577,14 @@ def _add_filter_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # A configured `vault.root` makes --root optional; without one it stays required.
+    _VAULT_ROOT = settings.vault_root()
     parser = argparse.ArgumentParser(prog="vault-rag", description="Vault RAG JSON CLI")
-    parser.add_argument("--chroma-path", default="chroma_db", help="Chroma persistence dir")
+    parser.add_argument(
+        "--chroma-path",
+        default=settings.chroma_path(),
+        help="Chroma persistence dir (default from config.yaml `index.chroma_path`)",
+    )
     parser.add_argument("--collection", default="vault_notes", help="Chroma collection name")
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -528,7 +602,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync = sub.add_parser(
         "sync", parents=[common], help="Incrementally sync the vault into the index"
     )
-    p_sync.add_argument("--root", required=True, help="Vault directory to index")
+    p_sync.add_argument(
+        "--root",
+        required=_VAULT_ROOT is None,
+        default=_VAULT_ROOT,
+        help="Vault directory to index (default from config.yaml `vault.root`)",
+    )
     p_sync.add_argument("--reset", action="store_true", help="Rebuild from scratch")
     p_sync.add_argument("--dry-run", dest="dry_run", action="store_true")
 
@@ -555,21 +634,45 @@ def build_parser() -> argparse.ArgumentParser:
     p_synth.add_argument("-n", type=int, default=10)
     p_synth.add_argument("--n-context", dest="n_context", type=int, default=8)
     p_synth.add_argument("--save", action="store_true", help="Persist a good answer as a distilled note")
-    p_synth.add_argument("--save-dir", dest="save_dir", default="Distilled", help="Distilled note folder (relative to --root)")
-    p_synth.add_argument("--root", default=None, help="Vault directory to write the distilled note into")
+    p_synth.add_argument(
+        "--save-dir",
+        dest="save_dir",
+        default=settings.distilled_dir(),
+        help="Distilled note folder relative to --root (config: `vault.distilled_dir`)",
+    )
+    p_synth.add_argument(
+        "--root",
+        default=_VAULT_ROOT,
+        help="Vault directory to write the distilled note into (config: `vault.root`)",
+    )
     _add_filter_arguments(p_synth)
 
     p_lint = sub.add_parser("lint", parents=[common], help="Read-only corpus health report")
-    p_lint.add_argument("--root", required=True, help="Vault directory to lint")
+    p_lint.add_argument(
+        "--root",
+        required=_VAULT_ROOT is None,
+        default=_VAULT_ROOT,
+        help="Vault directory to lint (default from config.yaml `vault.root`)",
+    )
     p_lint.add_argument("--format", choices=["json", "text"], default="json")
     p_lint.add_argument(
         "--fix", action="store_true", help="Write missing id/created/updated frontmatter"
+    )
+    p_lint.add_argument(
+        "--fix-timestamps",
+        action="store_true",
+        help="Rewrite naive created/updated/date as offset-aware timestamps",
     )
 
     p_enrich = sub.add_parser(
         "enrich", parents=[common], help="Propose an enrichment plan (no mutations)"
     )
-    p_enrich.add_argument("--root", required=True, help="Corpus directory")
+    p_enrich.add_argument(
+        "--root",
+        required=_VAULT_ROOT is None,
+        default=_VAULT_ROOT,
+        help="Corpus directory (default from config.yaml `vault.root`)",
+    )
     p_enrich.add_argument("--note", default=None, help="Vault-relative path of an existing note")
     p_enrich.add_argument("--stdin", action="store_true", help="Enrich raw text read from stdin")
     p_enrich.add_argument("--intent", default=None)
@@ -595,7 +698,14 @@ _HANDLERS = {
 
 
 def main(argv: Optional[list] = None) -> int:
-    parser = build_parser()
+    try:
+        parser = build_parser()
+    except settings.ConfigError as exc:
+        # A malformed config.yaml must still leave one JSON envelope on stdout.
+        command = next((arg for arg in (argv or sys.argv[1:]) if not arg.startswith("-")), "cli")
+        print_json(failure(command, "invalid_arguments", str(exc)))
+        return 1
+
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
@@ -606,6 +716,8 @@ def main(argv: Optional[list] = None) -> int:
         envelope = handler(args)
     except OpenRouterError as exc:
         envelope = failure(args.command, "provider_error", str(exc))
+    except settings.ConfigError as exc:
+        envelope = failure(args.command, "invalid_arguments", str(exc))
     except Exception as exc:  # noqa: BLE001 - top-level guard -> internal_error envelope
         envelope = failure(args.command, "internal_error", str(exc))
 

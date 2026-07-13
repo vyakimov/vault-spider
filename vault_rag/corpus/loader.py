@@ -7,22 +7,37 @@ import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
+from vault_rag import settings
 from vault_rag.corpus.frontmatter import coerce_datetime, normalize_tags, split_frontmatter
 from vault_rag.corpus.identity import resolve_note_id
 
 DATE_FILENAME_RE = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})\.md$")
 
-IGNORE_TAGS = ("ignore", "secret")
-IGNORE_TAG_RE = re.compile(
-    r"(?<!\S)#(?:" + "|".join(IGNORE_TAGS) + r")(?![\w/-])",
-    re.IGNORECASE,
-)
+def ignore_tags() -> List[str]:
+    """Tags that mean "never index this note". Configurable: `vault.ignore_tags`."""
+    return settings.ignore_tags()
 
-# Vault-relative directory prefixes that are never indexed. "999 Templates" is
-# this vault's Templater folder (recorded in plans/phase-0-results.md).
-SKIP_DIR_PARTS = {".trash", ".obsidian", "Templates", "999 Templates"}
+
+def _ignore_tag_re() -> re.Pattern:
+    tags = ignore_tags() or ["ignore"]
+    alternation = "|".join(re.escape(tag) for tag in tags)
+    return re.compile(rf"(?<!\S)#(?:{alternation})(?![\w/-])", re.IGNORECASE)
+
+
+def skip_dirs() -> Set[str]:
+    """Vault-relative directory names that are never indexed.
+
+    Configurable via `vault.skip_dirs` — a vault whose Templater folder is called
+    "999 Templates" adds it there rather than to this source file.
+    """
+    return settings.skip_dirs()
+
+# Excalidraw stores drawings as `.md` files whose body is compressed drawing data,
+# not prose. Embedding them poisons retrieval, so they are skipped everywhere.
+EXCALIDRAW_SUFFIX = ".excalidraw.md"
+EXCALIDRAW_FRONTMATTER_KEY = "excalidraw-plugin"
 
 
 @dataclass
@@ -41,12 +56,13 @@ class Note:
 
 
 def has_ignore_tag(body: str) -> bool:
-    return bool(IGNORE_TAG_RE.search(body))
+    return bool(_ignore_tag_re().search(body))
 
 
 def has_ignore_frontmatter_tag(tags: List[str]) -> bool:
     """True when a frontmatter tag is `ignore`/`secret` (with or without `#`)."""
-    return any(tag.lstrip("#").lower() in IGNORE_TAGS for tag in tags)
+    ignored = ignore_tags()
+    return any(tag.lstrip("#").lower() in ignored for tag in tags)
 
 
 def resolve_note_date(path: Path, frontmatter: Dict[str, Any]) -> str:
@@ -71,8 +87,24 @@ def _iso_or_none(value: Any) -> str | None:
     return resolved.isoformat() if resolved is not None else None
 
 
-def _is_skipped(relative_path: Path) -> bool:
-    return any(part in SKIP_DIR_PARTS for part in relative_path.parts[:-1])
+def is_skipped_path(relative_path: Path) -> bool:
+    """True when any parent directory is skipped or hidden.
+
+    Hidden directories (`.git`, plugin caches, ...) are never part of the vault:
+    Obsidian does not index dot-folders, so nothing inside one is a note or a
+    linkable attachment.
+    """
+    skipped = skip_dirs()
+    return any(
+        part in skipped or part.startswith(".") for part in relative_path.parts[:-1]
+    )
+
+
+def is_excalidraw(relative_path: Path, frontmatter: Dict[str, Any]) -> bool:
+    return (
+        relative_path.name.lower().endswith(EXCALIDRAW_SUFFIX)
+        or EXCALIDRAW_FRONTMATTER_KEY in frontmatter
+    )
 
 
 def load_notes(root: str) -> List[Note]:
@@ -83,7 +115,7 @@ def load_notes(root: str) -> List[Note]:
     notes: List[Note] = []
     for path in sorted(root_path.rglob("*.md")):
         relative_path = path.relative_to(root_path)
-        if _is_skipped(relative_path):
+        if is_skipped_path(relative_path):
             continue
         try:
             raw_text = path.read_text(encoding="utf-8", errors="strict")
@@ -94,6 +126,8 @@ def load_notes(root: str) -> List[Note]:
         frontmatter, body = split_frontmatter(raw_text)
         tags = normalize_tags(frontmatter.get("tags"))
         if has_ignore_tag(body) or has_ignore_frontmatter_tag(tags):
+            continue
+        if is_excalidraw(relative_path, frontmatter):
             continue
         relative_posix = relative_path.as_posix()
         title = str(frontmatter.get("title") or path.stem)

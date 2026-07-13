@@ -142,3 +142,20 @@ class TestLoadNotes:
             (d / "x.md").write_text("skipme")
         notes = load_notes(str(tmp_path))
         assert [n.path for n in notes] == ["keep.md"]
+
+    def test_skips_hidden_dirs(self, tmp_path: Path):
+        """Obsidian never indexes dot-folders (`.git`, plugin caches, ...)."""
+        (tmp_path / "keep.md").write_text("body")
+        hidden = tmp_path / ".git" / "sub"
+        hidden.mkdir(parents=True)
+        (hidden / "x.md").write_text("skipme")
+        notes = load_notes(str(tmp_path))
+        assert [n.path for n in notes] == ["keep.md"]
+
+    def test_skips_excalidraw_drawings(self, tmp_path: Path):
+        """Excalidraw `.md` files hold compressed drawing data, not prose."""
+        (tmp_path / "keep.md").write_text("plain body")
+        (tmp_path / "map.excalidraw.md").write_text("---\ntags: [excalidraw]\n---\ncompressed\n")
+        (tmp_path / "tagged.md").write_text("---\nexcalidraw-plugin: parsed\n---\ncompressed\n")
+        notes = load_notes(str(tmp_path))
+        assert [n.path for n in notes] == ["keep.md"]

@@ -1,6 +1,9 @@
 # Assistant.md
 
-This repository is **Vault RAG**, a retrieval system for Markdown notes stored in `input/Vault 14`.
+This repository is **Vault RAG**, a retrieval system for an Obsidian vault of Markdown notes.
+
+The vault itself is never committed. Its location, and everything else installation-specific,
+lives in `config.yaml` (gitignored; copy `config.yaml.example`). Secrets live in `.env`.
 
 ## Project Overview
 
@@ -16,7 +19,7 @@ by the `granularity` metadata field.
 
 - `uv run vault-rag schema`
   - Prints the machine-readable command + contract schema (`version: 1`).
-- `uv run vault-rag sync --root "./input/Vault 14" [--reset]`
+- `uv run vault-rag sync [--root <dir>] [--reset]`  (`--root` defaults to `vault.root` in `config.yaml`)
   - Incremental sync: adds new notes, re-embeds changed or moved notes, deletes removed notes.
     Notes sharing a duplicate frontmatter `id` are skipped after the first and reported in
     the result's `warnings`.
@@ -33,9 +36,19 @@ by the `granularity` metadata field.
     under `<root>/<save-dir>`. Skips (with a warning) when the answer abstained, is low-confidence,
     has no citations, or the target exists. Distilled notes are regenerable pointers to their
     sources — raw notes always win on conflict. Run `vault-rag sync` afterward to index it.
-- `uv run vault-rag lint --root <dir> [--format json|text] [--fix]`
-  - Read-only corpus health report unless `--fix`, which writes only missing `id`/`created`/`updated` frontmatter (no LLM or index needed): missing frontmatter
-    fields, invalid/naive timestamps, duplicate ids, broken wikilinks, orphans, stale distilled notes.
+- `uv run vault-rag lint --root <dir> [--format json|text] [--fix] [--fix-timestamps]`
+  - Read-only corpus health report (no LLM or index needed): missing frontmatter fields,
+    invalid/naive timestamps, duplicate ids, duplicate titles, broken wikilinks, `dangling_targets`
+    (unresolved link targets ranked by how many notes want them — the best next notes to write),
+    `empty_notes` (stubs, ranked by inbound links), `conflict_copies` (`Note 1.md` beside
+    `Note.md`), orphans, stale distilled notes.
+  - Link resolution follows Obsidian: frontmatter links (`parents: "[[Daily Notes]]"`) count as
+    real edges, `aliases` resolve, and `[[diagram.png]]` resolves to an attachment rather than
+    being reported broken.
+  - `--fix` writes only *missing* `id`/`created`/`updated` frontmatter (never edits a value).
+    `--fix-timestamps` additionally rewrites *naive* `created`/`updated`/`date` as offset-aware —
+    a naive timestamp is local wall-clock time, so the local offset is attached with historical
+    DST; unparseable values are skipped, never guessed.
 - `uv run vault-rag enrich --root <dir> (--note <path> | --stdin) [--intent ...] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]`
   - App-agnostic **enrichment planner**: retrieves a note's neighborhood and proposes a title,
     frontmatter patch (`type`/`aliases`/`source_type`/`source_url` only), inline links, related
@@ -76,7 +89,10 @@ The `vault_rag` package is layered:
    - `frontmatter.py` — YAML frontmatter split, tag normalization, datetime coercion.
    - `identity.py` — note id resolution (frontmatter `id`/ULID, else path hash).
    - `loader.py` — `load_notes(root)` → `Note` dataclasses (skips `#ignore`/`#secret` in the
-     body or frontmatter `tags`, non-UTF-8 files, and `.trash/`, `.obsidian/`, `Templates/`).
+     body or frontmatter `tags`, non-UTF-8 files, `.trash/`, `.obsidian/`, `Templates/`, every
+     hidden directory — Obsidian never indexes dot-folders like `.git` — and
+     Excalidraw drawings — `*.excalidraw.md` / `excalidraw-plugin` frontmatter — whose bodies are
+     compressed drawing data rather than prose).
    - `chunker.py` — deterministic `split_sections` plus `document_text` / `section_text`.
 
 2. `vault_rag/index/`
@@ -107,13 +123,18 @@ The `vault_rag` package is layered:
 
 `tools/backfill.py` — standalone one-time migration that adds `id`/`created`/`updated`
 frontmatter to existing notes (dry-run by default; `--apply` to write; never touches bodies).
-`uv run tools/backfill.py --root <dir> [--apply] [--report <path>]`. Timestamp policy defaults to
-UTC `Z` (`TIMESTAMP_POLICY` in the file); Phase 0 may switch it to offset-aware local.
+`uv run tools/backfill.py --root <dir> [--apply] [--report <path>]`. The timestamp policy comes
+from `config.yaml` (`timestamps.policy`: `offset_local` or `utc_z`).
 
 ## Paths & Persistence
 
-- ChromaDB directory: `./chroma_db/`
-- Default note source: `./input/Vault 14/`
+All of these are configurable in `config.yaml`; the values below are the defaults.
+
+- ChromaDB directory: `./chroma_db/` (`index.chroma_path`)
+- Note source: none by default — set `vault.root`, or pass `--root`
+- Skipped folders: `.trash`, `.obsidian`, `Templates` (`vault.skip_dirs`), all hidden
+  directories, plus Excalidraw drawings
+- Never-indexed tags: `#ignore`, `#secret` (`vault.ignore_tags`)
 - Streamlit entrypoint: `scripts/streamlit_app.py`
 
 ## Development Notes

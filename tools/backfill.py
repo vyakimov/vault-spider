@@ -4,9 +4,8 @@ Safe by construction: existing metadata is preserved, note bodies are never
 touched, and provenance is recorded in an external JSON report. Dry-run is the
 default; writes happen only with --apply.
 
-The timestamp policy comes from Phase 0 (plans/phase-0-results.md). Until that
-file records a decision, the data contract's preferred format (UTC `Z`) is used;
-change TIMESTAMP_POLICY here if Phase 0 selects offset-aware local time.
+The timestamp policy comes from config.yaml (`timestamps.policy`): `offset_local`
+(the default) or `utc_z`.
 """
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ from typing import Any, Dict, List, Optional, Tuple
 # to the pre-refactor scripts/vault_ingestion.py the spec referenced).
 from vault_rag.compounding.backfill_core import (
     LEGACY_ID_FIELDS,
-    TIMESTAMP_POLICY,
     ULID_RE,
     Change,
     GitContext,
@@ -44,12 +42,12 @@ from vault_rag.compounding.backfill_core import (
     resolve_updated,
 )
 from vault_rag.corpus.frontmatter import coerce_datetime, split_frontmatter
+from vault_rag.corpus.loader import is_skipped_path
 
-SKIP_DIRS = {".trash", ".obsidian", "Templates", "999 Templates"}
 CONTRACT_ORDER = ("id", "created", "updated")
 
 __all__ = [
-    "TIMESTAMP_POLICY", "ULID_RE", "LEGACY_ID_FIELDS", "format_timestamp",
+    "ULID_RE", "LEGACY_ID_FIELDS", "format_timestamp",
     "iso_to_policy", "now_timestamp", "GitContext", "git_context", "_git_dates",
     "git_first_commit", "git_last_commit", "Change", "_legacy_id_values",
     "_closing_fence", "detect_ambiguity", "resolve_id", "resolve_created",
@@ -62,7 +60,7 @@ __all__ = [
 def _iter_files(root: Path, include_glob: str):
     for path in sorted(root.rglob(include_glob)):
         rel = path.relative_to(root)
-        if any(part in SKIP_DIRS for part in rel.parts[:-1]):
+        if is_skipped_path(rel):
             continue
         yield path, rel.as_posix()
 

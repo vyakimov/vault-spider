@@ -33,7 +33,7 @@ def _why(row: Dict[str, object]) -> str:
     return "combined keyword+semantic signal"
 
 
-def build_evidence(result_row: Dict[str, object], store, granularity: str) -> Dict[str, object]:
+def build_evidence(result_row: Dict[str, object]) -> Dict[str, object]:
     metadata: Dict[str, object] = result_row["metadata"]  # type: ignore[assignment]
     is_document = str(metadata.get("granularity", "document")) == "document"
     heading = "" if is_document else str(metadata.get("heading", ""))
@@ -65,7 +65,6 @@ def build_retrieval_output(
     mode: str,
     granularity: str,
     rows: List[Dict[str, object]],
-    store=None,
 ) -> Dict[str, object]:
     bm25_z = _zscores([float(row["bm25"]) for row in rows])
     sem_z = _zscores([float(row["semantic"]) for row in rows])
@@ -73,7 +72,7 @@ def build_retrieval_output(
         row["_bm25_z"] = bz
         row["_sem_z"] = sz
 
-    candidates = [build_evidence(row, store, granularity) for row in rows]
+    candidates = [build_evidence(row) for row in rows]
     return {
         "query": query,
         "mode": mode,

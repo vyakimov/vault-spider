@@ -88,7 +88,7 @@ def display_candidate(index: int, candidate: Dict[str, object]):
 
 def main():
     st.title("🗂️ Vault RAG")
-    st.caption("Retrieve Markdown notes from `input/Vault 14` using BM25, embeddings, reranking, and recency.")
+    st.caption("Retrieve Markdown notes using BM25, embeddings, reranking, and recency.")
 
     store, searcher, init_error = get_store_and_searcher()
     if init_error:
@@ -148,7 +148,7 @@ def main():
                 n_results=int(n_results),
             )
             st.session_state.last_results = build_retrieval_output(
-                query, mode, granularity, result.rows, store
+                query, mode, granularity, result.rows
             )
 
     if st.session_state.last_results is None:

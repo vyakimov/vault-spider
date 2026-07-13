@@ -1,0 +1,47 @@
+# vault-rag configuration.
+#
+# Everything installation-specific lives here: where your vault is, which folders to
+# skip, which tags mean "never index", how timestamps are written. Nothing personal is
+# baked into the source.
+#
+# Copy to config.yaml (gitignored) and edit. The file is OPTIONAL — without it the
+# defaults below apply and `--root` must be passed explicitly.
+#
+# Secrets do NOT belong here. API keys go in .env (see .env.example).
+#
+# VAULT_RAG_CONFIG can point at this file somewhere else.
+
+vault:
+  # Default corpus root, so you can run `vault-rag lint` without `--root`.
+  # `~` is expanded. Leave unset (null) to require --root on every command.
+  root: ~/Documents/MyVault
+
+  # Directory names never indexed, at any depth. Add your Templater folder here —
+  # Obsidian setups often name it something like "999 Templates" or "_templates".
+  # Hidden directories (.git, plugin caches, ...) are always skipped.
+  skip_dirs:
+    - .trash
+    - .obsidian
+    - Templates
+
+  # A note carrying any of these tags — in its frontmatter `tags:` or as a #tag in
+  # the body — is never indexed. This is the escape hatch for private notes: they
+  # stay in Obsidian but never reach the vector store or an LLM.
+  ignore_tags:
+    - ignore
+    - secret
+
+  # Where `synthesize --save` writes distilled notes, relative to the vault root.
+  distilled_dir: Distilled
+
+index:
+  # ChromaDB persistence directory, relative to the repo (or an absolute path).
+  chroma_path: chroma_db
+
+timestamps:
+  # How `--fix`/`--fix-timestamps`/distilled notes write `created`/`updated`:
+  #   offset_local — 2026-07-13T14:30:00+02:00  (local wall-clock + offset; what
+  #                  Obsidian and Templater write, and what most vaults already use)
+  #   utc_z        — 2026-07-13T12:30:00Z
+  # A naive timestamp already in a note is read as local wall-clock time either way.
+  policy: offset_local

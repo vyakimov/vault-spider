@@ -6,6 +6,7 @@ from typing import Optional, Tuple
 
 import streamlit as st
 
+from vault_rag import settings
 from vault_rag.index.store import IndexStore
 from vault_rag.llm.openrouter import OpenRouterClient
 from vault_rag.retrieval.searcher import Searcher
@@ -20,12 +21,12 @@ def get_openrouter_client() -> OpenRouterClient:
 def get_store_and_searcher() -> Tuple[Optional[IndexStore], Optional[Searcher], Optional[str]]:
     try:
         provider = get_openrouter_client()
-        store = IndexStore(provider=provider)
+        store = IndexStore(chroma_db_path=settings.chroma_path(), provider=provider)
         if store.collection.count() == 0:
             return (
                 None,
                 None,
-                'No notes found in the index. Run `uv run vault-rag sync --root "./input/Vault 14"` first.',
+                'No notes found in the index. Run `uv run vault-rag sync` first.',
             )
         searcher = Searcher(store, granularity="document", provider=provider)
         return store, searcher, None
