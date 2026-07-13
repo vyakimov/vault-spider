@@ -1,31 +1,35 @@
 ---
 name: vault
 description: >-
-  Search, answer from, and maintain the user's Obsidian vault using
-  vault-rag (retrieval / synthesis / lint / enrich) and obsctl (safe note
-  mutations). Use when the user asks what they know or wrote about something, or
-  wants notes found, captured, enriched, filed, or vault health checked.
+  Search, answer from, and maintain the user's Obsidian vault using the
+  vault-rag CLI (retrieval / synthesis / lint / enrich / safe note mutations).
+  Use when the user asks what they know or wrote about something, or wants
+  notes found, captured, enriched, filed, or vault health checked.
 ---
 
 # vault
 
-Thin orchestration over three JSON CLIs. This file encodes **when to use which tool** — it holds
-no ranking, YAML, or path logic (that lives in the CLIs). Every CLI prints one JSON envelope;
-**check the `"ok"` field, never exit codes.**
+Thin orchestration over one JSON CLI (plus the official `obsidian` CLI for a few read-only
+extras). This file encodes **when to use which command** — it holds no ranking, YAML, or path
+logic (that lives in the CLI). Every command prints one JSON envelope; **check the `"ok"` field,
+never exit codes.**
 
 ## Tools & preconditions
 
-- **`vault-rag`** — run from the repo via `uv run vault-rag ...`; needs `.env` (OpenRouter) and
-  `config.yaml` (vault root, skip dirs, distilled dir — see `config.yaml.example`). Read-only
-  against the vault except `synthesize --save` and the opt-in `lint --fix*` fixers. The corpus
-  root comes from `config.yaml` (`vault.root`), so `--root` can be omitted on every command.
-  `vault-rag stats` needs no API key — it is the cheap "is the index alive?" check.
-- **`obsctl`** — on PATH; **needs the Obsidian app running.** All vault mutations go through it.
-- **`obsidian`** — the official CLI; read-only use here (`read`, `backlinks`, `unresolved`, `tags`).
+- **`vault-rag`** — run from the repo via `uv run vault-rag ...`; one CLI for both reading and
+  writing the vault. Config comes from `config.yaml` (vault root, skip dirs, distilled dir,
+  Obsidian connection facts — see `config.yaml.example`), so `--root` can be omitted everywhere.
+  - *Query commands* (`retrieve`, `synthesize`, `enrich`, `stats`, `sync`, `lint`) need `.env`
+    (OpenRouter) except `stats` and `lint`. `vault-rag stats` needs no API key — it is the cheap
+    "is the index alive?" check.
+  - *Mutation commands* (`create-note`, `read-note`, `merge-frontmatter`, `add-links`,
+    `insert-related`, `move-note`, `rename-note`, `open-note`) **need the Obsidian app running**;
+    they go through the official Obsidian CLI so links update and plugins fire.
+- **`obsidian`** — the official CLI; read-only use here (`backlinks`, `unresolved`, `tags`).
   Errors print `Error:` text with exit 0.
 
-`vault-rag schema` and `obsctl schema` describe every command; full flags are in
-[references/commands.md](references/commands.md).
+`vault-rag schema` (version 2) describes every command, contract, and error type in one document;
+full flags are in [references/commands.md](references/commands.md).
 
 ## Decision rules
 
@@ -81,11 +85,14 @@ changed, `sync --dry-run` previews adds/updates/deletes without touching the ind
 
 ## Mutations — hard rules
 
-- Every `obsctl` mutation: run with `--dry-run` first, show the diff, then apply on confirmation.
+- Every mutation (`create-note`, `merge-frontmatter`, `add-links`, `insert-related`, `move-note`,
+  `rename-note`): run with `--dry-run` first, show the diff, then apply on confirmation.
+- If a mutation fails with `error.type: obsidian_not_running`, tell the user to open Obsidian;
+  do not retry blindly.
 - Never construct a frontmatter patch containing `id`, `created`, `updated`, or `tags`.
 - Move/rename only with explicit user approval of the exact destination.
-- Anything `obsctl` reports as `ambiguous_target` or `contract_violation` → surface verbatim; do
-  not work around it.
+- Anything reported as `ambiguous_target` or `contract_violation` → surface verbatim; do not
+  work around it.
 
 ## Output conventions
 

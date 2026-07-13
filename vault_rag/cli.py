@@ -1,4 +1,4 @@
-"""JSON-only CLI for Vault RAG: schema, sync, retrieve, synthesize."""
+"""JSON-only CLI for the vault: retrieval/synthesis plus safe note mutations."""
 
 from __future__ import annotations
 
@@ -7,14 +7,17 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import PurePosixPath
 from typing import Any, Dict, Optional
 
 from vault_rag import settings
-from vault_rag.envelope import failure, print_json, success
+from vault_rag.envelope import CliError, failure, print_json, success
 from vault_rag.llm.openrouter import OpenRouterClient, OpenRouterError
 
-SCHEMA_VERSION = 1
+# v2: the obsctl note-mutation commands were merged into this CLI (one schema,
+# one envelope, one error-type union).
+SCHEMA_VERSION = 2
 
 # How many findings per check `--format text` prints before truncating.
 _LINT_TEXT_LIMIT = 15
@@ -46,8 +49,9 @@ def _schema() -> Dict[str, Any]:
     return {
         "version": SCHEMA_VERSION,
         "commands": {
-            "schema": {"args": {}, "result": "this document"},
+            "schema": {"args": {}, "result": "this document", "mutates_state": False},
             "sync": {
+                "mutates_state": "the index (never the vault)",
                 "args": {
                     "--root": "vault directory (required unless config.yaml sets vault.root)",
                     "--reset": "flag",
@@ -65,6 +69,7 @@ def _schema() -> Dict[str, Any]:
                 },
             },
             "stats": {
+                "mutates_state": False,
                 "args": {},
                 "result": {
                     "total_documents": "int",
@@ -77,6 +82,7 @@ def _schema() -> Dict[str, Any]:
                 },
             },
             "retrieve": {
+                "mutates_state": False,
                 "args": {
                     "--query": "str (required)",
                     "--mode": "fast|thorough (default fast)",
@@ -87,6 +93,7 @@ def _schema() -> Dict[str, Any]:
                 "result": "retrieval_output",
             },
             "synthesize": {
+                "mutates_state": "only with --save (writes one new distilled note)",
                 "args": {
                     "--query": "str",
                     "--mode": "fast|thorough (default thorough)",
@@ -101,6 +108,7 @@ def _schema() -> Dict[str, Any]:
                 "result": "synthesis_output (with embedded retrieval; +saved/saved_path when --save)",
             },
             "lint": {
+                "mutates_state": "only with --fix/--fix-timestamps",
                 "args": {
                     "--root": "vault directory (required unless config.yaml sets vault.root)",
                     "--format": "json|text (default json)",
@@ -110,6 +118,7 @@ def _schema() -> Dict[str, Any]:
                 "result": "lint_report (+fixed/fix_skipped with --fix/--fix-timestamps)",
             },
             "enrich": {
+                "mutates_state": False,
                 "args": {
                     "--root": "corpus directory (required unless config.yaml sets vault.root)",
                     "--note": "vault-relative path (xor --stdin)",
@@ -121,6 +130,101 @@ def _schema() -> Dict[str, Any]:
                 },
                 "result": "enrichment_plan",
             },
+            # Note mutations. All go through the official Obsidian CLI, so the
+            # Obsidian app must be running; every mutating one takes --dry-run
+            # (compute + return the diff, mutate nothing) and the per-command
+            # connection overrides --binary / --vault.
+            "create-note": {
+                "mutates_state": True,
+                "requires": "obsidian-app",
+                "args": {
+                    "--path": "vault-relative .md path (required)",
+                    "--content": "note body ('-' = stdin)",
+                    "--content-file": "read body from file ('-' = stdin; xor --content)",
+                    "--frontmatter": "JSON object (only place id/created may be set)",
+                    "--dry-run": "flag",
+                },
+                "result": {"changed": "bool", "path": "str", "text": "str (dry-run only)"},
+            },
+            "read-note": {
+                "mutates_state": False,
+                "requires": "obsidian-app",
+                "args": {
+                    "--path": "vault-relative path (required)",
+                    "--frontmatter-only": "flag",
+                    "--body-only": "flag",
+                },
+                "result": {"path": "str", "frontmatter": "object", "body": "str", "raw": "str"},
+            },
+            "merge-frontmatter": {
+                "mutates_state": True,
+                "requires": "obsidian-app",
+                "args": {
+                    "--path": "vault-relative path (required)",
+                    "--patch": "JSON object; id/created immutable once set; aliases merge",
+                    "--dry-run": "flag",
+                },
+                "result": {
+                    "changed": "bool",
+                    "fields_touched": ["str"],
+                    "skipped": "object",
+                    "diffs": "object (dry-run only)",
+                },
+            },
+            "add-links": {
+                "mutates_state": True,
+                "requires": "obsidian-app",
+                "args": {
+                    "--path": "vault-relative path (required)",
+                    "--links": 'JSON array of {"target", "anchor_text", "line"?}',
+                    "--dry-run": "flag",
+                },
+                "result": {"changed": "bool", "path": "str", "links": ["per-link outcome"]},
+            },
+            "insert-related": {
+                "mutates_state": True,
+                "requires": "obsidian-app",
+                "args": {
+                    "--path": "vault-relative path (required)",
+                    "--targets": "JSON array of wikilink targets",
+                    "--dry-run": "flag",
+                },
+                "result": {"changed": "bool", "added": ["str"], "already_present": ["str"]},
+            },
+            "move-note": {
+                "mutates_state": True,
+                "requires": "obsidian-app",
+                "args": {
+                    "--path": "vault-relative path (required)",
+                    "--to": "destination folder (must exist)",
+                    "--dry-run": "flag",
+                },
+                "result": {"changed": "bool", "path_before": "str", "path_after": "str"},
+            },
+            "rename-note": {
+                "mutates_state": True,
+                "requires": "obsidian-app",
+                "args": {
+                    "--path": "vault-relative path (required)",
+                    "--name": "new note name (.md optional)",
+                    "--dry-run": "flag",
+                },
+                "result": {"changed": "bool", "path_before": "str", "path_after": "str"},
+            },
+            "open-note": {
+                "mutates_state": False,
+                "requires": "obsidian-app",
+                "args": {"--path": "vault-relative path (required)"},
+                "result": {"opened": "bool", "path": "str"},
+            },
+        },
+        "mutation_contract": {
+            "immutable_fields": ["id", "created"],
+            "timestamps": "written untyped; format follows config.yaml `timestamps.policy`",
+            "manage_updated": "if true (config.yaml `obsidian.manage_updated`), "
+                              "content edits patch `updated` themselves",
+            "empty_optional_fields": "patches writing '' / [] / null are refused",
+            "links_updated_by": "move/rename: the backend rewrites incoming wikilinks",
         },
         "contracts": {
             "retrieval_output": {
@@ -210,6 +314,11 @@ def _schema() -> Dict[str, Any]:
             "provider_error",
             "not_found",
             "internal_error",
+            "obsidian_not_running",
+            "backend_error",
+            "already_exists",
+            "ambiguous_target",
+            "contract_violation",
         ],
     }
 
@@ -563,6 +672,26 @@ def cmd_lint(args: argparse.Namespace) -> Dict[str, Any]:
     return success("lint", result=report)
 
 
+def _make_obsidian_handler(action: str):
+    """Route a note-mutation subcommand to vault_rag.obsidian with the
+    configured connection facts (CLI flags override config.yaml)."""
+
+    def handler(args: argparse.Namespace) -> Dict[str, Any]:
+        from vault_rag.obsidian import backend, notes
+
+        backend.configure(
+            binary=args.binary or settings.obsidian_binary(),
+            vault=args.vault or settings.obsidian_vault(),
+            manage_updated=settings.obsidian_manage_updated(),
+        )
+        t0 = time.monotonic()
+        envelope = notes.HANDLERS[action](args)
+        envelope.setdefault("meta", {})["timing_ms"] = round((time.monotonic() - t0) * 1000)
+        return envelope
+
+    return handler
+
+
 # -- parser -------------------------------------------------------------------
 
 def _add_filter_arguments(parser: argparse.ArgumentParser) -> None:
@@ -683,8 +812,84 @@ def build_parser() -> argparse.ArgumentParser:
     p_enrich.add_argument("--source-url", dest="source_url", default=None)
     p_enrich.add_argument("--title", default=None, help="Known title override")
 
+    # Note mutations, executed through the running Obsidian app.
+    obsidian_common = argparse.ArgumentParser(add_help=False)
+    obsidian_common.add_argument(
+        "--binary", default=None, help="Obsidian CLI binary (config: `obsidian.binary`)"
+    )
+    obsidian_common.add_argument(
+        "--vault", default=None, help="Obsidian vault name (config: `obsidian.vault`)"
+    )
+
+    p_create = sub.add_parser(
+        "create-note", parents=[obsidian_common], help="Create a note (fails if it exists)"
+    )
+    p_create.add_argument("--path", required=True)
+    p_create.add_argument("--content", default=None)
+    p_create.add_argument("--content-file", dest="content_file", default=None)
+    p_create.add_argument("--frontmatter", default=None)
+    p_create.add_argument("--dry-run", action="store_true", dest="dry_run")
+
+    p_read = sub.add_parser(
+        "read-note", parents=[obsidian_common], help="Read a note via the Obsidian backend"
+    )
+    p_read.add_argument("--path", required=True)
+    p_read.add_argument("--frontmatter-only", action="store_true", dest="frontmatter_only")
+    p_read.add_argument("--body-only", action="store_true", dest="body_only")
+
+    p_merge = sub.add_parser(
+        "merge-frontmatter", parents=[obsidian_common], help="Merge a frontmatter patch"
+    )
+    p_merge.add_argument("--path", required=True)
+    p_merge.add_argument("--patch", required=True)
+    p_merge.add_argument("--dry-run", action="store_true", dest="dry_run")
+
+    p_links = sub.add_parser(
+        "add-links", parents=[obsidian_common], help="Turn anchor text into wikilinks"
+    )
+    p_links.add_argument("--path", required=True)
+    p_links.add_argument("--links", required=True)
+    p_links.add_argument("--dry-run", action="store_true", dest="dry_run")
+
+    p_related = sub.add_parser(
+        "insert-related", parents=[obsidian_common], help="Add targets to '## Related'"
+    )
+    p_related.add_argument("--path", required=True)
+    p_related.add_argument("--targets", required=True)
+    p_related.add_argument("--dry-run", action="store_true", dest="dry_run")
+
+    p_move = sub.add_parser(
+        "move-note", parents=[obsidian_common], help="Move a note (backend updates links)"
+    )
+    p_move.add_argument("--path", required=True)
+    p_move.add_argument("--to", required=True)
+    p_move.add_argument("--dry-run", action="store_true", dest="dry_run")
+
+    p_rename = sub.add_parser(
+        "rename-note", parents=[obsidian_common], help="Rename a note (backend updates links)"
+    )
+    p_rename.add_argument("--path", required=True)
+    p_rename.add_argument("--name", required=True)
+    p_rename.add_argument("--dry-run", action="store_true", dest="dry_run")
+
+    p_open = sub.add_parser(
+        "open-note", parents=[obsidian_common], help="Open a note in the Obsidian app"
+    )
+    p_open.add_argument("--path", required=True)
+
     return parser
 
+
+_OBSIDIAN_COMMANDS = (
+    "create-note",
+    "read-note",
+    "merge-frontmatter",
+    "add-links",
+    "insert-related",
+    "move-note",
+    "rename-note",
+    "open-note",
+)
 
 _HANDLERS = {
     "schema": cmd_schema,
@@ -694,6 +899,7 @@ _HANDLERS = {
     "synthesize": cmd_synthesize,
     "lint": cmd_lint,
     "enrich": cmd_enrich,
+    **{name: _make_obsidian_handler(name) for name in _OBSIDIAN_COMMANDS},
 }
 
 
@@ -714,6 +920,8 @@ def main(argv: Optional[list] = None) -> int:
     handler = _HANDLERS[args.command]
     try:
         envelope = handler(args)
+    except CliError as exc:
+        envelope = failure(args.command, exc.err_type, exc.message, exc.details)
     except OpenRouterError as exc:
         envelope = failure(args.command, "provider_error", str(exc))
     except settings.ConfigError as exc:

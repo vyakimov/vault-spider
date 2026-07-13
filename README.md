@@ -1,11 +1,14 @@
 # vault-rag
 
-Hybrid retrieval, cited answers, and health checks for an Obsidian vault.
+Hybrid retrieval, cited answers, health checks, and safe note mutations for an Obsidian vault —
+one JSON CLI.
 
 It indexes your Markdown notes into ChromaDB and a BM25 index, fuses the two, optionally reranks,
 and answers questions **with citations back to the notes** — or abstains when the notes don't
-contain the answer. Every command prints a single JSON envelope on stdout, so it is as usable by an
-agent as it is by a human.
+contain the answer. It also carries the vault's write path: contract-enforcing note mutations
+(create, frontmatter patch, link, move, rename) executed through the running Obsidian app. Every
+command prints a single JSON envelope on stdout, so it is as usable by an agent as it is by a
+human.
 
 Your vault is never committed, and nothing about your particular setup is baked into the source:
 paths, folder names and tag conventions all live in a gitignored `config.yaml`.
@@ -48,6 +51,39 @@ There is also a Streamlit UI:
 ```bash
 uv run streamlit run scripts/streamlit_app.py
 ```
+
+## Mutating the vault
+
+All write commands go through the official Obsidian CLI rather than touching files directly, so
+wikilinks update on move/rename, unknown frontmatter keys survive patches, and vault plugins fire
+exactly as if you had edited in the app. **The Obsidian app must be running** for these commands
+(macOS only):
+
+```bash
+uv run vault-rag create-note   --path "Inbox/New Idea.md" --content-file draft.txt \
+                               --frontmatter '{"id":"<ULID>","created":"<now>","updated":"<now>"}'
+uv run vault-rag read-note     --path "Inbox/New Idea.md" [--frontmatter-only|--body-only]
+uv run vault-rag merge-frontmatter --path "..." --patch '{"type":"idea","aliases":["Alias"]}'
+uv run vault-rag add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]'
+uv run vault-rag insert-related --path "..." --targets '["Some Note"]'
+uv run vault-rag move-note     --path "Inbox/New Idea.md" --to "Research/"
+uv run vault-rag rename-note   --path "Inbox/New Idea.md" --name "Better Title"
+uv run vault-rag open-note     --path "..."
+```
+
+Safety properties, enforced in code:
+
+- **Every mutating command takes `--dry-run`**: it computes and returns exactly what would change
+  (`changed`, diffs) with `meta.dry_run: true` and makes no backend mutation calls.
+- **`id` and `created` are immutable** once set — a patch touching them fails with
+  `contract_violation`. They may only be set when absent (i.e. at `create-note`).
+- **Empty optional fields** (`""`, `[]`, `null`) in a patch are refused.
+- **No silent overwrites**: `create-note`, `move-note` and `rename-note` fail with
+  `already_exists` when the destination is taken.
+- **Idempotent merging**: `add-links` skips targets already linked, `insert-related` dedupes
+  against the existing `## Related` section, alias patches union rather than replace.
+- `updated` is left alone by default — a modified-date plugin normally owns it. Set
+  `obsidian.manage_updated: true` in `config.yaml` only if no such plugin is active.
 
 ## How it works
 
@@ -95,14 +131,16 @@ uv run vault-rag lint --fix-timestamps   # rewrite naive timestamps as offset-aw
   sources — raw notes always win on conflict, and `lint` flags a distilled note as stale once a
   source outranks it in age.
 - `enrich` is a read-only **planner**: given a note, it retrieves the neighbourhood and proposes a
-  title, a frontmatter patch, inline links and a folder. It never mutates anything; applying a plan
-  is a separate tool's job.
+  title, a frontmatter patch, inline links and a folder. It never mutates anything; apply a plan
+  with the mutation commands (`merge-frontmatter`, `add-links`, `insert-related`, then
+  `rename-note`/`move-note`), each dry-run first.
 
 ## Configuration
 
 Everything installation-specific is in `config.yaml` (gitignored — see `config.yaml.example`):
-vault root, skipped folders, never-indexed tags, the distilled folder, the Chroma path, and the
-timestamp policy. Secrets stay in `.env`.
+vault root, skipped folders, never-indexed tags, the distilled folder, the Chroma path, the
+timestamp policy, and the Obsidian connection facts for the mutation commands (`obsidian.binary`,
+`obsidian.vault`, `obsidian.manage_updated`). Secrets stay in `.env`.
 
 Notes carrying `#secret` or `#ignore` (in the body or in frontmatter `tags:`) are **never indexed** —
 they stay in Obsidian but never reach the vector store or an LLM. Excalidraw drawings are skipped
@@ -115,5 +153,6 @@ uv run pytest    # network-free; uses a fake provider, no API key needed
 ```
 
 The package is layered: `corpus/` (load, parse, chunk) → `index/` (Chroma + BM25) → `retrieval/`
-(fusion, search, evidence) → `synthesis/` (cited answers) → `compounding/` (distill, lint).
-`AGENTS.md` has the full architecture.
+(fusion, search, evidence) → `synthesis/` (cited answers) → `compounding/` (distill, lint) →
+`obsidian/` (the mutation backend). The read path works on files directly; the write path goes
+through the Obsidian app — that boundary is deliberate. `AGENTS.md` has the full architecture.

@@ -45,3 +45,21 @@ timestamps:
   #   utc_z        — 2026-07-13T12:30:00Z
   # A naive timestamp already in a note is read as local wall-clock time either way.
   policy: offset_local
+
+obsidian:
+  # Connection facts for the note-mutation commands (create-note, merge-frontmatter,
+  # add-links, insert-related, move-note, rename-note, open-note). These commands
+  # go through the official Obsidian CLI, so the Obsidian app must be running.
+  #
+  # Path to the official `obsidian` CLI binary. Leave unset to auto-discover
+  # (/usr/local/bin/obsidian, then the app bundle).
+  binary: null
+
+  # Obsidian vault NAME (not a path — the vault as named in Obsidian's vault
+  # switcher). Leave unset to target the app's active vault.
+  vault: null
+
+  # Whether the mutation commands should patch `updated` themselves after a
+  # content edit. Leave false when a plugin (e.g. update-time-on-edit) already
+  # maintains `updated` — stamping it here too would double-write it.
+  manage_updated: false

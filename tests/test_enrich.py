@@ -9,7 +9,7 @@ from vault_rag.enrich.planner import EnrichInput, plan, postprocess
 from vault_rag.index.store import IndexStore
 
 
-def make_input(body="Meeting with Rose about Beta today.\n", path="Inbox/raw.md",
+def make_input(body="Meeting with Atlas about Beta today.\n", path="Inbox/raw.md",
                frontmatter=None, title="Raw", source_type=None, source_url=None):
     return EnrichInput(
         body=body,
@@ -24,7 +24,7 @@ def make_input(body="Meeting with Rose about Beta today.\n", path="Inbox/raw.md"
 
 
 NEIGHBORS = [
-    {"note_id": "n1", "title": "Rose", "path": "Research/Rose.md", "excerpt": "x", "score": 0.9},
+    {"note_id": "n1", "title": "Atlas", "path": "Research/Atlas.md", "excerpt": "x", "score": 0.9},
     {"note_id": "n2", "title": "Beta", "path": "Research/Beta.md", "excerpt": "y", "score": 0.8},
 ]
 
@@ -32,12 +32,12 @@ NEIGHBORS = [
 class TestPostprocessSafety:
     def test_full_canned_plan(self):
         parsed = {
-            "title": "Interview about Rose",
+            "title": "Interview about Atlas",
             "type": "banana",  # invalid
             "aliases": ["AKA"],
             "inline_links": [
-                {"target": "Rose", "anchor_text": "Rose", "confidence": 0.95},   # valid inline
-                {"target": "Ghost", "anchor_text": "Rose", "confidence": 0.95},  # nonexistent
+                {"target": "Atlas", "anchor_text": "Atlas", "confidence": 0.95},   # valid inline
+                {"target": "Ghost", "anchor_text": "Atlas", "confidence": 0.95},  # nonexistent
                 {"target": "Beta", "anchor_text": "Beta", "confidence": 0.7},    # demote
             ],
             "related": [],
@@ -46,9 +46,9 @@ class TestPostprocessSafety:
         result = postprocess(parsed, make_input(), NEIGHBORS)
 
         inline_targets = {link["target"] for link in result["link_insertions"]}
-        assert inline_targets == {"Rose"}
+        assert inline_targets == {"Atlas"}
         assert result["link_insertions"][0]["occurs_at_line"] == 1
-        assert result["link_insertions"][0]["target_path"] == "Research/Rose.md"
+        assert result["link_insertions"][0]["target_path"] == "Research/Atlas.md"
 
         related_targets = {r["target"] for r in result["related_candidates"]}
         assert related_targets == {"Beta"}  # demoted 0.7
@@ -62,12 +62,12 @@ class TestPostprocessSafety:
     def test_already_linked_dropped_silently(self):
         parsed = {
             "title": "T", "type": None, "aliases": [], "related": [], "warnings": [],
-            "inline_links": [{"target": "Rose", "anchor_text": "Rose", "confidence": 0.95}],
+            "inline_links": [{"target": "Atlas", "anchor_text": "Atlas", "confidence": 0.95}],
         }
-        body = "Notes already mention [[Rose]] here.\n"
+        body = "Notes already mention [[Atlas]] here.\n"
         result = postprocess(parsed, make_input(body=body), NEIGHBORS)
         assert result["link_insertions"] == []
-        assert not any("Rose" in w for w in result["warnings"])
+        assert not any("Atlas" in w for w in result["warnings"])
 
     def test_existing_type_conflict_dropped(self):
         parsed = {"title": "T", "type": "research", "aliases": [], "inline_links": [],
@@ -87,11 +87,11 @@ class TestPostprocessSafety:
     def test_anchor_not_in_body_demotes(self):
         parsed = {
             "title": "T", "type": None, "aliases": [], "related": [], "warnings": [],
-            "inline_links": [{"target": "Rose", "anchor_text": "absent-anchor", "confidence": 0.95}],
+            "inline_links": [{"target": "Atlas", "anchor_text": "absent-anchor", "confidence": 0.95}],
         }
         result = postprocess(parsed, make_input(), NEIGHBORS)
         assert result["link_insertions"] == []
-        assert {r["target"] for r in result["related_candidates"]} == {"Rose"}
+        assert {r["target"] for r in result["related_candidates"]} == {"Atlas"}
 
 
 class TestSuggestedPath:
@@ -125,7 +125,7 @@ class TestUnparseable:
 
     def test_non_dict_payload_is_treated_as_unusable(self):
         # A top-level JSON array from the model must not crash postprocess.
-        result = postprocess([{"target": "Rose"}], make_input(), NEIGHBORS)
+        result = postprocess([{"target": "Atlas"}], make_input(), NEIGHBORS)
         assert result["confidence"] == "low"
         assert result["frontmatter_patch"] == {}
 
@@ -133,10 +133,10 @@ class TestUnparseable:
         parsed = {
             "title": "T", "type": None, "aliases": "notalist", "related": ["oops"],
             "warnings": "notalist",
-            "inline_links": ["bad", {"target": "Rose", "anchor_text": "Rose", "confidence": 0.95}],
+            "inline_links": ["bad", {"target": "Atlas", "anchor_text": "Atlas", "confidence": 0.95}],
         }
         result = postprocess(parsed, make_input(), NEIGHBORS)
-        assert {link["target"] for link in result["link_insertions"]} == {"Rose"}
+        assert {link["target"] for link in result["link_insertions"]} == {"Atlas"}
         assert "aliases" not in result["frontmatter_patch"]
 
 

@@ -2,15 +2,15 @@
 
 The less-frequent, multi-step flows: getting new material into the vault and enriching it. Ordering
 and confirmation policy only — the actual planning/mutation logic lives in `vault-rag enrich` and
-`obsctl`.
+the mutation commands.
 
 ## Frontmatter at capture (important)
 
-Templater does **not** fire on CLI-created notes (verified in Phase 6), so `obsctl create-note`
-must supply the universal fields itself. The `update-time-on-edit` plugin then maintains `updated`
-on every subsequent edit, so obsctl leaves `updated` alone (`manage_updated: false`).
+Templater does **not** fire on CLI-created notes, so `vault-rag create-note` must supply the
+universal fields itself. The `update-time-on-edit` plugin then maintains `updated` on every
+subsequent edit, so the CLI leaves `updated` alone (`obsidian.manage_updated: false`).
 
-Contract fields (per `plans/phase-0-results.md`):
+Contract fields:
 - `id` — a 26-char ULID (Crockford base32), immutable.
 - `created` / `updated` — ISO 8601, **offset-aware**. The format follows `config.yaml`
   `timestamps.policy`: `offset_local` (default, e.g. `2026-07-07T14:30:00+02:00`) or `utc_z`.
@@ -26,7 +26,7 @@ print(json.dumps({'id':str(ULID()),'created':n,'updated':n}))"
 ## Capture
 
 ```bash
-obsctl create-note --path "Inbox/<name>.md" --content-file raw.txt \
+uv run vault-rag create-note --path "Inbox/<name>.md" --content-file raw.txt \
     --frontmatter '{"id":"<ULID>","created":"<now>","updated":"<now>", "source_type":"..."}'
 ```
 
@@ -37,33 +37,33 @@ offer enrichment.
 
 1. **Plan** (read-only, no mutations; `--root` comes from `config.yaml` unless overridden):
    ```bash
-   vault-rag enrich --note "Inbox/<name>.md" --intent "..." --source-type "..." > plan.json
+   uv run vault-rag enrich --note "Inbox/<name>.md" --intent "..." --source-type "..." > plan.json
    ```
    Show the user the plan summary: title, `frontmatter_patch`, links, `suggested_path`, confidence.
    If `confidence: low`, show the warnings and apply **nothing** unless the user insists.
 
 2. **Apply in this order, each `--dry-run` first, then for real on confirmation:**
    ```bash
-   obsctl merge-frontmatter --path "Inbox/<name>.md" --patch '<plan.frontmatter_patch>'
-   obsctl add-links         --path "Inbox/<name>.md" --links '<plan.link_insertions>'
-   obsctl insert-related    --path "Inbox/<name>.md" --targets '<[t.target for t in plan.related_candidates]>'
+   uv run vault-rag merge-frontmatter --path "Inbox/<name>.md" --patch '<plan.frontmatter_patch>'
+   uv run vault-rag add-links         --path "Inbox/<name>.md" --links '<plan.link_insertions>'
+   uv run vault-rag insert-related    --path "Inbox/<name>.md" --targets '<[t.target for t in plan.related_candidates]>'
    ```
 
 3. **Placement** (only if the user agrees to the destination):
    ```bash
-   obsctl rename-note --path "Inbox/<name>.md" --name "<plan.title>"        # if plan.title_changed
-   obsctl move-note   --path "Inbox/<new-name>.md" --to "<folder of plan.suggested_path>"
+   uv run vault-rag rename-note --path "Inbox/<name>.md" --name "<plan.title>"        # if plan.title_changed
+   uv run vault-rag move-note   --path "Inbox/<new-name>.md" --to "<folder of plan.suggested_path>"
    ```
    `suggested_path` is advisory. The destination folder must already exist.
 
 4. **Re-index** when done (incremental — only the touched notes are re-embedded):
    ```bash
-   vault-rag sync
+   uv run vault-rag sync
    ```
 
 ## Safety reminders
 
-- enrich validates links against the index and gates by confidence; obsctl enforces the data
-  contract. Do not second-guess them, but always dry-run and confirm before applying.
+- enrich validates links against the index and gates by confidence; the mutation commands enforce
+  the data contract. Do not second-guess them, but always dry-run and confirm before applying.
 - Never propose `id` / `created` / `updated` / `tags` in a patch. Move/rename never change `updated`.
-- `contract_violation` / `ambiguous_target` from obsctl → surface verbatim, stop, ask the user.
+- `contract_violation` / `ambiguous_target` → surface verbatim, stop, ask the user.

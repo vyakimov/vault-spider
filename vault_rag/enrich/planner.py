@@ -3,7 +3,8 @@
 Given raw note text plus optional capture context, retrieve its neighborhood
 and emit a structured *enrichment plan* (proposed title, metadata, links,
 related notes, placement). This module reasons and proposes only — it NEVER
-mutates files or the index. Applying a plan is obsctl's job (Phases 5/6).
+mutates files or the index. Applying a plan is the job of the CLI's note
+mutation commands (vault_rag.obsidian).
 """
 
 from __future__ import annotations

@@ -1,11 +1,15 @@
-# vault CLIs — command reference
+# vault CLI — command reference
 
-Full flags for the three tools the `vault` skill orchestrates. Each command prints one JSON
+Full flags for the commands the `vault` skill orchestrates. Each command prints one JSON
 envelope: `{"ok": true, "action", "result", "meta"}` or `{"ok": false, "action", "error": {...}}`.
-Check `"ok"`, not exit codes. Run `vault-rag schema` / `obsctl schema` for the machine-readable
-version.
+Check `"ok"`, not exit codes. Run `vault-rag schema` for the machine-readable version
+(`version: 2` — one schema covers query and mutation commands alike).
 
-## vault-rag (read/query/plan; run via `uv run vault-rag`)
+Error types (shared union): `invalid_arguments`, `index_empty`, `provider_error`, `not_found`,
+`internal_error`, `obsidian_not_running`, `backend_error`, `already_exists`, `ambiguous_target`,
+`contract_violation`.
+
+## Query & maintenance commands (run via `uv run vault-rag`)
 
 `--root` defaults to `config.yaml` `vault.root` everywhere; pass it only when that is unset.
 
@@ -53,34 +57,35 @@ FILTERS (retrieve & synthesize):
   format follows `config.yaml` `timestamps.policy`.
 - `enrich` result = an enrichment plan (title, `frontmatter_patch`, `link_insertions`,
   `related_candidates`, `suggested_path`, `confidence`, `warnings`). **enrich never mutates** —
-  feed its output to obsctl.
-- Error types: `invalid_arguments`, `index_empty`, `provider_error`, `not_found`, `internal_error`.
+  apply its output with the mutation commands below.
 - Env: `OPENROUTER_API_KEY`, `OPENROUTER_EMBEDDING_MODEL`, `OPENROUTER_CHAT_MODEL`;
   optional `OPENROUTER_RERANK_MODEL` (enables reranking in `thorough`).
 
-## obsctl (all vault mutations; Obsidian must be running)
+## Mutation commands (same CLI; Obsidian app must be running)
 
 ```
-obsctl schema | list-actions
-obsctl create-note   --path "Inbox/Foo.md" [--content ...|--content-file f|-] [--frontmatter '{...}'] [--dry-run]
-obsctl read-note     --path "..." [--frontmatter-only|--body-only]
-obsctl merge-frontmatter --path "..." --patch '{"type":"interview","aliases":["X"]}' [--dry-run]
-obsctl add-links     --path "..." --links '[{"target":"Rose","anchor_text":"Rose","line":12}]' [--dry-run]
-obsctl insert-related --path "..." --targets '["Rose Vogquestue"]' [--dry-run]
-obsctl move-note     --path "Inbox/Foo.md" --to "Research/"       [--dry-run]
-obsctl rename-note   --path "Inbox/Foo.md" --name "Better Title"  [--dry-run]
-obsctl open-note     --path "..."
+vault-rag create-note   --path "Inbox/Foo.md" [--content ...|--content-file f|-] [--frontmatter '{...}'] [--dry-run]
+vault-rag read-note     --path "..." [--frontmatter-only|--body-only]
+vault-rag merge-frontmatter --path "..." --patch '{"type":"interview","aliases":["Alias"]}' [--dry-run]
+vault-rag add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]' [--dry-run]
+vault-rag insert-related --path "..." --targets '["Some Note"]' [--dry-run]
+vault-rag move-note     --path "Inbox/Foo.md" --to "Research/"       [--dry-run]
+vault-rag rename-note   --path "Inbox/Foo.md" --name "Better Title"  [--dry-run]
+vault-rag open-note     --path "..."
 ```
 
 - Every mutating command supports `--dry-run` (returns the diff, makes no backend mutation).
-- Error types: `invalid_arguments`, `obsidian_not_running`, `backend_error`, `not_found`,
-  `already_exists`, `ambiguous_target`, `contract_violation`.
+- Connection facts come from `config.yaml` (`obsidian.binary`, `obsidian.vault`,
+  `obsidian.manage_updated`); `--binary`/`--vault` override per command.
+- `id`/`created` are immutable once set (`contract_violation`); empty optional fields are
+  refused; creates/moves/renames never overwrite (`already_exists`).
 - `move-note` needs the destination folder to already exist (enrich's `suggested_path` folders do).
+- Move/rename update incoming wikilinks automatically (the backend does it) and never bump
+  `updated`.
 
-## obsidian (read-only within this skill)
+## obsidian (official CLI; read-only within this skill)
 
 ```
-obsidian read path="folder/note.md"
 obsidian backlinks file="Note" format=json
 obsidian unresolved total        # broken-link instance count
 obsidian orphans total
@@ -88,4 +93,5 @@ obsidian tags
 ```
 
 Strip leading `Loading updated...` / `Your Obsidian installer...` noise lines; treat an `Error:`
-line as failure even though exit code is 0.
+line as failure even though exit code is 0. (For reading a note, prefer `vault-rag read-note` —
+it returns parsed frontmatter in the JSON envelope.)

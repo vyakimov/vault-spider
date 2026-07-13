@@ -39,6 +39,14 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     "timestamps": {
         "policy": "offset_local",  # or "utc_z"
     },
+    # Connection facts for the mutation backend (the official Obsidian CLI).
+    # Facts only, no workflow policy: which binary, which vault, and whether
+    # this installation's modified-date plugin is absent (manage_updated).
+    "obsidian": {
+        "binary": None,  # auto-discovered when unset
+        "vault": None,  # Obsidian vault name; unset = the app's active vault
+        "manage_updated": False,  # true only if no plugin maintains `updated`
+    },
 }
 
 
@@ -118,6 +126,20 @@ def distilled_dir() -> str:
 
 def chroma_path() -> str:
     return str(_get("index", "chroma_path"))
+
+
+def obsidian_binary() -> Optional[str]:
+    binary = _get("obsidian", "binary")
+    return str(Path(str(binary)).expanduser()) if binary else None
+
+
+def obsidian_vault() -> Optional[str]:
+    vault = _get("obsidian", "vault")
+    return str(vault) if vault else None
+
+
+def obsidian_manage_updated() -> bool:
+    return bool(_get("obsidian", "manage_updated"))
 
 
 def timestamp_policy() -> str:

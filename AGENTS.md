@@ -1,6 +1,7 @@
 # Assistant.md
 
-This repository is **Vault RAG**, a retrieval system for an Obsidian vault of Markdown notes.
+This repository is **Vault RAG**, a retrieval **and mutation** system for an Obsidian vault of
+Markdown notes — one CLI for querying and modifying the vault.
 
 The vault itself is never committed. Its location, and everything else installation-specific,
 lives in `config.yaml` (gitignored; copy `config.yaml.example`). Secrets live in `.env`.
@@ -8,8 +9,15 @@ lives in `config.yaml` (gitignored; copy `config.yaml.example`). Secrets live in
 ## Project Overview
 
 The project indexes `.md` files from the vault into ChromaDB, builds BM25 indexes, and exposes
-hybrid retrieval and answer synthesis with stable JSON contracts. It is organized as the
-`vault_rag` Python package with a JSON-only CLI (`vault-rag`) plus a Streamlit UI.
+hybrid retrieval and answer synthesis with stable JSON contracts. It also carries the vault's
+write path: contract-enforcing note mutations executed through the running Obsidian app (the
+former standalone `obsctl` tool, merged into this CLI). It is organized as the `vault_rag`
+Python package with a JSON-only CLI (`vault-rag`) plus a Streamlit UI.
+
+The read path (indexing, retrieval, lint) works on vault files directly; the write path goes
+through the official Obsidian CLI so wikilinks update on move/rename, unknown frontmatter keys
+survive patches, and vault plugins fire. Keep that boundary: **never write vault files directly
+from mutation code.**
 
 One note is indexed as **one `document`-granularity entry plus N `section` entries** (section
 splitting is deterministic, heading-based). Both live in a single Chroma collection, distinguished
@@ -52,9 +60,22 @@ by the `granularity` metadata field.
 - `uv run vault-rag enrich --root <dir> (--note <path> | --stdin) [--intent ...] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]`
   - App-agnostic **enrichment planner**: retrieves a note's neighborhood and proposes a title,
     frontmatter patch (`type`/`aliases`/`source_type`/`source_url` only), inline links, related
-    candidates, and placement — as JSON. It **never mutates** files or the index; applying a plan
-    is obsctl's job. Only links to retrieved neighbors are proposed; the LLM output is validated in
-    code (confidence gating, anchor resolution, existing-type/link guards).
+    candidates, and placement — as JSON. It **never mutates** files or the index; apply a plan
+    with the mutation commands below. Only links to retrieved neighbors are proposed; the LLM
+    output is validated in code (confidence gating, anchor resolution, existing-type/link guards).
+- **Note mutations** — `create-note`, `read-note`, `merge-frontmatter`, `add-links`,
+  `insert-related`, `move-note`, `rename-note`, `open-note` (all `uv run vault-rag <command>`).
+  - Executed through the official Obsidian CLI; **the Obsidian app must be running** (macOS only).
+    Connection facts come from `config.yaml` (`obsidian.binary`/`obsidian.vault`, overridable per
+    command with `--binary`/`--vault`).
+  - Every mutating command accepts `--dry-run`: it computes and returns exactly what would change
+    with `meta.dry_run: true` and makes no backend mutation calls.
+  - Contract enforcement: `id`/`created` are immutable once set (`contract_violation`); empty
+    optional fields (`""`, `[]`, `null`) are refused; creates/moves/renames fail with
+    `already_exists` rather than overwrite; `add-links`/`insert-related`/alias patches are
+    idempotent. `updated` is left to the modified-date plugin unless
+    `obsidian.manage_updated: true`. Timestamps are written untyped, following
+    `timestamps.policy`.
 - `uv run streamlit run scripts/streamlit_app.py`
   - Streamlit UI: Retrieve (mode + granularity selectors), Synthesize, Notes browser.
 - `uv run pytest`
@@ -62,7 +83,10 @@ by the `granularity` metadata field.
 
 All CLI output is a single JSON envelope on stdout: `{"ok": bool, "action", "result", "meta"}` on
 success, `{"ok": false, "action", "error": {"type", "message", "details"}}` on failure (exit 1).
-Error types: `invalid_arguments`, `index_empty`, `provider_error`, `not_found`, `internal_error`.
+Error types: `invalid_arguments`, `index_empty`, `provider_error`, `not_found`, `internal_error`,
+`obsidian_not_running`, `backend_error`, `already_exists`, `ambiguous_target`,
+`contract_violation`. The schema (`vault-rag schema`) is `version: 2` — the version where the
+mutation commands were merged in.
 
 ## Environment
 
@@ -115,11 +139,19 @@ The `vault_rag` package is layered:
    - `lint.py` — `lint_vault()` read-only health checks.
    `vault_rag/enrich/planner.py` — `plan()` enrichment planner (read-only; proposes, never mutates).
 
-6. `vault_rag/llm/openrouter.py` — embeddings, rerank, and chat via OpenRouter.
+6. `vault_rag/obsidian/`
+   - `backend.py` — invocation layer for the official Obsidian CLI: binary discovery, vault
+     targeting, noise stripping, error mapping (`obsidian_not_running`, `not_found`, ...).
+   - `notes.py` — the mutation commands: dry-run, no-op detection, collision safety, ambiguity
+     rejection, idempotent link/alias merging, `id`/`created` immutability. Uses its own minimal
+     untyped frontmatter parser on purpose (the YAML-typed `corpus/frontmatter.py` would not
+     round-trip values faithfully).
 
-7. `vault_rag/cli.py` + `vault_rag/envelope.py` — the JSON CLI and envelope helpers.
+7. `vault_rag/llm/openrouter.py` — embeddings, rerank, and chat via OpenRouter.
 
-8. `scripts/streamlit_*.py` — Streamlit pages that import from `vault_rag`.
+8. `vault_rag/cli.py` + `vault_rag/envelope.py` — the JSON CLI, envelope helpers, and `CliError`.
+
+9. `scripts/streamlit_*.py` — Streamlit pages that import from `vault_rag`.
 
 `tools/backfill.py` — standalone one-time migration that adds `id`/`created`/`updated`
 frontmatter to existing notes (dry-run by default; `--apply` to write; never touches bodies).
@@ -135,6 +167,8 @@ All of these are configurable in `config.yaml`; the values below are the default
 - Skipped folders: `.trash`, `.obsidian`, `Templates` (`vault.skip_dirs`), all hidden
   directories, plus Excalidraw drawings
 - Never-indexed tags: `#ignore`, `#secret` (`vault.ignore_tags`)
+- Obsidian mutation backend: binary auto-discovered, app's active vault,
+  `manage_updated: false` (`obsidian.binary` / `obsidian.vault` / `obsidian.manage_updated`)
 - Streamlit entrypoint: `scripts/streamlit_app.py`
 
 ## Development Notes
