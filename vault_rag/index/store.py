@@ -18,7 +18,7 @@ from rank_bm25 import BM25Okapi
 from vault_rag.config import BM25_CONFIG
 from vault_rag.corpus.chunker import document_text, section_text, split_sections
 from vault_rag.corpus.loader import Note, load_notes
-from vault_rag.llm.openrouter import OpenRouterClient
+from vault_rag.llm.openrouter import OpenRouterClient, OpenRouterError
 from vault_rag.utils import DEFAULT_STOP_WORDS, tokenize_for_bm25
 
 GRANULARITIES = ("document", "section")
@@ -305,9 +305,10 @@ class IndexStore:
                 "would_delete": sorted(would_delete),
             }
 
-        if ids_to_delete:
-            self.collection.delete(ids=ids_to_delete)
-
+        add_ids: List[str] = []
+        add_texts: List[str] = []
+        add_metas: List[Dict[str, object]] = []
+        resolved_embeddings: List[List[float]] = []
         if entries_to_add:
             add_ids = [entry[0] for entry in entries_to_add]
             add_texts = [entry[1] for entry in entries_to_add]
@@ -324,9 +325,24 @@ class IndexStore:
                     embeddings[index] = cached
             if missing_texts:
                 computed = self.provider.embed_texts(missing_texts, batch_size=32)
+                if len(computed) != len(missing_indexes):
+                    raise OpenRouterError(
+                        f"Embedding provider returned {len(computed)} vectors "
+                        f"for {len(missing_indexes)} entries"
+                    )
                 for index, embedding in zip(missing_indexes, computed):
                     embeddings[index] = embedding
             resolved_embeddings = [embedding for embedding in embeddings if embedding is not None]
+            if len(resolved_embeddings) != len(entries_to_add):
+                raise OpenRouterError("Embedding provider did not resolve every index entry")
+
+        # Finish all fallible provider work before removing the old entries. A
+        # transient embedding failure must leave the currently usable index
+        # intact so the next sync can retry safely.
+        if ids_to_delete:
+            self.collection.delete(ids=ids_to_delete)
+
+        if entries_to_add:
             self._add_in_batches(add_ids, add_texts, add_metas, resolved_embeddings)
 
         self._rehydrate_from_collection()

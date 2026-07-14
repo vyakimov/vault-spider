@@ -13,10 +13,15 @@ from typing import Any, Dict, List
 from ulid import ULID
 
 from vault_rag.compounding.backfill_core import now_timestamp
+from vault_rag.utils import validate_vault_relative_path
 
 
 class EmptySlugError(ValueError):
     """Raised when a question slugifies to an empty string."""
+
+
+class InvalidSaveDirectoryError(ValueError):
+    """Raised when a distilled-note destination is not inside the vault."""
 
 
 def slugify(question: str) -> str:
@@ -105,23 +110,40 @@ def save_distilled_note(
     if not slug:
         raise EmptySlugError("question slugifies to an empty string")
 
+    try:
+        relative_dir = validate_vault_relative_path(save_dir, label="save directory")
+    except ValueError as exc:
+        raise InvalidSaveDirectoryError(str(exc)) from exc
+
+    root_path = Path(root).resolve()
+    if not root_path.is_dir():
+        raise InvalidSaveDirectoryError(f"vault root directory not found: {root}")
+
     # Skip conditions, checked in order.
     if synth_output.get("abstained"):
         return {"saved": False, "saved_path": None, "warnings": ["not saved: model abstained"]}
     if str(synth_output.get("confidence", "")).lower() == "low":
         return {"saved": False, "saved_path": None, "warnings": ["not saved: low confidence"]}
+    if not str(synth_output.get("answer", "")).strip():
+        return {"saved": False, "saved_path": None, "warnings": ["not saved: empty answer"]}
     if not (synth_output.get("citations") or []):
         return {"saved": False, "saved_path": None, "warnings": ["not saved: no citations"]}
 
-    rel_path = f"{save_dir}/{slug}.md"
-    target = Path(root) / save_dir / f"{slug}.md"
-    if target.exists():
+    rel_path = f"{relative_dir}/{slug}.md"
+    target = (root_path / relative_dir / f"{slug}.md").resolve()
+    try:
+        target.relative_to(root_path)
+    except ValueError as exc:
+        raise InvalidSaveDirectoryError("save directory resolves outside the vault root") from exc
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with target.open("x", encoding="utf-8") as handle:
+            handle.write(render_distilled_note(synth_output))
+    except FileExistsError:
         return {
             "saved": False,
             "saved_path": None,
             "warnings": [f"not saved: {rel_path} already exists"],
         }
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_distilled_note(synth_output), encoding="utf-8")
     return {"saved": True, "saved_path": rel_path, "warnings": []}

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from vault_rag.index.store import IndexStore
+from vault_rag.llm.openrouter import OpenRouterError
 
 
 def build_store(chroma_dir: Path, provider) -> IndexStore:
@@ -213,3 +214,36 @@ def test_dry_run_with_reset_is_refused(tmp_path, tiny_vault, fake_provider):
         store.sync(str(tiny_vault), reset=True, dry_run=True)
 
     assert store.collection.count() == count
+
+
+def test_embedding_failure_leaves_existing_index_intact(
+    tmp_path, tiny_vault, fake_provider, monkeypatch
+):
+    store = build_store(tmp_path / "chroma", fake_provider)
+    store.sync(str(tiny_vault))
+
+    def snapshot():
+        payload = store.collection.get(include=["documents", "metadatas"])
+        documents = payload.get("documents") or []
+        metadatas = payload.get("metadatas") or []
+        return {
+            entry_id: (document, metadata)
+            for entry_id, document, metadata in zip(
+                payload["ids"], documents, metadatas
+            )
+        }
+
+    before = snapshot()
+    (tiny_vault / "note_plain.md").write_text(
+        "This update cannot be embedded right now.\n", encoding="utf-8"
+    )
+
+    def fail(*args, **kwargs):
+        raise OpenRouterError("temporary provider failure")
+
+    monkeypatch.setattr(fake_provider, "embed_texts", fail)
+
+    with pytest.raises(OpenRouterError, match="temporary provider failure"):
+        store.sync(str(tiny_vault))
+
+    assert snapshot() == before

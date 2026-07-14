@@ -168,6 +168,19 @@ class TestMergeFrontmatter:
 # -- add-links ---------------------------------------------------------------
 
 class TestAddLinks:
+    def test_malformed_link_item_is_invalid_arguments(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "body"})
+
+        code, env = run(
+            ["add-links", "--path", "n.md", "--links", json.dumps(["Atlas"])],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "invalid_arguments"
+
     def test_anchor_resolution_and_idempotency(self, capsys, monkeypatch):
         backend = FakeBackend({"n.md": "---\nid: x\n---\nMeeting about Atlas today."})
         links = json.dumps([{"target": "Atlas", "anchor_text": "Atlas", "line": 1}])
@@ -204,6 +217,19 @@ class TestAddLinks:
 # -- insert-related ----------------------------------------------------------
 
 class TestInsertRelated:
+    def test_empty_target_is_invalid_arguments(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "body"})
+
+        code, env = run(
+            ["insert-related", "--path", "n.md", "--targets", json.dumps([""])],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "invalid_arguments"
+
     def test_creates_section_and_dedupes(self, capsys, monkeypatch):
         backend = FakeBackend({"n.md": "---\nid: x\n---\nbody\n\n## Related\n- [[Existing]]\n"})
         code, env = run(["insert-related", "--path", "n.md", "--targets", json.dumps(["Existing", "New"])],
@@ -276,6 +302,31 @@ class TestManageUpdated:
 # -- envelope shape ----------------------------------------------------------
 
 class TestEnvelope:
+    def test_vault_path_traversal_is_rejected(self, capsys, monkeypatch):
+        backend = FakeBackend()
+
+        code, env = run(
+            ["read-note", "--path", "../outside.md"], backend, capsys, monkeypatch
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "invalid_arguments"
+        assert backend.calls == []
+
+    def test_mutually_exclusive_read_views_return_json_error(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "body"})
+
+        code, env = run(
+            ["read-note", "--path", "n.md", "--body-only", "--frontmatter-only"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "invalid_arguments"
+        assert backend.calls == []
+
     def test_success_shape(self, capsys, monkeypatch):
         backend = FakeBackend({"n.md": "---\nid: x\n---\nbody"})
         code, env = run(["read-note", "--path", "n.md"], backend, capsys, monkeypatch)

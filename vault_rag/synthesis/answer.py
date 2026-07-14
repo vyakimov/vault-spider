@@ -48,7 +48,8 @@ def _try_repair_truncated_json(text: str) -> Optional[Dict[str, Any]]:
     while stack:
         repaired += stack.pop()
     try:
-        return json.loads(repaired)
+        parsed = json.loads(repaired)
+        return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
         return None
 
@@ -58,14 +59,16 @@ def parse_llm_json(response: str) -> Optional[Dict[str, Any]]:
         return None
     candidate = _strip_code_fences(response)
     try:
-        return json.loads(candidate)
+        parsed = json.loads(candidate)
+        return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
         pass
     start = candidate.find("{")
     end = candidate.rfind("}") + 1
     if start != -1 and end > start:
         try:
-            return json.loads(candidate[start:end])
+            parsed = json.loads(candidate[start:end])
+            return parsed if isinstance(parsed, dict) else None
         except json.JSONDecodeError:
             pass
     if start != -1:
@@ -105,6 +108,8 @@ Answer using only the context above."""
 def build_context(
     retrieval_output: Dict[str, Any], hard_cutoff: int = 8
 ) -> Tuple[str, Dict[str, Dict[str, Any]]]:
+    if hard_cutoff < 1:
+        raise ValueError("hard_cutoff must be at least 1")
     context_parts: List[str] = []
     index_map: Dict[str, Dict[str, Any]] = {}
     for candidate in retrieval_output.get("candidates", []):
@@ -154,10 +159,45 @@ def synthesize(
         }
 
     warnings: List[str] = []
+    raw_answer = parsed.get("answer", "")
+    if isinstance(raw_answer, str):
+        answer = raw_answer
+        answer_is_valid = True
+    else:
+        answer = ""
+        answer_is_valid = False
+        warnings.append("model answer was not a string")
+
+    raw_abstained = parsed.get("abstained")
+    if isinstance(raw_abstained, bool):
+        abstained = raw_abstained
+    else:
+        # Invalid truth values are fail-closed: never persist or present an
+        # ungrounded answer because a model emitted e.g. the string "false".
+        abstained = True
+        warnings.append("model abstained value was not a boolean")
+    if not answer_is_valid:
+        abstained = True
+    elif not answer.strip() and not abstained:
+        abstained = True
+        warnings.append("model returned an empty answer without abstaining")
+
+    confidence = str(parsed.get("confidence", "") or "").strip().lower()
+    if confidence not in {"high", "medium", "low"}:
+        confidence = "low"
+        warnings.append("model confidence was not high, medium, or low")
+
+    raw_citations = parsed.get("citations", [])
+    if isinstance(raw_citations, list):
+        citation_keys = raw_citations
+    else:
+        citation_keys = []
+        warnings.append("model citations were not an array")
+
     citations: List[Dict[str, Any]] = []
     notes_used: List[str] = []
     seen_keys: set = set()
-    for key in parsed.get("citations", []) or []:
+    for key in citation_keys:
         if str(key) in seen_keys:
             continue
         seen_keys.add(str(key))
@@ -179,11 +219,11 @@ def synthesize(
         if path and path not in notes_used:
             notes_used.append(path)
 
-    if not parsed.get("abstained") and str(parsed.get("answer", "")):
+    if not abstained and answer:
         sentences = [
             sentence.strip()
             for sentence in re.split(
-                r"(?<=[.!?])\s+", str(parsed.get("answer", ""))
+                r"(?<=[.!?])\s+", answer
             )
             if sentence.strip()
         ]
@@ -195,12 +235,11 @@ def synthesize(
         if uncited:
             warnings.append(f"{len(uncited)} sentence(s) lack citations")
 
-    confidence = str(parsed.get("confidence", "") or "").strip().lower()
     return {
         "question": question,
-        "answer": parsed.get("answer", ""),
+        "answer": answer,
         "confidence": confidence,
-        "abstained": bool(parsed.get("abstained", False)),
+        "abstained": abstained,
         "citations": citations,
         "notes_used": notes_used,
         "warnings": warnings,

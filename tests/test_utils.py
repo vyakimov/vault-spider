@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from nltk.stem import PorterStemmer
 
 from vault_rag.utils import (
@@ -10,6 +11,7 @@ from vault_rag.utils import (
     hash_string,
     normalize_no_punct,
     tokenize_for_bm25,
+    validate_vault_relative_path,
 )
 
 
@@ -66,3 +68,13 @@ class TestTokenizeForBm25:
         stemmer = PorterStemmer()
         tokens = tokenize_for_bm25("Dogs", set(), stemmer)
         assert tokens == [stemmer.stem("dogs")]
+
+
+class TestValidateVaultRelativePath:
+    def test_accepts_canonical_nested_path(self):
+        assert validate_vault_relative_path("Research/Alpha.md") == "Research/Alpha.md"
+
+    @pytest.mark.parametrize("path", ["/absolute.md", "../escape.md", "a/./b.md", "a\\b.md"])
+    def test_rejects_ambiguous_or_escaping_paths(self, path):
+        with pytest.raises(ValueError):
+            validate_vault_relative_path(path)

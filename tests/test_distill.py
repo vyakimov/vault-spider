@@ -76,6 +76,11 @@ class TestSave:
         assert result["saved"] is False
         assert result["warnings"] == ["not saved: no citations"]
 
+    def test_empty_answer_skips(self, tmp_path):
+        result = distill.save_distilled_note(synth(answer=""), str(tmp_path))
+        assert result["saved"] is False
+        assert result["warnings"] == ["not saved: empty answer"]
+
     def test_existing_file_skips(self, tmp_path):
         distill.save_distilled_note(synth(), str(tmp_path))
         result = distill.save_distilled_note(synth(), str(tmp_path))
@@ -85,6 +90,12 @@ class TestSave:
     def test_empty_slug_raises(self, tmp_path):
         with pytest.raises(distill.EmptySlugError):
             distill.save_distilled_note(synth(question="?!."), str(tmp_path))
+
+    def test_save_directory_cannot_escape_vault(self, tmp_path):
+        with pytest.raises(distill.InvalidSaveDirectoryError, match="must not contain"):
+            distill.save_distilled_note(synth(), str(tmp_path), "../Outside")
+
+        assert not (tmp_path.parent / "Outside").exists()
 
     def test_duplicate_title_uses_path_target(self, tmp_path):
         citations = [

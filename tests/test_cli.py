@@ -146,6 +146,57 @@ class TestStats:
 
 
 class TestInvalidArguments:
+    def test_argparse_failure_is_a_json_envelope(self, capsys):
+        code, envelope = run(capsys, ["retrieve"])
+
+        assert code == 1
+        assert envelope["action"] == "retrieve"
+        assert envelope["error"]["type"] == "invalid_arguments"
+        assert "--query" in envelope["error"]["message"]
+
+    def test_missing_command_is_a_json_envelope(self, capsys):
+        code, envelope = run(capsys, [])
+
+        assert code == 1
+        assert envelope["action"] == "cli"
+        assert envelope["error"]["type"] == "invalid_arguments"
+
+    def test_non_positive_result_count_fails_before_provider(self, capsys, monkeypatch):
+        monkeypatch.setattr(
+            cli, "get_provider", lambda: (_ for _ in ()).throw(AssertionError())
+        )
+
+        code, envelope = run(capsys, ["retrieve", "--query", "q", "-n", "0"])
+
+        assert code == 1
+        assert envelope["error"]["type"] == "invalid_arguments"
+        assert "at least 1" in envelope["error"]["message"]
+
+    def test_invalid_save_directory_fails_before_provider(
+        self, capsys, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(
+            cli, "get_provider", lambda: (_ for _ in ()).throw(AssertionError())
+        )
+
+        code, envelope = run(
+            capsys,
+            [
+                "synthesize",
+                "--query",
+                "q",
+                "--save",
+                "--root",
+                str(tmp_path),
+                "--save-dir",
+                "../Outside",
+            ],
+        )
+
+        assert code == 1
+        assert envelope["error"]["type"] == "invalid_arguments"
+        assert "must not contain" in envelope["error"]["message"]
+
     def test_sync_missing_root(self, capsys, tmp_path, fake_provider, monkeypatch):
         monkeypatch.setattr(cli, "get_provider", lambda: fake_provider)
         code, envelope = run(
@@ -208,6 +259,38 @@ class TestSynthesizeFromRetrievalFile:
         assert code == 1
         assert envelope["ok"] is False
         assert envelope["error"]["type"] == "invalid_arguments"
+
+    def test_malformed_candidates_fail_before_provider(self, capsys, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            cli, "get_provider", lambda: (_ for _ in ()).throw(AssertionError())
+        )
+        retrieval_file = tmp_path / "r.json"
+        retrieval_file.write_text(
+            json.dumps({"query": "q", "candidates": {"not": "an array"}}),
+            encoding="utf-8",
+        )
+
+        code, envelope = run(capsys, ["synthesize", "--retrieval", str(retrieval_file)])
+
+        assert code == 1
+        assert envelope["error"]["type"] == "invalid_arguments"
+        assert "array of objects" in envelope["error"]["message"]
+
+
+class TestEnrichInputSafety:
+    def test_note_path_cannot_escape_root(self, capsys, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            cli, "get_provider", lambda: (_ for _ in ()).throw(AssertionError())
+        )
+
+        code, envelope = run(
+            capsys,
+            ["enrich", "--root", str(tmp_path), "--note", "../private.md"],
+        )
+
+        assert code == 1
+        assert envelope["error"]["type"] == "invalid_arguments"
+        assert "must not contain" in envelope["error"]["message"]
 
 
 class TestMissingApiKey:

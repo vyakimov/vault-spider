@@ -50,6 +50,9 @@ class TestParseLlmJson:
     def test_unparseable_returns_none(self):
         assert parse_llm_json("no json here at all") is None
 
+    def test_top_level_array_is_not_a_valid_response(self):
+        assert parse_llm_json('[{"answer": "hi"}]') is None
+
 
 class TestSynthesize:
     def test_citation_resolution_and_unknown_key_warning(self, fake_provider):
@@ -126,17 +129,53 @@ class TestSynthesize:
             "2 sentence(s) lack citations"
         ]
 
-    def test_abstained_and_empty_answers_skip_coverage_warning(self, fake_provider):
-        for answer, abstained in [
-            ("A deliberately long uncited sentence that would otherwise be flagged.", True),
-            ("", False),
-        ]:
-            fake_provider.chat_response = json.dumps(
-                {
-                    "answer": answer,
-                    "citations": [],
-                    "confidence": "Low",
-                    "abstained": abstained,
-                }
-            )
-            assert synthesize(fake_provider, retrieval_output())["warnings"] == []
+    def test_abstained_answer_skips_coverage_warning(self, fake_provider):
+        fake_provider.chat_response = json.dumps(
+            {
+                "answer": "A deliberately long uncited sentence that would otherwise be flagged.",
+                "citations": [],
+                "confidence": "Low",
+                "abstained": True,
+            }
+        )
+        assert synthesize(fake_provider, retrieval_output())["warnings"] == []
+
+    def test_empty_answer_fails_closed(self, fake_provider):
+        fake_provider.chat_response = json.dumps(
+            {"answer": "", "citations": [], "confidence": "High", "abstained": False}
+        )
+
+        result = synthesize(fake_provider, retrieval_output())
+
+        assert result["abstained"] is True
+        assert result["warnings"] == ["model returned an empty answer without abstaining"]
+
+    def test_string_boolean_fails_closed(self, fake_provider):
+        fake_provider.chat_response = json.dumps(
+            {
+                "answer": "This must not be treated as grounded [S0].",
+                "citations": ["S0"],
+                "confidence": "High",
+                "abstained": "false",
+            }
+        )
+
+        result = synthesize(fake_provider, retrieval_output())
+
+        assert result["abstained"] is True
+        assert "model abstained value was not a boolean" in result["warnings"]
+
+    def test_non_array_citations_are_not_iterated_as_text(self, fake_provider):
+        fake_provider.chat_response = json.dumps(
+            {
+                "answer": "Alpha is described here.",
+                "citations": "S0",
+                "confidence": "High",
+                "abstained": False,
+            }
+        )
+
+        result = synthesize(fake_provider, retrieval_output())
+
+        assert result["citations"] == []
+        assert "model citations were not an array" in result["warnings"]

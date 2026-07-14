@@ -21,9 +21,26 @@ from vault_rag.compounding.lint import WIKILINK_RE
 from vault_rag.corpus.chunker import HEADING_RE
 from vault_rag.envelope import CliError, success
 from vault_rag.obsidian import backend
+from vault_rag.utils import validate_vault_relative_path
 
 CONTRACT_IMMUTABLE = ("id", "created")
 _PATCH_EMPTY_REJECT = ("", [], None)
+
+
+def _vault_path(value: str, label: str) -> str:
+    try:
+        return validate_vault_relative_path(value, label=label)
+    except ValueError as exc:
+        raise CliError("invalid_arguments", str(exc)) from exc
+
+
+def _link_target(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise CliError("invalid_arguments", f"{label} must be a non-empty string")
+    target = value.strip()
+    if any(marker in target for marker in ("[[", "]]", "\n", "\r", "\x00")):
+        raise CliError("invalid_arguments", f"{label} contains invalid wikilink characters")
+    return target
 
 
 # ---------------------------------------------------------------------------
@@ -169,11 +186,9 @@ def _resolve_content(args: argparse.Namespace) -> Optional[str]:
 
 
 def cmd_create_note(args: argparse.Namespace) -> Dict[str, Any]:
-    path = args.path
+    path = _vault_path(args.path, "--path")
     if not path.endswith(".md"):
         raise CliError("invalid_arguments", "path must end with .md")
-    if path.startswith("/"):
-        raise CliError("invalid_arguments", "path must be vault-relative (no leading /)")
 
     content = _resolve_content(args)
     frontmatter: Dict[str, Any] = {}
@@ -315,6 +330,30 @@ def cmd_add_links(args: argparse.Namespace) -> Dict[str, Any]:
     if not isinstance(links, list):
         raise CliError("invalid_arguments", "--links must be a JSON array")
 
+    validated_links: List[Tuple[str, str, Optional[int]]] = []
+    for index, link in enumerate(links):
+        if not isinstance(link, dict):
+            raise CliError(
+                "invalid_arguments", f"--links item {index} must be a JSON object"
+            )
+        target = _link_target(link.get("target"), f"--links item {index} target")
+        raw_anchor = link.get("anchor_text", target)
+        if not isinstance(raw_anchor, str):
+            raise CliError(
+                "invalid_arguments", f"--links item {index} anchor_text must be a string"
+            )
+        anchor = raw_anchor.strip() or target
+        requested_line = link.get("line")
+        if requested_line is not None and (
+            not isinstance(requested_line, int)
+            or isinstance(requested_line, bool)
+            or requested_line < 1
+        ):
+            raise CliError(
+                "invalid_arguments", f"--links item {index} line must be a positive integer"
+            )
+        validated_links.append((target, anchor, requested_line))
+
     raw = backend.read_note(args.path)
     prefix, body = split_note(raw)
     body_lines = body.split("\n")
@@ -323,10 +362,7 @@ def cmd_add_links(args: argparse.Namespace) -> Dict[str, Any]:
     outcomes: List[Dict[str, Any]] = []
     changed = False
 
-    for link in links:
-        target = str(link.get("target", "")).strip()
-        anchor = str(link.get("anchor_text", target)).strip() or target
-        requested_line = link.get("line")
+    for target, anchor, requested_line in validated_links:
 
         if f"[[{target}]]" in body or f"[[{target}|" in body:
             outcomes.append({"target": target, "applied": False, "already": True})
@@ -370,6 +406,11 @@ def cmd_insert_related(args: argparse.Namespace) -> Dict[str, Any]:
     if not isinstance(targets, list):
         raise CliError("invalid_arguments", "--targets must be a JSON array")
 
+    validated_targets = [
+        _link_target(target, f"--targets item {index}")
+        for index, target in enumerate(targets)
+    ]
+
     raw = backend.read_note(args.path)
     prefix, body = split_note(raw)
     lines = body.split("\n")
@@ -397,8 +438,7 @@ def cmd_insert_related(args: argparse.Namespace) -> Dict[str, Any]:
 
     added: List[str] = []
     already_present: List[str] = []
-    for target in targets:
-        target = str(target).strip()
+    for target in validated_targets:
         if target.lower() in existing_targets_lower:
             already_present.append(target)
         else:
@@ -445,6 +485,8 @@ def _parse_destination(out: str, label: str, fallback: str) -> str:
 def _relocate(action: str, path: str, dest: str, backend_args: List[str],
               label: str, dry_run: bool) -> Dict[str, Any]:
     """Shared move/rename scaffolding: guards, dry-run, backend call, destination parse."""
+    path = _vault_path(path, "--path")
+    dest = _vault_path(dest, "destination")
     if not backend.note_exists(path):
         raise CliError("not_found", f"note not found: {path}")
     if backend.note_exists(dest):
@@ -462,12 +504,23 @@ def _relocate(action: str, path: str, dest: str, backend_args: List[str],
 def cmd_move_note(args: argparse.Namespace) -> Dict[str, Any]:
     filename = args.path.rsplit("/", 1)[-1]
     to = args.to.rstrip("/")
+    if not to:
+        if args.to:
+            raise CliError("invalid_arguments", "--to must be a vault-relative directory")
+    else:
+        to = _vault_path(to, "--to")
     dest = f"{to}/{filename}" if to else filename
     return _relocate("move-note", args.path, dest,
                      ["move", f"path={args.path}", f"to={args.to}"], "Moved", args.dry_run)
 
 
 def cmd_rename_note(args: argparse.Namespace) -> Dict[str, Any]:
+    if (
+        not args.name
+        or args.name in (".", "..")
+        or any(character in args.name for character in ("/", "\\", "\n", "\r", "\x00"))
+    ):
+        raise CliError("invalid_arguments", "--name must be a single non-empty filename")
     folder = args.path.rsplit("/", 1)[0] if "/" in args.path else ""
     new_name = args.name if args.name.endswith(".md") else f"{args.name}.md"
     dest = f"{folder}/{new_name}" if folder else new_name

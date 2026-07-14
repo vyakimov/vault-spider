@@ -69,6 +69,8 @@ class OpenRouterClient:
     RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
     def _post(self, path: str, payload: Dict[str, Any], retries: int = 3) -> Dict[str, Any]:
+        if retries < 1:
+            raise ValueError("retries must be at least 1")
         url = f"{self.base_url}/{path.lstrip('/')}"
 
         for attempt in range(retries):
@@ -92,41 +94,75 @@ class OpenRouterClient:
                 message = response.text.strip() or f"HTTP {response.status_code}"
                 raise OpenRouterError(f"OpenRouter request failed: {message}")
             try:
-                return response.json()
+                response_payload = response.json()
             except ValueError as exc:
                 raise OpenRouterError(
                     "OpenRouter returned a non-JSON response"
                 ) from exc
+            if not isinstance(response_payload, dict):
+                raise OpenRouterError("OpenRouter returned JSON that was not an object")
+            return response_payload
 
         raise OpenRouterError("OpenRouter request failed: retries exhausted")
 
     @staticmethod
     def _normalize_embedding(embedding: List[float]) -> List[float]:
         norm = math.sqrt(sum(value * value for value in embedding))
-        if norm == 0:
-            return embedding
+        if norm == 0 or not math.isfinite(norm):
+            raise OpenRouterError("Embedding response contained a non-normalizable vector")
         return [value / norm for value in embedding]
 
     def embed_texts(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
+        if batch_size < 1:
+            raise ValueError("batch_size must be at least 1")
         embeddings: List[List[float]] = []
+        embedding_size: Optional[int] = None
         for start in range(0, len(texts), batch_size):
             chunk = texts[start : start + batch_size]
             payload = {"model": self.embedding_model, "input": chunk}
             response = self._post("/embeddings", payload)
-            data = sorted(response.get("data", []), key=lambda item: item.get("index", 0))
-            batch = [
-                self._normalize_embedding(item["embedding"])
-                for item in data
-                if "embedding" in item
-            ]
-            if len(batch) != len(chunk):
+            data = response.get("data")
+            if not isinstance(data, list):
+                raise OpenRouterError("Embedding response data was not an array")
+
+            indexed: Dict[int, List[float]] = {}
+            for item in data:
+                if not isinstance(item, dict):
+                    raise OpenRouterError("Embedding response contained a non-object item")
+                index = item.get("index")
+                if (
+                    not isinstance(index, int)
+                    or isinstance(index, bool)
+                    or not 0 <= index < len(chunk)
+                ):
+                    raise OpenRouterError(f"Embedding response contained invalid index {index!r}")
+                if index in indexed:
+                    raise OpenRouterError(f"Embedding response contained duplicate index {index}")
+                raw_embedding = item.get("embedding")
+                if not isinstance(raw_embedding, list) or not raw_embedding:
+                    raise OpenRouterError("Embedding response contained an invalid vector")
+                try:
+                    embedding = [float(value) for value in raw_embedding]
+                except (TypeError, ValueError) as exc:
+                    raise OpenRouterError(
+                        "Embedding response contained a non-numeric vector"
+                    ) from exc
+                if not all(math.isfinite(value) for value in embedding):
+                    raise OpenRouterError("Embedding response contained a non-finite vector")
+                if embedding_size is None:
+                    embedding_size = len(embedding)
+                elif len(embedding) != embedding_size:
+                    raise OpenRouterError("Embedding response dimensions were inconsistent")
+                indexed[index] = self._normalize_embedding(embedding)
+
+            if len(indexed) != len(chunk):
                 # A partial batch would silently misalign embeddings with the
                 # documents they are stored against.
                 raise OpenRouterError(
-                    f"Embedding response returned {len(batch)} embeddings "
+                    f"Embedding response returned {len(indexed)} embeddings "
                     f"for {len(chunk)} inputs"
                 )
-            embeddings.extend(batch)
+            embeddings.extend(indexed[index] for index in range(len(chunk)))
         return embeddings
 
     def rerank(
@@ -137,6 +173,8 @@ class OpenRouterClient:
     ) -> pd.DataFrame:
         if not self.rerank_model:
             raise OpenRouterError("No rerank model configured")
+        if len(documents) != len(ids):
+            raise ValueError("documents and ids must have the same length")
 
         payload = {
             "model": self.rerank_model,
@@ -145,18 +183,36 @@ class OpenRouterClient:
         }
         response = self._post("/rerank", payload)
         results = response.get("results") or response.get("data") or []
+        if not isinstance(results, list):
+            raise OpenRouterError("Rerank response results were not an array")
         rows = []
+        seen_indexes = set()
         for result in results:
+            if not isinstance(result, dict):
+                raise OpenRouterError("Rerank response contained a non-object item")
             index = result.get("index")
-            if index is None or index >= len(documents):
-                continue
+            if (
+                not isinstance(index, int)
+                or isinstance(index, bool)
+                or not 0 <= index < len(documents)
+            ):
+                raise OpenRouterError(f"Rerank response contained invalid index {index!r}")
+            if index in seen_indexes:
+                raise OpenRouterError(f"Rerank response contained duplicate index {index}")
+            seen_indexes.add(index)
             score = result.get("relevance_score", result.get("score", 0.0))
+            try:
+                score = float(score)
+            except (TypeError, ValueError) as exc:
+                raise OpenRouterError("Rerank response contained a non-numeric score") from exc
+            if not math.isfinite(score):
+                raise OpenRouterError("Rerank response contained a non-finite score")
             rows.append(
                 {
                     "id": ids[index],
                     "query": query,
                     "passage": documents[index],
-                    "score": float(score),
+                    "score": score,
                 }
             )
 
@@ -185,12 +241,19 @@ class OpenRouterClient:
         }
         response = self._post("/chat/completions", payload)
         choices = response.get("choices") or []
-        if not choices:
+        if not isinstance(choices, list) or not choices:
             raise OpenRouterError("Chat response did not contain any choices")
-        message = choices[0].get("message", {}) or {}
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            raise OpenRouterError("Chat response contained an invalid choice")
+        message = first_choice.get("message", {}) or {}
+        if not isinstance(message, dict):
+            raise OpenRouterError("Chat response contained an invalid message")
         content = message.get("content")
         if isinstance(content, list):
-            text_parts = [part.get("text", "") for part in content if isinstance(part, dict)]
+            text_parts = [
+                str(part.get("text") or "") for part in content if isinstance(part, dict)
+            ]
             content = "".join(text_parts)
         # Reasoning models sometimes return content=None when the max_tokens
         # budget gets absorbed by internal reasoning. Fall back to the

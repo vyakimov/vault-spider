@@ -1,5 +1,6 @@
 """Configuration for Vault RAG retrieval and ranking."""
 
+import math
 from dataclasses import dataclass, replace
 
 
@@ -16,6 +17,26 @@ class SearchParams:
     recency_boost_enabled: bool = True
     recency_weight: float = 0.2
     recency_decay_days: float = 365.0
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.semantic_weight <= 1.0:
+            raise ValueError("semantic_weight must be between 0 and 1")
+        if self.top_k < 1:
+            raise ValueError("top_k must be at least 1")
+        if self.n_results < 1:
+            raise ValueError("n_results must be at least 1")
+        if self.combine_strategy not in {"rrf", "zsigmoid", "minmax"}:
+            raise ValueError("combine_strategy must be rrf, zsigmoid, or minmax")
+        if self.rrf_k < 1:
+            raise ValueError("rrf_k must be at least 1")
+        if not math.isfinite(self.zsigmoid_temperature) or self.zsigmoid_temperature <= 0:
+            raise ValueError("zsigmoid_temperature must be greater than 0")
+        if self.rerank_top_k < 1:
+            raise ValueError("rerank_top_k must be at least 1")
+        if not 0.0 <= self.recency_weight <= 1.0:
+            raise ValueError("recency_weight must be between 0 and 1")
+        if not math.isfinite(self.recency_decay_days) or self.recency_decay_days <= 0:
+            raise ValueError("recency_decay_days must be greater than 0")
 
     def with_overrides(self, **overrides) -> "SearchParams":
         provided = {key: value for key, value in overrides.items() if value is not None}

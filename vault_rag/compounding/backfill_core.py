@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -99,7 +100,7 @@ class Change:
     value: str
     source: str
     confidence: str
-    warnings: List[str] = field(default_factory=list)
+    warnings: List[str] = dataclass_field(default_factory=list)
 
 
 def _legacy_id_values(fm: Dict[str, Any]) -> Dict[str, str]:

@@ -9,6 +9,7 @@ mutation commands (vault_rag.obsidian).
 
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ ALLOWED_TYPES = {
     "idea",
     "project",
 }
+ALLOWED_SOURCE_TYPES = {"transcript", "web", "pdf", "manual"}
 
 _SYSTEM_PROMPT = """You are an enrichment planner for a personal markdown knowledge vault.
 Given a NOTE and its retrieved NEIGHBORS, propose conservative improvements as JSON.
@@ -61,6 +63,24 @@ def _norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", text.lower())
 
 
+def _parse_confidence(value: Any) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+        return None
+    return confidence
+
+
+def _is_safe_title(title: str) -> bool:
+    return bool(title) and title not in (".", "..") and not any(
+        character in title for character in ("/", "\\", "\x00", "\n", "\r")
+    )
+
+
 def gather_neighbors(store, provider, inp: EnrichInput, per_query: int = 5, keep: int = 10):
     from vault_rag.retrieval.searcher import Searcher
 
@@ -88,12 +108,22 @@ def gather_neighbors(store, provider, inp: EnrichInput, per_query: int = 5, keep
         except ValueError:
             continue
         for row in result.rows:
-            metadata = row["metadata"]
+            metadata = row.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
             path = str(metadata.get("path", ""))
             if inp.path and path == inp.path:
                 continue
             note_id = str(row["note_id"])
-            score = float(row["final"])
+            raw_score = row.get("final")
+            if not isinstance(raw_score, (str, int, float)) or isinstance(raw_score, bool):
+                continue
+            try:
+                score = float(raw_score)
+            except ValueError:
+                continue
+            if not math.isfinite(score):
+                continue
             if note_id not in merged or score > merged[note_id]["score"]:
                 merged[note_id] = {
                     "note_id": note_id,
@@ -155,13 +185,16 @@ def _suggested_path(inp: EnrichInput, title: str, neighbors: List[Dict[str, Any]
             consensus = folder
 
     is_stdin = inp.path is None
-    current_folder = "" if is_stdin else PurePosixPath(inp.path).parent.as_posix()
+    current_folder = (
+        "" if inp.path is None else PurePosixPath(inp.path).parent.as_posix()
+    )
     inbox_like = "inbox" in current_folder.lower()
 
     if (is_stdin or inbox_like) and consensus:
         return f"{consensus}/{title}.md"
     if is_stdin:
         return f"Inbox/{title}.md"
+    assert inp.path is not None
     return inp.path  # keep current location
 
 
@@ -203,7 +236,11 @@ def postprocess(
         warnings.extend(str(w) for w in raw_warnings)
 
     # Title: unchanged if it differs only in case/punctuation from the current.
-    proposed_title = str(parsed.get("title") or inp.title).strip() or inp.title
+    fallback_title = inp.title if _is_safe_title(inp.title) else "Untitled"
+    proposed_title = str(parsed.get("title") or fallback_title).strip() or fallback_title
+    if not _is_safe_title(proposed_title):
+        warnings.append("dropped title containing unsafe path characters")
+        proposed_title = fallback_title
     title_changed = _norm(proposed_title) != _norm(inp.title)
     title = proposed_title if title_changed else inp.title
 
@@ -225,7 +262,10 @@ def postprocess(
         if not isinstance(entry, dict):
             continue
         target = str(entry.get("target", "")).strip()
-        confidence = float(entry.get("confidence", 0.0) or 0.0)
+        confidence = _parse_confidence(entry.get("confidence", 0.0))
+        if confidence is None:
+            warnings.append(f"dropped link with invalid confidence: {target}")
+            continue
         resolved = index.resolve(target)
         if resolved is None:
             warnings.append(f"dropped link to nonexistent note: {target}")
@@ -260,7 +300,10 @@ def postprocess(
         if not isinstance(entry, dict):
             continue
         target = str(entry.get("target", "")).strip()
-        confidence = float(entry.get("confidence", 0.0) or 0.0)
+        confidence = _parse_confidence(entry.get("confidence", 0.0))
+        if confidence is None:
+            warnings.append(f"dropped related with invalid confidence: {target}")
+            continue
         resolved = index.resolve(target)
         if resolved is None:
             warnings.append(f"dropped related to nonexistent note: {target}")
@@ -295,9 +338,14 @@ def postprocess(
     if aliases:
         patch["aliases"] = aliases
 
-    source_type = inp.source_type or (str(parsed.get("source_type")).strip() if parsed.get("source_type") else "")
+    source_type = inp.source_type or (
+        str(parsed.get("source_type")).strip().lower() if parsed.get("source_type") else ""
+    )
     if source_type:
-        patch["source_type"] = source_type
+        if source_type in ALLOWED_SOURCE_TYPES:
+            patch["source_type"] = source_type
+        else:
+            warnings.append(f"dropped invalid source_type={source_type}")
     if inp.source_url:
         patch["source_url"] = inp.source_url
 

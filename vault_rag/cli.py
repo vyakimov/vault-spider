@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
 import time
-from pathlib import PurePosixPath
-from typing import Any, Dict, Optional
+from pathlib import Path, PurePosixPath
+from typing import Any, Dict, NoReturn, Optional
 
 from vault_rag import settings
 from vault_rag.envelope import CliError, failure, print_json, success
 from vault_rag.llm.openrouter import OpenRouterClient, OpenRouterError
+from vault_rag.utils import validate_vault_relative_path
 
 # v2: the obsctl note-mutation commands were merged into this CLI (one schema,
 # one envelope, one error-type union).
@@ -21,6 +23,13 @@ SCHEMA_VERSION = 2
 
 # How many findings per check `--format text` prints before truncating.
 _LINT_TEXT_LIMIT = 15
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    """Convert argparse failures into the CLI's stable JSON error contract."""
+
+    def error(self, message: str) -> NoReturn:
+        raise CliError("invalid_arguments", message)
 
 
 def get_provider() -> OpenRouterClient:
@@ -403,6 +412,8 @@ def _validate_filter_dates(args: argparse.Namespace) -> Optional[str]:
 def cmd_retrieve(args: argparse.Namespace) -> Dict[str, Any]:
     if not args.query or not args.query.strip():
         return failure("retrieve", "invalid_arguments", "--query is required")
+    if args.n < 1:
+        return failure("retrieve", "invalid_arguments", "-n must be at least 1")
     date_error = _validate_filter_dates(args)
     if date_error:
         return failure("retrieve", "invalid_arguments", date_error)
@@ -430,18 +441,38 @@ def _load_retrieval_file(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as handle:
         payload = json.load(handle)
     if isinstance(payload, dict) and "candidates" in payload:
-        return payload
-    if isinstance(payload, dict) and isinstance(payload.get("result"), dict):
-        return payload["result"]
-    raise ValueError("retrieval file is not a valid retrieve contract or envelope")
+        retrieval = payload
+    elif isinstance(payload, dict) and isinstance(payload.get("result"), dict):
+        retrieval = payload["result"]
+    else:
+        raise ValueError("retrieval file is not a valid retrieve contract or envelope")
+
+    candidates = retrieval.get("candidates")
+    if not isinstance(candidates, list) or not all(
+        isinstance(candidate, dict) for candidate in candidates
+    ):
+        raise ValueError("retrieval file candidates must be an array of objects")
+    for index, candidate in enumerate(candidates):
+        scores = candidate.get("scores")
+        if not isinstance(scores, dict):
+            raise ValueError(f"retrieval candidate {index} scores must be an object")
+        final_score = scores.get("final")
+        if (
+            not isinstance(final_score, (int, float))
+            or isinstance(final_score, bool)
+            or not math.isfinite(float(final_score))
+        ):
+            raise ValueError(f"retrieval candidate {index} final score must be finite")
+        if not isinstance(candidate.get("excerpt"), str):
+            raise ValueError(f"retrieval candidate {index} excerpt must be a string")
+    return retrieval
 
 
 def cmd_synthesize(args: argparse.Namespace) -> Dict[str, Any]:
+    retrieval_output: Dict[str, Any] = {}
     date_error = _validate_filter_dates(args)
     if date_error:
         return failure("synthesize", "invalid_arguments", date_error)
-    provider = get_provider()
-
     if args.save and args.retrieval:
         return failure(
             "synthesize",
@@ -450,6 +481,31 @@ def cmd_synthesize(args: argparse.Namespace) -> Dict[str, Any]:
         )
     if args.save and not args.root:
         return failure("synthesize", "invalid_arguments", "--root is required with --save")
+    if args.save and not os.path.isdir(args.root):
+        return failure(
+            "synthesize", "invalid_arguments", f"root directory not found: {args.root}"
+        )
+    if args.save:
+        try:
+            save_dir = validate_vault_relative_path(args.save_dir, label="--save-dir")
+        except ValueError as exc:
+            return failure("synthesize", "invalid_arguments", str(exc))
+        root_path = Path(args.root).resolve()
+        try:
+            (root_path / save_dir).resolve().relative_to(root_path)
+        except ValueError:
+            return failure(
+                "synthesize",
+                "invalid_arguments",
+                "--save-dir resolves outside the vault root",
+            )
+        args.save_dir = save_dir
+    if args.n < 1:
+        return failure("synthesize", "invalid_arguments", "-n must be at least 1")
+    if args.n_context < 1:
+        return failure(
+            "synthesize", "invalid_arguments", "--n-context must be at least 1"
+        )
 
     if args.retrieval:
         try:
@@ -473,6 +529,9 @@ def cmd_synthesize(args: argparse.Namespace) -> Dict[str, Any]:
                 "invalid_arguments",
                 "--query is required unless --retrieval is provided",
             )
+
+    provider = get_provider()
+    if not args.retrieval:
         store = get_store(args.chroma_path, args.collection, provider)
         if store.collection.count() == 0:
             return failure(
@@ -500,11 +559,15 @@ def cmd_synthesize(args: argparse.Namespace) -> Dict[str, Any]:
 
     meta: Dict[str, Any] = {}
     if args.save:
-        from vault_rag.compounding.distill import EmptySlugError, save_distilled_note
+        from vault_rag.compounding.distill import (
+            EmptySlugError,
+            InvalidSaveDirectoryError,
+            save_distilled_note,
+        )
 
         try:
             save_result = save_distilled_note(synth, args.root, args.save_dir)
-        except EmptySlugError as exc:
+        except (EmptySlugError, InvalidSaveDirectoryError) as exc:
             return failure("synthesize", "invalid_arguments", str(exc))
         synth["saved"] = save_result["saved"]
         synth["saved_path"] = save_result["saved_path"]
@@ -536,17 +599,33 @@ def cmd_enrich(args: argparse.Namespace) -> Dict[str, Any]:
     from vault_rag.corpus.frontmatter import split_frontmatter
     from vault_rag.enrich.planner import EnrichInput, plan
 
+    if not os.path.isdir(args.root):
+        return failure("enrich", "invalid_arguments", f"root directory not found: {args.root}")
+
     if args.note:
-        note_path = os.path.join(args.root, args.note)
-        if not os.path.isfile(note_path):
+        try:
+            relative_note = validate_vault_relative_path(args.note, label="--note")
+        except ValueError as exc:
+            return failure("enrich", "invalid_arguments", str(exc))
+        if not relative_note.lower().endswith(".md"):
+            return failure("enrich", "invalid_arguments", "--note must be a Markdown file")
+        root_path = Path(args.root).resolve()
+        note_path = (root_path / relative_note).resolve()
+        try:
+            note_path.relative_to(root_path)
+        except ValueError:
+            return failure(
+                "enrich", "invalid_arguments", "--note resolves outside the vault root"
+            )
+        if not note_path.is_file():
             return failure("enrich", "not_found", f"note not found: {args.note}")
-        with open(note_path, "r", encoding="utf-8", errors="strict") as handle:
+        with note_path.open("r", encoding="utf-8", errors="strict") as handle:
             raw = handle.read()
         frontmatter, body = split_frontmatter(raw)
         title = args.title or str(frontmatter.get("title") or "") or _derive_title(
-            body, PurePosixPath(args.note).stem
+            body, PurePosixPath(relative_note).stem
         )
-        rel_path: Optional[str] = args.note
+        rel_path: Optional[str] = relative_note
     else:
         body = sys.stdin.read()
         frontmatter = {}
@@ -684,6 +763,11 @@ def _obsidian_handler(args: argparse.Namespace) -> Dict[str, Any]:
     Imported lazily so the query commands never load the mutation stack."""
     from vault_rag.obsidian import backend, notes
 
+    try:
+        args.path = validate_vault_relative_path(args.path, label="--path")
+    except ValueError as exc:
+        raise CliError("invalid_arguments", str(exc)) from exc
+
     backend.configure(
         binary=args.binary or settings.obsidian_binary(),
         vault=args.vault or settings.obsidian_vault(),
@@ -713,14 +797,14 @@ def _add_filter_arguments(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     # A configured `vault.root` makes --root optional; without one it stays required.
     _VAULT_ROOT = settings.vault_root()
-    parser = argparse.ArgumentParser(prog="vault-rag", description="Vault RAG JSON CLI")
+    parser = JsonArgumentParser(prog="vault-rag", description="Vault RAG JSON CLI")
     parser.add_argument(
         "--chroma-path",
         default=settings.chroma_path(),
         help="Chroma persistence dir (default from config.yaml `index.chroma_path`)",
     )
     parser.add_argument("--collection", default="vault_notes", help="Chroma collection name")
-    common = argparse.ArgumentParser(add_help=False)
+    common = JsonArgumentParser(add_help=False)
     common.add_argument(
         "--chroma-path", default=argparse.SUPPRESS, help="Chroma persistence dir"
     )
@@ -819,7 +903,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Note mutations, executed through the running Obsidian app. All take
     # --path plus the connection overrides; the mutating ones add --dry-run.
-    obsidian_common = argparse.ArgumentParser(add_help=False)
+    obsidian_common = JsonArgumentParser(add_help=False)
     obsidian_common.add_argument("--path", required=True, help="Vault-relative note path")
     obsidian_common.add_argument(
         "--binary", default=None, help="Obsidian CLI binary (config: `obsidian.binary`)"
@@ -827,7 +911,7 @@ def build_parser() -> argparse.ArgumentParser:
     obsidian_common.add_argument(
         "--vault", default=None, help="Obsidian vault name (config: `obsidian.vault`)"
     )
-    mutating = argparse.ArgumentParser(add_help=False, parents=[obsidian_common])
+    mutating = JsonArgumentParser(add_help=False, parents=[obsidian_common])
     mutating.add_argument("--dry-run", action="store_true", dest="dry_run")
 
     p_create = sub.add_parser(
@@ -840,8 +924,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_read = sub.add_parser(
         "read-note", parents=[obsidian_common], help="Read a note via the Obsidian backend"
     )
-    p_read.add_argument("--frontmatter-only", action="store_true", dest="frontmatter_only")
-    p_read.add_argument("--body-only", action="store_true", dest="body_only")
+    read_view = p_read.add_mutually_exclusive_group()
+    read_view.add_argument("--frontmatter-only", action="store_true", dest="frontmatter_only")
+    read_view.add_argument("--body-only", action="store_true", dest="body_only")
 
     p_merge = sub.add_parser(
         "merge-frontmatter", parents=[mutating], help="Merge a frontmatter patch"
@@ -887,18 +972,39 @@ _HANDLERS = {
 }
 
 
+def _command_hint(argv: list[str]) -> str:
+    known_commands = set(_schema()["commands"])
+    index = 0
+    while index < len(argv):
+        argument = argv[index]
+        if argument in {"--chroma-path", "--collection"}:
+            index += 2
+            continue
+        if argument.startswith(("--chroma-path=", "--collection=")):
+            index += 1
+            continue
+        if argument in known_commands:
+            return argument
+        index += 1
+    return "cli"
+
+
 def main(argv: Optional[list] = None) -> int:
+    raw_argv = list(argv if argv is not None else sys.argv[1:])
     try:
         parser = build_parser()
     except settings.ConfigError as exc:
         # A malformed config.yaml must still leave one JSON envelope on stdout.
-        command = next((arg for arg in (argv or sys.argv[1:]) if not arg.startswith("-")), "cli")
-        print_json(failure(command, "invalid_arguments", str(exc)))
+        print_json(failure(_command_hint(raw_argv), "invalid_arguments", str(exc)))
         return 1
 
-    args = parser.parse_args(argv)
+    try:
+        args = parser.parse_args(raw_argv)
+    except CliError as exc:
+        print_json(failure(_command_hint(raw_argv), exc.err_type, exc.message, exc.details))
+        return 1
     if not args.command:
-        parser.print_help()
+        print_json(failure("cli", "invalid_arguments", "a command is required"))
         return 1
 
     handler = _HANDLERS.get(args.command, _obsidian_handler)

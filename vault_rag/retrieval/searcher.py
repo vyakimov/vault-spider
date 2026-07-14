@@ -151,13 +151,10 @@ class Searcher:
     ) -> RetrievalResult:
         started = datetime.now(timezone.utc)
         granularity = granularity or self.default_granularity
-        data_granularity = "section" if granularity == "mixed" else granularity
-        documents, ids, metadatas, bm25 = self.store.granularity_data(data_granularity)
-        if not ids or bm25 is None:
-            raise ValueError("Index is empty for the requested granularity.")
-
-        metadata_by_id = dict(zip(ids, metadatas))
-        document_by_id = dict(zip(ids, documents))
+        if mode not in {"fast", "thorough"}:
+            raise ValueError("mode must be fast or thorough")
+        if granularity not in {"document", "section", "mixed"}:
+            raise ValueError("granularity must be document, section, or mixed")
 
         params = DEFAULT_SEARCH_PARAMS.with_overrides(
             semantic_weight=semantic_weight,
@@ -171,6 +168,14 @@ class Searcher:
             recency_decay_days=recency_decay_days,
         )
         strategy = params.combine_strategy.lower()
+
+        data_granularity = "section" if granularity == "mixed" else granularity
+        documents, ids, metadatas, bm25 = self.store.granularity_data(data_granularity)
+        if not ids or bm25 is None:
+            raise ValueError("Index is empty for the requested granularity.")
+
+        metadata_by_id = dict(zip(ids, metadatas))
+        document_by_id = dict(zip(ids, documents))
 
         allowed_ids = set(ids)
         if must_include_terms:

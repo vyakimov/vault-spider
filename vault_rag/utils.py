@@ -6,6 +6,7 @@ import ctypes
 import hashlib
 import re
 import string
+from pathlib import PurePosixPath
 from typing import Iterable, List
 
 WORD_RE = r"\b\w+\b"
@@ -69,3 +70,24 @@ def normalize_no_punct(text: str) -> str:
 def tokenize_for_bm25(text: str, stop_words: Iterable[str], stemmer) -> List[str]:
     tokens = re.findall(WORD_RE, text.lower())
     return [stemmer.stem(token) for token in tokens if token and token not in stop_words]
+
+
+def validate_vault_relative_path(value: str, *, label: str = "path") -> str:
+    """Return a canonical vault-relative POSIX path or raise ``ValueError``.
+
+    Obsidian paths are always slash-separated and relative to the active vault.
+    Rejecting ambiguous segments here prevents callers from accidentally escaping
+    a configured vault root when the same path is used with the filesystem.
+    """
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must not be empty")
+    if "\x00" in value:
+        raise ValueError(f"{label} must not contain NUL bytes")
+    if "\\" in value:
+        raise ValueError(f"{label} must use '/' as the path separator")
+    path = PurePosixPath(value)
+    if path.is_absolute():
+        raise ValueError(f"{label} must be vault-relative")
+    if any(part in ("", ".", "..") for part in value.split("/")):
+        raise ValueError(f"{label} must not contain empty, '.' or '..' segments")
+    return path.as_posix()

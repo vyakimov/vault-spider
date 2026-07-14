@@ -139,6 +139,37 @@ class TestUnparseable:
         assert {link["target"] for link in result["link_insertions"]} == {"Atlas"}
         assert "aliases" not in result["frontmatter_patch"]
 
+    def test_invalid_confidences_are_dropped_without_crashing(self):
+        parsed = {
+            "title": "T",
+            "inline_links": [
+                {"target": "Atlas", "anchor_text": "Atlas", "confidence": "high"}
+            ],
+            "related": [{"target": "Beta", "confidence": float("nan")}],
+        }
+
+        result = postprocess(parsed, make_input(), NEIGHBORS)
+
+        assert result["link_insertions"] == []
+        assert result["related_candidates"] == []
+        assert sum("invalid confidence" in warning for warning in result["warnings"]) == 2
+
+    def test_unsafe_title_and_source_type_are_dropped(self):
+        parsed = {
+            "title": "../../Outside",
+            "source_type": "executable",
+            "inline_links": [],
+            "related": [],
+        }
+
+        result = postprocess(parsed, make_input(), NEIGHBORS)
+
+        assert result["title"] == "Raw"
+        assert result["suggested_path"] == "Inbox/raw.md"
+        assert "source_type" not in result["frontmatter_patch"]
+        assert any("unsafe path" in warning for warning in result["warnings"])
+        assert any("invalid source_type" in warning for warning in result["warnings"])
+
 
 class TestMutationGuard:
     def test_plan_writes_nothing(self, tmp_path, tiny_vault, fake_provider):
