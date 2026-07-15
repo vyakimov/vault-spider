@@ -16,7 +16,7 @@ import re
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
-from vault_rag.compounding.backfill_core import now_timestamp
+from vault_rag.compounding.backfill_core import fresh_identity, now_timestamp
 from vault_rag.compounding.lint import WIKILINK_RE
 from vault_rag.corpus.chunker import HEADING_RE
 from vault_rag.envelope import CliError, success
@@ -199,6 +199,10 @@ def cmd_create_note(args: argparse.Namespace) -> Dict[str, Any]:
             raise CliError("invalid_arguments", f"--frontmatter is not valid JSON: {exc}")
         if not isinstance(frontmatter, dict):
             raise CliError("invalid_arguments", "--frontmatter must be a JSON object")
+
+    if args.auto_id:
+        # Fill-only-missing, like `lint --fix`: explicit --frontmatter values win.
+        frontmatter = {**fresh_identity(), **frontmatter}
 
     if backend.note_exists(path):
         raise CliError("already_exists", f"note already exists: {path}")

@@ -10,9 +10,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-from ulid import ULID
-
-from vault_rag.compounding.backfill_core import now_timestamp
+from vault_rag.compounding.backfill_core import fresh_identity
 from vault_rag.utils import validate_vault_relative_path
 
 
@@ -70,12 +68,12 @@ def render_distilled_note(synth_output: Dict[str, Any]) -> str:
     sources = _unique_sources(synth_output.get("citations", []) or [])
     targets = _link_targets(sources)
 
-    timestamp = now_timestamp()
+    identity = fresh_identity()
     lines = [
         "---",
-        f"id: {ULID()}",
-        f"created: {timestamp}",
-        f"updated: {timestamp}",
+        f"id: {identity['id']}",
+        f"created: {identity['created']}",
+        f"updated: {identity['updated']}",
         "type: distilled",
         "---",
         f"# {question}",

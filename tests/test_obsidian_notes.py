@@ -125,6 +125,33 @@ class TestCreateNote:
         assert env["ok"] and env["meta"]["dry_run"] is True
         assert backend.mutating_calls() == []
 
+    def test_auto_id_mints_identity(self, capsys, monkeypatch):
+        import re
+        from datetime import datetime
+
+        backend = FakeBackend()
+        code, env = run(["create-note", "--path", "A.md", "--content", "body",
+                         "--auto-id", "--dry-run"],
+                        backend, capsys, monkeypatch)
+        assert env["ok"]
+        text = env["result"]["text"]
+        fields = dict(re.findall(r"^(id|created|updated): (.+)$", text, re.MULTILINE))
+        assert re.fullmatch(r"[0-9A-HJKMNP-TV-Z]{26}", fields["id"])  # Crockford ULID
+        assert fields["created"] == fields["updated"]
+        assert datetime.fromisoformat(fields["created"]).tzinfo is not None
+
+    def test_auto_id_never_overwrites_explicit_frontmatter(self, capsys, monkeypatch):
+        backend = FakeBackend()
+        code, env = run(["create-note", "--path", "A.md", "--content", "body", "--auto-id",
+                         "--frontmatter", json.dumps({"id": "01ABC", "type": "idea"}),
+                         "--dry-run"],
+                        backend, capsys, monkeypatch)
+        assert env["ok"]
+        text = env["result"]["text"]
+        assert "id: 01ABC" in text
+        assert "type: idea" in text
+        assert "created: " in text and "updated: " in text
+
 
 # -- merge-frontmatter -------------------------------------------------------
 

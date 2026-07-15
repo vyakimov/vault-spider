@@ -155,7 +155,8 @@ def _schema() -> Dict[str, Any]:
                     "--path": "vault-relative .md path (required)",
                     "--content": "note body ('-' = stdin)",
                     "--content-file": "read body from file ('-' = stdin; xor --content)",
-                    "--frontmatter": "JSON object (only place id/created may be set)",
+                    "--frontmatter": "JSON object (id/created may only be set here or via --auto-id)",
+                    "--auto-id": "flag: mint id (ULID) + created/updated (= now, timestamps.policy) for fields missing from --frontmatter",
                     "--dry-run": "flag",
                 },
                 "result": {"changed": "bool", "path": "str", "text": "str (dry-run only)"},
@@ -920,6 +921,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_create.add_argument("--content", default=None)
     p_create.add_argument("--content-file", dest="content_file", default=None)
     p_create.add_argument("--frontmatter", default=None)
+    p_create.add_argument("--auto-id", action="store_true", dest="auto_id")
 
     p_read = sub.add_parser(
         "read-note", parents=[obsidian_common], help="Read a note via the Obsidian backend"

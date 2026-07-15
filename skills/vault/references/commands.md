@@ -64,7 +64,7 @@ FILTERS (retrieve & synthesize):
 ## Mutation commands (same CLI; Obsidian app must be running)
 
 ```
-vault-rag create-note   --path "Inbox/Foo.md" [--content ...|--content-file f|-] [--frontmatter '{...}'] [--dry-run]
+vault-rag create-note   --path "Inbox/Foo.md" [--content ...|--content-file f|-] [--frontmatter '{...}'] [--auto-id] [--dry-run]
 vault-rag read-note     --path "..." [--frontmatter-only|--body-only]
 vault-rag merge-frontmatter --path "..." --patch '{"type":"interview","aliases":["Alias"]}' [--dry-run]
 vault-rag add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]' [--dry-run]
@@ -75,6 +75,9 @@ vault-rag open-note     --path "..."
 ```
 
 - Every mutating command supports `--dry-run` (returns the diff, makes no backend mutation).
+- `create-note --auto-id` mints `id` (ULID) plus `created`/`updated` (same timestamp, formatted
+  per `timestamps.policy`) for whichever of the three are missing from `--frontmatter` — always
+  prefer it over minting those fields by hand.
 - Connection facts come from `config.yaml` (`obsidian.binary`, `obsidian.vault`,
   `obsidian.manage_updated`); `--binary`/`--vault` override per command.
 - `id`/`created` are immutable once set (`contract_violation`); empty optional fields are

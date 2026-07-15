@@ -7,27 +7,23 @@ the mutation commands.
 ## Frontmatter at capture (important)
 
 Templater does **not** fire on CLI-created notes, so `vault-rag create-note` must supply the
-universal fields itself. The `update-time-on-edit` plugin then maintains `updated` on every
-subsequent edit, so the CLI leaves `updated` alone (`obsidian.manage_updated: false`).
+universal fields itself — pass `--auto-id` and the CLI mints them. The `update-time-on-edit`
+plugin then maintains `updated` on every subsequent edit, so the CLI leaves `updated` alone
+(`obsidian.manage_updated: false`).
 
-Contract fields:
+Contract fields `--auto-id` mints:
 - `id` — a 26-char ULID (Crockford base32), immutable.
-- `created` / `updated` — ISO 8601, **offset-aware**. The format follows `config.yaml`
-  `timestamps.policy`: `offset_local` (default, e.g. `2026-07-07T14:30:00+02:00`) or `utc_z`.
+- `created` / `updated` — the same "now", ISO 8601, **offset-aware**. The format follows
+  `config.yaml` `timestamps.policy`: `offset_local` (default, e.g. `2026-07-07T14:30:00+02:00`)
+  or `utc_z`.
 
-Mint them at capture (python-ulid ships with vault-rag):
-
-```bash
-uv run python -c "from ulid import ULID; from datetime import datetime,timezone; import json; \
-n=datetime.now(timezone.utc).astimezone().isoformat(timespec='seconds'); \
-print(json.dumps({'id':str(ULID()),'created':n,'updated':n}))"
-```
+Values set explicitly in `--frontmatter` always win; `--auto-id` fills only the missing ones.
 
 ## Capture
 
 ```bash
 uv run vault-rag create-note --path "Inbox/<name>.md" --content-file raw.txt \
-    --frontmatter '{"id":"<ULID>","created":"<now>","updated":"<now>", "source_type":"..."}'
+    --auto-id --frontmatter '{"source_type":"..."}'
 ```
 
 Set `source_type` if known at capture; leave `type` out (let enrich propose it). After capture,

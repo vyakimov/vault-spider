@@ -36,6 +36,11 @@ def now_timestamp() -> str:
     return format_timestamp(datetime.now(timezone.utc))
 
 
+def fresh_identity() -> Dict[str, str]:
+    stamp = now_timestamp()
+    return {"id": str(ULID()), "created": stamp, "updated": stamp}
+
+
 @dataclass
 class GitContext:
     inside: bool

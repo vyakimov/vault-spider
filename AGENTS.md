@@ -76,6 +76,10 @@ by the `granularity` metadata field.
     command with `--binary`/`--vault`).
   - Every mutating command accepts `--dry-run`: it computes and returns exactly what would change
     with `meta.dry_run: true` and makes no backend mutation calls.
+  - `create-note --auto-id` mints `id` (ULID) and `created`/`updated` (the same timestamp,
+    formatted per `timestamps.policy`) for whichever of the three are missing from
+    `--frontmatter`; explicit values always win. Templater does not fire on CLI-created notes,
+    so prefer `--auto-id` over minting these fields by hand.
   - Contract enforcement: `id`/`created` are immutable once set (`contract_violation`); empty
     optional fields (`""`, `[]`, `null`) are refused; creates/moves/renames fail with
     `already_exists` rather than overwrite; `add-links`/`insert-related`/alias patches are

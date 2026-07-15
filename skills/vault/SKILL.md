@@ -90,6 +90,8 @@ changed, `sync --dry-run` previews adds/updates/deletes without touching the ind
 - If a mutation fails with `error.type: obsidian_not_running`, tell the user to open Obsidian;
   do not retry blindly.
 - Never construct a frontmatter patch containing `id`, `created`, `updated`, or `tags`.
+- Create notes with `create-note --auto-id` so the CLI mints `id`/`created`/`updated`; never
+  mint those values by hand.
 - Move/rename only with explicit user approval of the exact destination.
 - Anything reported as `ambiguous_target` or `contract_violation` → surface verbatim; do not
   work around it.
