@@ -25,9 +25,11 @@ by the `granularity` metadata field.
 
 ## Key Commands
 
-- `uv run vault-rag schema`
+- `./bin/vault-rag` is the stable executable wrapper for the CLI. It locates this project and
+  delegates to `uv run vault-rag`, so its absolute path can be called from outside the repository.
+- `./bin/vault-rag schema`
   - Prints the machine-readable command + contract schema (`version: 2`).
-- `uv run vault-rag sync [--root <dir>] [--reset]`  (`--root` defaults to `vault.root` in
+- `./bin/vault-rag sync [--root <dir>] [--reset]`  (`--root` defaults to `vault.root` in
   `config.yaml`, then the active Obsidian vault)
   - Incremental sync: adds new notes, re-embeds changed or moved notes, deletes removed notes.
     Notes sharing a duplicate frontmatter `id` are skipped after the first and reported in
@@ -35,12 +37,12 @@ by the `granularity` metadata field.
   - Failure-safe ordering: old entries are deleted only after all new embeddings have been
     computed and validated, so a provider failure mid-sync leaves the existing index usable.
   - `--reset` rebuilds the collection from scratch (needed once after an entry-shape change).
-- `uv run vault-rag stats` — index statistics (no API key needed).
-- `uv run vault-rag retrieve --query "..." [--mode fast|thorough] [--granularity document|section|mixed] [-n 10]`
+- `./bin/vault-rag stats` — index statistics (no API key needed).
+- `./bin/vault-rag retrieve --query "..." [--mode fast|thorough] [--granularity document|section|mixed] [-n 10]`
   - Returns the retrieval output contract (candidates with score breakdown). Defaults: `fast`, `document`.
     `mixed` searches the section pool with a 3-sections-per-note cap (it does not mix in document entries).
   - `fast` skips reranking; `thorough` reranks the top candidates.
-- `uv run vault-rag synthesize --query "..." [--mode thorough] [--granularity mixed] [--retrieval file.json] [--n-context 8] [--save --root <dir> [--save-dir Distilled]]`
+- `./bin/vault-rag synthesize --query "..." [--mode thorough] [--granularity mixed] [--retrieval file.json] [--n-context 8] [--save --root <dir> [--save-dir Distilled]]`
   - Retrieves (defaults `thorough`/`mixed`) then synthesizes a cited answer. `--retrieval` reuses a
     prior `retrieve` envelope/contract and skips retrieval. Abstains when the notes lack the answer.
   - `--save` persists a high-quality answer as a create-only **distilled note** (`type: distilled`)
@@ -48,7 +50,7 @@ by the `granularity` metadata field.
     root. Skips (with a warning) when the answer abstained, is low-confidence, is empty, has no
     citations, or the target exists. Distilled notes are regenerable pointers to their
     sources — raw notes always win on conflict. Run `vault-rag sync` afterward to index it.
-- `uv run vault-rag lint --root <dir> [--format json|text] [--fix] [--fix-timestamps]`
+- `./bin/vault-rag lint --root <dir> [--format json|text] [--fix] [--fix-timestamps]`
   - Read-only corpus health report (no LLM or index needed): missing frontmatter fields,
     invalid/naive timestamps, duplicate ids, duplicate titles, broken wikilinks, `dangling_targets`
     (unresolved link targets ranked by how many notes want them — the best next notes to write),
@@ -61,7 +63,7 @@ by the `granularity` metadata field.
     `--fix-timestamps` additionally rewrites *naive* `created`/`updated`/`date` as offset-aware —
     a naive timestamp is local wall-clock time, so the local offset is attached with historical
     DST; unparseable values are skipped, never guessed.
-- `uv run vault-rag enrich --root <dir> (--note <path> | --stdin) [--intent ...] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]`
+- `./bin/vault-rag enrich --root <dir> (--note <path> | --stdin) [--intent ...] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]`
   - App-agnostic **enrichment planner**: retrieves a note's neighborhood and proposes a title,
     frontmatter patch (`type`/`aliases`/`source_type`/`source_url` only), inline links, related
     candidates, and placement — as JSON. It **never mutates** files or the index; apply a plan
@@ -71,7 +73,7 @@ by the `granularity` metadata field.
     confidences dropped with warnings). `--note` must be a vault-relative `.md` path resolving
     inside `--root`.
 - **Note mutations** — `create-note`, `read-note`, `merge-frontmatter`, `add-links`,
-  `insert-related`, `move-note`, `rename-note`, `open-note` (all `uv run vault-rag <command>`).
+  `insert-related`, `move-note`, `rename-note`, `open-note` (all `./bin/vault-rag <command>`).
   - Executed through the official Obsidian CLI; **the Obsidian app must be running** (macOS only).
     Vault resolution is flags > `config.yaml` > the active vault. Obsidian's registry bridges the
     read path's `vault.root` filesystem path to the mutation backend's vault name and fails with

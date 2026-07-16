@@ -18,28 +18,36 @@ paths, folder names and tag conventions all live in a gitignored `config.yaml`.
 ```bash
 uv sync
 cp .env.example .env                # OpenRouter key + models
-cp config.yaml.example config.yaml  # where your vault is
+cp config.yaml.example config.yaml  # optional installation-specific settings
 ```
 
-Edit `.env` with an [OpenRouter](https://openrouter.ai/keys) key, and `config.yaml` with the path to
-your vault. Then:
+Edit `.env` with an [OpenRouter](https://openrouter.ai/keys) key. Set `vault.root` in `config.yaml`
+if you do not want to use Obsidian's active vault by default. Then:
 
 ```bash
-uv run vault-rag sync            # index the vault (embeds every note; takes a few minutes)
-uv run vault-rag stats
+./bin/vault-rag sync            # index the vault (embeds every note; takes a few minutes)
+./bin/vault-rag stats
 ```
 
 ## Use
 
 ```bash
 # Find notes
-uv run vault-rag retrieve --query "wireguard setup" --mode fast
+./bin/vault-rag retrieve --query "wireguard setup" --mode fast
 
 # Answer a question, with citations — abstains rather than guessing
-uv run vault-rag synthesize --query "How did I set up the VPN, and why that way?"
+./bin/vault-rag synthesize --query "How did I set up the VPN, and why that way?"
 
 # Vault health
-uv run vault-rag lint --format text
+./bin/vault-rag lint --format text
+```
+
+`bin/vault-rag` is the stable executable entrypoint for callers that need to whitelist one file.
+It forwards argv to the existing `uv run vault-rag` command and locates the project independently
+of the caller's working directory. Call it by absolute path from anywhere, for example:
+
+```bash
+/path/to/vault-rag/bin/vault-rag schema
 ```
 
 `vault-rag schema` prints the full machine-readable command and contract schema. All output is
@@ -61,21 +69,32 @@ exactly as if you had edited in the app. **The Obsidian app must be running** fo
 (macOS only):
 
 ```bash
-uv run vault-rag create-note   --path "Inbox/New Idea.md" --content-file draft.txt \
-                               --frontmatter '{"id":"<ULID>","created":"<now>","updated":"<now>"}'
-uv run vault-rag read-note     --path "Inbox/New Idea.md" [--frontmatter-only|--body-only]
-uv run vault-rag merge-frontmatter --path "..." --patch '{"type":"idea","aliases":["Alias"]}'
-uv run vault-rag add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]'
-uv run vault-rag insert-related --path "..." --targets '["Some Note"]'
-uv run vault-rag move-note     --path "Inbox/New Idea.md" --to "Research/"
-uv run vault-rag rename-note   --path "Inbox/New Idea.md" --name "Better Title"
-uv run vault-rag open-note     --path "..."
+./bin/vault-rag create-note   --path "Inbox/New Idea.md" --content-file draft.txt \
+                              --auto-id --frontmatter '{"type":"idea"}'
+./bin/vault-rag read-note     --path "Inbox/New Idea.md" [--frontmatter-only|--body-only]
+./bin/vault-rag merge-frontmatter --path "..." --patch '{"type":"idea","aliases":["Alias"]}'
+./bin/vault-rag add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]'
+./bin/vault-rag insert-related --path "..." --targets '["Some Note"]'
+./bin/vault-rag move-note     --path "Inbox/New Idea.md" --to "Research/"
+./bin/vault-rag rename-note   --path "Inbox/New Idea.md" --name "Better Title"
+./bin/vault-rag open-note     --path "..."
 ```
+
+Vault resolution is explicit flags (`--root`/`--vault`), then `config.yaml`, then Obsidian's active
+vault. The read path's `vault.root` is mapped to a vault name through Obsidian's registry so reads
+and mutations target the same vault. If configured paths and names disagree, or the configured
+root is not registered, the command fails closed with `config_mismatch`. An explicit `--vault`
+overrides the config agreement guard, rejects empty names, and is validated against the registry
+when it is readable.
 
 Safety properties, enforced in code:
 
 - **Every mutating command takes `--dry-run`**: it computes and returns exactly what would change
   (`changed`, diffs) with `meta.dry_run: true` and makes no backend mutation calls.
+- **`create-note --auto-id` supplies note identity**: it mints a ULID plus equal `created` and
+  `updated` timestamps, formatted according to `timestamps.policy`, for whichever fields are
+  absent from `--frontmatter`. Explicit values win. Templater does not run for CLI-created notes,
+  so prefer this flag over minting those fields manually.
 - **Paths cannot escape the vault**: every path argument (`--path`, `--to`, `--save-dir`, …) must
   be a clean vault-relative POSIX path — absolute paths, backslashes and `.`/`..` segments are
   refused before the backend is invoked, and link targets must be plain note names (no `[[`,
@@ -131,8 +150,8 @@ Link resolution follows Obsidian: frontmatter links (`parents: "[[Daily Notes]]"
 Two opt-in fixers write to the vault:
 
 ```bash
-uv run vault-rag lint --fix              # add MISSING id/created/updated (never edits a value)
-uv run vault-rag lint --fix-timestamps   # rewrite naive timestamps as offset-aware
+./bin/vault-rag lint --fix              # add MISSING id/created/updated (never edits a value)
+./bin/vault-rag lint --fix-timestamps   # rewrite naive timestamps as offset-aware
 ```
 
 ## Compounding
@@ -151,7 +170,9 @@ uv run vault-rag lint --fix-timestamps   # rewrite naive timestamps as offset-aw
 Everything installation-specific is in `config.yaml` (gitignored — see `config.yaml.example`):
 vault root, skipped folders, never-indexed tags, the distilled folder, the Chroma path, the
 timestamp policy, and the Obsidian connection facts for the mutation commands (`obsidian.binary`,
-`obsidian.vault`, `obsidian.manage_updated`). Secrets stay in `.env`.
+`obsidian.vault`, `obsidian.manage_updated`). The file is optional: root resolution is an explicit
+`--root`, then `vault.root`, then the active vault from Obsidian's registry; mutations similarly
+use an explicit `--vault`, then guarded config, then the active vault. Secrets stay in `.env`.
 
 Notes carrying `#secret` or `#ignore` (in the body or in frontmatter `tags:`) are **never indexed** —
 they stay in Obsidian but never reach the vector store or an LLM. Excalidraw drawings are skipped

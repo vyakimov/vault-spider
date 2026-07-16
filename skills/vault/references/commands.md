@@ -2,29 +2,29 @@
 
 Full flags for the commands the `vault` skill orchestrates. Each command prints one JSON
 envelope: `{"ok": true, "action", "result", "meta"}` or `{"ok": false, "action", "error": {...}}`.
-Check `"ok"`, not exit codes. Run `vault-rag schema` for the machine-readable version
+Check `"ok"`, not exit codes. Run `./bin/vault-rag schema` for the machine-readable version
 (`version: 2` — one schema covers query and mutation commands alike).
 
 Error types (shared union): `invalid_arguments`, `index_empty`, `provider_error`, `not_found`,
 `internal_error`, `obsidian_not_running`, `backend_error`, `already_exists`, `ambiguous_target`,
 `config_mismatch`, `contract_violation`.
 
-## Query & maintenance commands (run via `uv run vault-rag`)
+## Query & maintenance commands (run via `./bin/vault-rag`)
 
 Vault resolution is explicit flags, then `config.yaml`, then the active Obsidian vault.
 `config_mismatch` means config and Obsidian disagree about the vault; surface it verbatim and
 tell the user to fix config.
 
 ```
-vault-rag schema
-vault-rag sync [--root <dir>] [--reset | --dry-run]
-vault-rag stats                              # index statistics; no API key needed
-vault-rag retrieve --query "..." [--mode fast|thorough] [--granularity document|section|mixed] [-n 10] [FILTERS]
-vault-rag synthesize --query "..." [--mode thorough] [--granularity mixed] [--retrieval file.json]
-                     [--n-context 8] [--save [--root <dir>] [--save-dir Distilled]] [FILTERS]
-vault-rag lint [--root <dir>] [--format json|text] [--fix] [--fix-timestamps]
-vault-rag enrich (--note <vault-rel-path> | --stdin) [--root <dir>]
-                 [--intent "..."] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]
+./bin/vault-rag schema
+./bin/vault-rag sync [--root <dir>] [--reset | --dry-run]
+./bin/vault-rag stats                              # index statistics; no API key needed
+./bin/vault-rag retrieve --query "..." [--mode fast|thorough] [--granularity document|section|mixed] [-n 10] [FILTERS]
+./bin/vault-rag synthesize --query "..." [--mode thorough] [--granularity mixed] [--retrieval file.json]
+                           [--n-context 8] [--save [--root <dir>] [--save-dir Distilled]] [FILTERS]
+./bin/vault-rag lint [--root <dir>] [--format json|text] [--fix] [--fix-timestamps]
+./bin/vault-rag enrich (--note <vault-rel-path> | --stdin) [--root <dir>]
+                       [--intent "..."] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]
 
 FILTERS (retrieve & synthesize):
   [--folder <prefix>] [--tag <t>]... [--type <note_type>] [--since <ISO>] [--until <ISO>]
@@ -66,14 +66,14 @@ FILTERS (retrieve & synthesize):
 ## Mutation commands (same CLI; Obsidian app must be running)
 
 ```
-vault-rag create-note   --path "Inbox/Foo.md" [--content ...|--content-file f|-] [--frontmatter '{...}'] [--auto-id] [--dry-run]
-vault-rag read-note     --path "..." [--frontmatter-only|--body-only]
-vault-rag merge-frontmatter --path "..." --patch '{"type":"interview","aliases":["Alias"]}' [--dry-run]
-vault-rag add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]' [--dry-run]
-vault-rag insert-related --path "..." --targets '["Some Note"]' [--dry-run]
-vault-rag move-note     --path "Inbox/Foo.md" --to "Research/"       [--dry-run]
-vault-rag rename-note   --path "Inbox/Foo.md" --name "Better Title"  [--dry-run]
-vault-rag open-note     --path "..."
+./bin/vault-rag create-note   --path "Inbox/Foo.md" [--content ...|--content-file f|-] [--frontmatter '{...}'] [--auto-id] [--dry-run]
+./bin/vault-rag read-note     --path "..." [--frontmatter-only|--body-only]
+./bin/vault-rag merge-frontmatter --path "..." --patch '{"type":"interview","aliases":["Alias"]}' [--dry-run]
+./bin/vault-rag add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]' [--dry-run]
+./bin/vault-rag insert-related --path "..." --targets '["Some Note"]' [--dry-run]
+./bin/vault-rag move-note     --path "Inbox/Foo.md" --to "Research/"       [--dry-run]
+./bin/vault-rag rename-note   --path "Inbox/Foo.md" --name "Better Title"  [--dry-run]
+./bin/vault-rag open-note     --path "..."
 ```
 
 - Every mutating command supports `--dry-run` (returns the diff, makes no backend mutation).

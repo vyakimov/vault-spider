@@ -16,10 +16,12 @@ never exit codes.**
 
 ## Tools & preconditions
 
-- **`vault-rag`** — run from the repo via `uv run vault-rag ...`; one CLI for both reading and
-  writing the vault. Config comes from `config.yaml` (vault root, skip dirs, distilled dir,
-  Obsidian connection facts — see `config.yaml.example`). Vault resolution is explicit flags,
-  then config, then the active Obsidian vault, so `--root` can be omitted everywhere.
+- **`vault-rag`** — invoke the stable wrapper at `<repo>/bin/vault-rag ...` (or
+  `./bin/vault-rag ...` from the repo); do not construct `uv run` calls directly. The wrapper
+  locates the project and preserves argv, JSON output, and exit status. Config comes from
+  `config.yaml` (vault root, skip dirs, distilled dir, Obsidian connection facts — see
+  `config.yaml.example`). Vault resolution is explicit flags, then config, then the active
+  Obsidian vault, so `--root` can be omitted everywhere.
   - *Query commands* (`retrieve`, `synthesize`, `enrich`, `stats`, `sync`, `lint`) need `.env`
     (OpenRouter) except `stats` and `lint`. `vault-rag stats` needs no API key — it is the cheap
     "is the index alive?" check.

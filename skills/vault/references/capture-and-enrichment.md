@@ -22,7 +22,7 @@ Values set explicitly in `--frontmatter` always win; `--auto-id` fills only the 
 ## Capture
 
 ```bash
-uv run vault-rag create-note --path "Inbox/<name>.md" --content-file raw.txt \
+./bin/vault-rag create-note --path "Inbox/<name>.md" --content-file raw.txt \
     --auto-id --frontmatter '{"source_type":"..."}'
 ```
 
@@ -33,28 +33,28 @@ offer enrichment.
 
 1. **Plan** (read-only, no mutations; `--root` comes from `config.yaml` unless overridden):
    ```bash
-   uv run vault-rag enrich --note "Inbox/<name>.md" --intent "..." --source-type "..." > plan.json
+   ./bin/vault-rag enrich --note "Inbox/<name>.md" --intent "..." --source-type "..." > plan.json
    ```
    Show the user the plan summary: title, `frontmatter_patch`, links, `suggested_path`, confidence.
    If `confidence: low`, show the warnings and apply **nothing** unless the user insists.
 
 2. **Apply in this order, each `--dry-run` first, then for real on confirmation:**
    ```bash
-   uv run vault-rag merge-frontmatter --path "Inbox/<name>.md" --patch '<plan.frontmatter_patch>'
-   uv run vault-rag add-links         --path "Inbox/<name>.md" --links '<plan.link_insertions>'
-   uv run vault-rag insert-related    --path "Inbox/<name>.md" --targets '<[t.target for t in plan.related_candidates]>'
+   ./bin/vault-rag merge-frontmatter --path "Inbox/<name>.md" --patch '<plan.frontmatter_patch>'
+   ./bin/vault-rag add-links         --path "Inbox/<name>.md" --links '<plan.link_insertions>'
+   ./bin/vault-rag insert-related    --path "Inbox/<name>.md" --targets '<[t.target for t in plan.related_candidates]>'
    ```
 
 3. **Placement** (only if the user agrees to the destination):
    ```bash
-   uv run vault-rag rename-note --path "Inbox/<name>.md" --name "<plan.title>"        # if plan.title_changed
-   uv run vault-rag move-note   --path "Inbox/<new-name>.md" --to "<folder of plan.suggested_path>"
+   ./bin/vault-rag rename-note --path "Inbox/<name>.md" --name "<plan.title>"        # if plan.title_changed
+   ./bin/vault-rag move-note   --path "Inbox/<new-name>.md" --to "<folder of plan.suggested_path>"
    ```
    `suggested_path` is advisory. The destination folder must already exist.
 
 4. **Re-index** when done (incremental — only the touched notes are re-embedded):
    ```bash
-   uv run vault-rag sync
+   ./bin/vault-rag sync
    ```
 
 ## Safety reminders
