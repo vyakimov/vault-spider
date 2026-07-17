@@ -68,6 +68,8 @@ FILTERS (retrieve & synthesize):
 ```
 ./bin/vault-spider create-note   --path "Inbox/Foo.md" [--content ...|--content-file f|-] [--frontmatter '{...}'] [--auto-id] [--dry-run]
 ./bin/vault-spider read-note     --path "..." [--frontmatter-only|--body-only]
+./bin/vault-spider edit-note     --path "..." --edits '[{"old_text":"...","new_text":"...","occurrence":1}]'
+                              [--expected-sha256 <dry-run-hash>] [--dry-run]
 ./bin/vault-spider merge-frontmatter --path "..." --patch '{"type":"interview","aliases":["Alias"]}' [--dry-run]
 ./bin/vault-spider add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]' [--dry-run]
 ./bin/vault-spider insert-related --path "..." --targets '["Some Note"]' [--dry-run]
@@ -77,6 +79,14 @@ FILTERS (retrieve & synthesize):
 ```
 
 - Every mutating command supports `--dry-run` (returns the diff, makes no backend mutation).
+- `edit-note` changes body text only. Each operation selects exact `old_text`; without
+  `occurrence`, the text must occur exactly once. `occurrence` is 1-based, operations resolve
+  against the original body, and overlaps are refused. Dry-run returns a rendered unified `diff`,
+  `expected_sha256`, and `proposed_sha256`. A real apply requires the dry-run hash and fails with
+  `contract_violation` if the full raw note changed; the backend compares again inside Obsidian
+  immediately before writing. Run a new dry-run after any conflict. Use `merge-frontmatter` for
+  metadata edits. When `obsidian.manage_updated: true`, the rendered dry-run/apply diff includes
+  the `updated` value Vault Spider proposes/writes; otherwise that field remains plugin-owned.
 - `create-note --auto-id` mints `id` (ULID) plus `created`/`updated` (same timestamp, formatted
   per `timestamps.policy`) for whichever of the three are missing from `--frontmatter` — always
   prefer it over minting those fields by hand.

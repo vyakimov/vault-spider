@@ -93,6 +93,29 @@ def read_note(path: str) -> str:
     return run(["read", f"path={path}"])
 
 
+def read_note_snapshot(path: str) -> str:
+    """Read exact note text through eval so terminal whitespace survives CLI formatting."""
+    code = (
+        "(async () => { const f = app.vault.getFileByPath(" + json.dumps(path) + "); "
+        "if (!f) return 'NOTFOUND'; const content = await app.vault.read(f); "
+        "return JSON.stringify({content}); })()"
+    )
+    out = run(["eval", f"code={code}"])
+    payload_text = out[2:].strip() if out.startswith("=>") else out
+    if payload_text in {"NOTFOUND", '"NOTFOUND"'}:
+        raise CliError("not_found", f"note not found: {path}")
+    try:
+        payload = json.loads(payload_text)
+        # Some CLI versions quote returned strings; tolerate one extra JSON layer.
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise CliError("backend_error", "Obsidian returned an invalid note snapshot") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("content"), str):
+        raise CliError("backend_error", "Obsidian returned an invalid note snapshot")
+    return payload["content"]
+
+
 def note_exists(path: str) -> bool:
     try:
         read_note(path)
@@ -112,6 +135,25 @@ def write_body(path: str, content: str) -> None:
     out = run(["eval", f"code={code}"])
     if "NOTFOUND" in out:
         raise CliError("not_found", f"note not found: {path}")
+
+
+def compare_and_write_note(path: str, expected_content: str, content: str) -> None:
+    """Atomically refuse a write unless Obsidian still has the expected note text."""
+    code = (
+        "(async () => { const f = app.vault.getFileByPath(" + json.dumps(path) + "); "
+        "if (!f) return 'NOTFOUND'; const current = await app.vault.read(f); "
+        "if (current !== " + json.dumps(expected_content) + ") return 'CONFLICT'; "
+        "await app.vault.modify(f, " + json.dumps(content) + "); return 'OK'; })()"
+    )
+    out = run(["eval", f"code={code}"])
+    if "NOTFOUND" in out:
+        raise CliError("not_found", f"note not found: {path}")
+    if "CONFLICT" in out:
+        raise CliError(
+            "contract_violation",
+            "note changed since dry run; run edit-note --dry-run again",
+            {"path": path},
+        )
 
 
 def escape_for_backend(text: str) -> str:

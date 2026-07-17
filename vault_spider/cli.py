@@ -184,6 +184,25 @@ def _schema() -> Dict[str, Any]:
                 },
                 "result": {"path": "str", "frontmatter": "object", "body": "str", "raw": "str"},
             },
+            "edit-note": {
+                "mutates_state": True,
+                "requires": "obsidian-app",
+                "args": {
+                    "--path": "vault-relative path (required)",
+                    "--edits": "non-empty JSON array of {old_text, new_text, occurrence?}; body only",
+                    "--expected-sha256": "guard returned by dry-run; required when applying",
+                    "--dry-run": "flag: render unified diff and return expected_sha256",
+                },
+                "result": {
+                    "changed": "bool",
+                    "path": "str",
+                    "expected_sha256": "str",
+                    "proposed_sha256": "str",
+                    "edits_applied": "int",
+                    "diff": "str (unified diff)",
+                    "updated": "str (when obsidian.manage_updated is true and content changes)",
+                },
+            },
             "merge-frontmatter": {
                 "mutates_state": True,
                 "requires": "obsidian-app",
@@ -253,6 +272,8 @@ def _schema() -> Dict[str, Any]:
                               "content edits patch `updated` themselves",
             "empty_optional_fields": "patches writing '' / [] / null are refused",
             "links_updated_by": "move/rename: the backend rewrites incoming wikilinks",
+            "guarded_body_edits": "edit-note apply requires the full-note SHA-256 returned "
+                                  "by dry-run and rechecks inside Obsidian",
         },
         "contracts": {
             "retrieval_output": {
@@ -951,6 +972,21 @@ def build_parser() -> argparse.ArgumentParser:
     read_view = p_read.add_mutually_exclusive_group()
     read_view.add_argument("--frontmatter-only", action="store_true", dest="frontmatter_only")
     read_view.add_argument("--body-only", action="store_true", dest="body_only")
+
+    p_edit = sub.add_parser(
+        "edit-note", parents=[mutating], help="Apply guarded exact-text edits to a note body"
+    )
+    p_edit.add_argument(
+        "--edits",
+        required=True,
+        help="JSON array of {old_text, new_text, occurrence?}",
+    )
+    p_edit.add_argument(
+        "--expected-sha256",
+        dest="expected_sha256",
+        default=None,
+        help="Full-note hash returned by --dry-run; required when applying",
+    )
 
     p_merge = sub.add_parser(
         "merge-frontmatter", parents=[mutating], help="Merge a frontmatter patch"

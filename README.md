@@ -61,6 +61,53 @@ There is also a Streamlit UI:
 uv run streamlit run scripts/streamlit_app.py
 ```
 
+## MCP server — Claude Desktop and ChatGPT
+
+Vault Spider includes an MCP server with explicit tools for stats, sync, retrieval, cited answers,
+lint, enrichment planning, note reads/edits, and the safe Obsidian mutation commands. Mutations
+default to `dry_run: true` and still go through the official Obsidian CLI. The server delegates to
+the JSON CLI, so MCP responses use the same success and error envelopes documented above.
+
+For a local stdio client such as Claude Desktop, first run `uv sync`, then add this to the client's
+MCP configuration (replace the repository path):
+
+```json
+{
+  "mcpServers": {
+    "vault-spider": {
+      "command": "/path/to/vault-spider/.venv/bin/python",
+      "args": ["-m", "vault_spider.mcp_server"]
+    }
+  }
+}
+```
+
+The stable wrapper can also launch the stdio server from a terminal, independently of cwd:
+
+```bash
+/path/to/vault-spider/bin/vault-spider-mcp
+```
+
+ChatGPT connects to remote MCP endpoints rather than local stdio processes. Start the Streamable
+HTTP transport locally with:
+
+```bash
+/path/to/vault-spider/bin/vault-spider-mcp \
+  --transport streamable-http --host 127.0.0.1 --port 8000
+```
+
+The endpoint is `http://127.0.0.1:8000/mcp`. Use OpenAI's secure MCP tunnel for a server on a
+developer machine/private network, or deploy it behind an authenticated HTTPS endpoint, then add
+that remote `/mcp` URL as a custom app in ChatGPT developer mode. The built-in HTTP transport has
+no application authentication; it binds to loopback by default and must not be exposed directly
+to an untrusted network.
+
+Server-level overrides are available when needed:
+
+```bash
+vault-spider-mcp --chroma-path /other/chroma_db --collection other_notes
+```
+
 ## Mutating the vault
 
 All write commands go through the official Obsidian CLI rather than touching files directly, so
@@ -72,6 +119,12 @@ exactly as if you had edited in the app. **The Obsidian app must be running** fo
 ./bin/vault-spider create-note   --path "Inbox/New Idea.md" --content-file draft.txt \
                               --auto-id --frontmatter '{"type":"idea"}'
 ./bin/vault-spider read-note     --path "Inbox/New Idea.md" [--frontmatter-only|--body-only]
+./bin/vault-spider edit-note     --path "Inbox/New Idea.md" \
+                              --edits '[{"old_text":"first draft","new_text":"revised text"}]' \
+                              --dry-run
+./bin/vault-spider edit-note     --path "Inbox/New Idea.md" \
+                              --edits '[{"old_text":"first draft","new_text":"revised text"}]' \
+                              --expected-sha256 '<hash returned by dry-run>'
 ./bin/vault-spider merge-frontmatter --path "..." --patch '{"type":"idea","aliases":["Alias"]}'
 ./bin/vault-spider add-links     --path "..." --links '[{"target":"Some Note","anchor_text":"some note","line":12}]'
 ./bin/vault-spider insert-related --path "..." --targets '["Some Note"]'
@@ -91,6 +144,14 @@ Safety properties, enforced in code:
 
 - **Every mutating command takes `--dry-run`**: it computes and returns exactly what would change
   (`changed`, diffs) with `meta.dry_run: true` and makes no backend mutation calls.
+- **Body edits are preview-bound**: `edit-note` accepts exact `old_text` → `new_text` operations.
+  A dry run returns a rendered unified `diff` and `expected_sha256`; applying requires that hash.
+  The hash covers the entire raw note, and Obsidian compares the expected text again immediately
+  before writing, so any body, frontmatter, or plugin change after preview fails with
+  `contract_violation`. Repeated text requires an explicit 1-based `occurrence`; overlapping edits
+  are refused. Frontmatter is never edited by this command except for the configured timestamp
+  policy: when `obsidian.manage_updated: true`, the rendered diff includes the exact `updated`
+  value Vault Spider proposes or writes. Use `merge-frontmatter` for other metadata.
 - **`create-note --auto-id` supplies note identity**: it mints a ULID plus equal `created` and
   `updated` timestamps, formatted according to `timestamps.policy`, for whichever fields are
   absent from `--frontmatter`. Explicit values win. Templater does not run for CLI-created notes,

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -40,11 +42,25 @@ class FakeBackend:
             return "Moved: Inbox/Foo.md -> Research/Foo.md"
         if cmd == "rename":
             return "Renamed: Inbox/Foo.md -> Inbox/Better.md"
-        # property:set, eval, open
+        if cmd == "eval" and "JSON.stringify({content})" in args[1]:
+            match = re.search(r"getFileByPath\((\"(?:\\.|[^\"])*\")\)", args[1])
+            path = json.loads(match.group(1)) if match else None
+            if path not in self.notes:
+                return "=> NOTFOUND"
+            return "=> " + json.dumps({"content": self.notes[path]})
+        # property:set, other eval, open
         return "=> OK"
 
     def mutating_calls(self):
-        return [c for c in self.calls if c[0] in ("create", "property:set", "eval", "move", "rename")]
+        calls = []
+        for call in self.calls:
+            if call[0] in ("create", "property:set", "move", "rename"):
+                calls.append(call)
+            elif call[0] == "eval" and any(
+                marker in call[1] for marker in ("app.vault.modify", "processFrontMatter")
+            ):
+                calls.append(call)
+        return calls
 
 
 @pytest.fixture(autouse=True)
@@ -108,6 +124,24 @@ class TestBackendLayer:
         assert exc.value.err_type == "config_mismatch"
         assert exc.value.message == "Obsidian vault not found: MissingVault"
 
+    def test_compare_and_write_rejects_an_atomic_conflict(self, monkeypatch):
+        monkeypatch.setattr(obsidian_backend, "run", lambda args: "=> CONFLICT")
+
+        with pytest.raises(CliError) as exc:
+            obsidian_backend.compare_and_write_note("n.md", "before", "after")
+
+        assert exc.value.err_type == "contract_violation"
+        assert "changed since dry run" in exc.value.message
+
+    def test_exact_snapshot_preserves_terminal_whitespace(self, monkeypatch):
+        monkeypatch.setattr(
+            obsidian_backend,
+            "run",
+            lambda args: '=> {"content":"body\\n\\n"}',
+        )
+
+        assert obsidian_backend.read_note_snapshot("n.md") == "body\n\n"
+
 
 # -- create-note -------------------------------------------------------------
 
@@ -165,6 +199,262 @@ class TestCreateNote:
         assert "id: 01ABC" in text
         assert "type: idea" in text
         assert "created: " in text and "updated: " in text
+
+
+# -- edit-note ---------------------------------------------------------------
+
+class TestEditNote:
+    def test_dry_run_returns_unified_diff_and_guard_without_writing(
+        self, capsys, monkeypatch
+    ):
+        raw = "---\nid: x\n---\nAlpha beta.\n"
+        backend = FakeBackend({"n.md": raw})
+        edits = json.dumps([{"old_text": "Alpha beta", "new_text": "Alpha gamma"}])
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits, "--dry-run"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 0 and env["ok"]
+        assert env["meta"]["dry_run"] is True
+        assert env["result"]["expected_sha256"] == hashlib.sha256(raw.encode()).hexdigest()
+        assert env["result"]["proposed_sha256"] != env["result"]["expected_sha256"]
+        assert env["result"]["diff"].startswith("--- a/n.md\n+++ b/n.md\n")
+        assert "-Alpha beta." in env["result"]["diff"]
+        assert "+Alpha gamma." in env["result"]["diff"]
+        assert backend.mutating_calls() == []
+
+    def test_dry_run_diff_includes_managed_updated_frontmatter(
+        self, capsys, monkeypatch, isolated_config
+    ):
+        enable_manage_updated(isolated_config)
+        raw = "---\nid: x\nupdated: 2026-01-01T00:00:00Z\n---\nAlpha beta.\n"
+        backend = FakeBackend({"n.md": raw})
+        edits = json.dumps([{"old_text": "Alpha beta", "new_text": "Alpha gamma"}])
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits, "--dry-run"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 0 and env["ok"]
+        stamp = env["result"]["updated"]
+        assert "-updated: 2026-01-01T00:00:00Z" in env["result"]["diff"]
+        assert f"+updated: {stamp}" in env["result"]["diff"]
+        proposed = raw.replace("2026-01-01T00:00:00Z", stamp).replace(
+            "Alpha beta", "Alpha gamma"
+        )
+        assert env["result"]["proposed_sha256"] == hashlib.sha256(
+            proposed.encode()
+        ).hexdigest()
+        assert backend.mutating_calls() == []
+
+    def test_apply_diff_uses_timestamp_written_to_frontmatter(
+        self, capsys, monkeypatch, isolated_config
+    ):
+        enable_manage_updated(isolated_config)
+        raw = "---\nid: x\n---\nAlpha beta.\n"
+        backend = FakeBackend({"n.md": raw})
+        guard = hashlib.sha256(raw.encode()).hexdigest()
+        edits = json.dumps([{"old_text": "Alpha beta", "new_text": "Alpha gamma"}])
+
+        code, env = run(
+            [
+                "edit-note",
+                "--path",
+                "n.md",
+                "--edits",
+                edits,
+                "--expected-sha256",
+                guard,
+            ],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 0 and env["ok"]
+        stamp = env["result"]["updated"]
+        assert f"+updated: {stamp}" in env["result"]["diff"]
+        updated_call = next(
+            call for call in backend.calls
+            if call[0] == "property:set" and "name=updated" in call
+        )
+        assert f"value={stamp}" in updated_call
+
+    def test_plugin_owned_updated_is_not_rendered_as_a_change(self, capsys, monkeypatch):
+        raw = "---\nupdated: plugin-owned\n---\nAlpha beta.\n"
+        backend = FakeBackend({"n.md": raw})
+        edits = json.dumps([{"old_text": "Alpha beta", "new_text": "Alpha gamma"}])
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits, "--dry-run"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 0 and env["ok"]
+        assert "-updated:" not in env["result"]["diff"]
+        assert "+updated:" not in env["result"]["diff"]
+
+    def test_apply_requires_dry_run_guard(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "Alpha beta"})
+        edits = json.dumps([{"old_text": "beta", "new_text": "gamma"}])
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "invalid_arguments"
+        assert "--expected-sha256 is required" in env["error"]["message"]
+        assert backend.calls == []
+
+    def test_apply_uses_compare_and_write_with_matching_guard(self, capsys, monkeypatch):
+        raw = "Alpha beta"
+        backend = FakeBackend({"n.md": raw})
+        guard = hashlib.sha256(raw.encode()).hexdigest()
+        edits = json.dumps([{"old_text": "beta", "new_text": "gamma"}])
+
+        code, env = run(
+            [
+                "edit-note",
+                "--path",
+                "n.md",
+                "--edits",
+                edits,
+                "--expected-sha256",
+                guard,
+            ],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 0 and env["ok"]
+        assert env["meta"]["dry_run"] is False
+        eval_call = next(
+            call for call in backend.calls
+            if call[0] == "eval" and "app.vault.modify" in call[1]
+        )
+        assert "Alpha beta" in eval_call[1]
+        assert "Alpha gamma" in eval_call[1]
+
+    def test_changed_note_rejects_stale_guard_without_writing(self, capsys, monkeypatch):
+        before = "Alpha beta"
+        backend = FakeBackend({"n.md": "Alpha beta changed elsewhere"})
+        stale_guard = hashlib.sha256(before.encode()).hexdigest()
+        edits = json.dumps([{"old_text": "beta", "new_text": "gamma"}])
+
+        code, env = run(
+            [
+                "edit-note",
+                "--path",
+                "n.md",
+                "--edits",
+                edits,
+                "--expected-sha256",
+                stale_guard,
+            ],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "contract_violation"
+        assert env["error"]["details"]["expected_sha256"] == stale_guard
+        assert backend.mutating_calls() == []
+
+    def test_repeated_text_requires_occurrence(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "one and one"})
+        edits = json.dumps([{"old_text": "one", "new_text": "two"}])
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits, "--dry-run"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "ambiguous_target"
+        assert "occurs 2 times" in env["error"]["message"]
+
+    def test_occurrence_selects_exact_match(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "one and one"})
+        edits = json.dumps(
+            [{"old_text": "one", "new_text": "two", "occurrence": 2}]
+        )
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits, "--dry-run"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 0 and env["ok"]
+        assert "-one and one" in env["result"]["diff"]
+        assert "+one and two" in env["result"]["diff"]
+
+    def test_diff_renders_terminal_newline_change(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "body\n"})
+        edits = json.dumps([{"old_text": "body\n", "new_text": "body"}])
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits, "--dry-run"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 0 and env["ok"]
+        assert env["result"]["diff"]
+        assert "\\ No newline at end of file" in env["result"]["diff"]
+
+    def test_edits_are_body_only(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "---\ntitle: Alpha\n---\nBody"})
+        edits = json.dumps([{"old_text": "Alpha", "new_text": "Beta"}])
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits, "--dry-run"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "not_found"
+
+    def test_overlapping_edits_are_rejected(self, capsys, monkeypatch):
+        backend = FakeBackend({"n.md": "abcdef"})
+        edits = json.dumps(
+            [
+                {"old_text": "abcd", "new_text": "one"},
+                {"old_text": "cdef", "new_text": "two"},
+            ]
+        )
+
+        code, env = run(
+            ["edit-note", "--path", "n.md", "--edits", edits, "--dry-run"],
+            backend,
+            capsys,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert env["error"]["type"] == "invalid_arguments"
+        assert "overlap" in env["error"]["message"]
 
 
 # -- merge-frontmatter -------------------------------------------------------

@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
   "chromadb==1.0.21",
   "httpx==0.28.1",
+  "mcp>=1.27,<2",
   "nltk==3.9.1",
   "pandas==2.3.1",
   "python-dotenv",
@@ -24,6 +25,7 @@ packages = ["vault_spider"]
 
 [project.scripts]
 vault-spider = "vault_spider.cli:main"
+vault-spider-mcp = "vault_spider.mcp_server:main"
 
 [dependency-groups]
 dev = [

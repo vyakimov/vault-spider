@@ -11,6 +11,8 @@ Handlers take the parsed argparse namespace and return a full envelope, raising
 from __future__ import annotations
 
 import argparse
+import difflib
+import hashlib
 import json
 import re
 import sys
@@ -154,13 +156,16 @@ def _replace_anchor(line: str, anchor: str, target: str) -> Tuple[str, bool]:
         i = idx + len(anchor)
 
 
-def _bump_updated_if_managed(path: str, changed: bool, dry_run: bool, result: Dict[str, Any]) -> None:
+def _bump_updated_if_managed(
+    path: str, changed: bool, dry_run: bool, result: Dict[str, Any]
+) -> Optional[str]:
     if not (backend.manage_updated() and changed):
-        return
+        return None
     stamp = now_timestamp()
     result["updated"] = stamp
     if not dry_run:
         backend.run(["property:set", f"path={path}", "name=updated", f"value={stamp}"])
+    return stamp
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +243,204 @@ def cmd_read_note(args: argparse.Namespace) -> Dict[str, Any]:
     if warnings:
         result["warnings"] = warnings
     return success("read-note", result)
+
+
+def _parse_text_edits(raw_edits: str) -> List[Dict[str, Any]]:
+    try:
+        edits = json.loads(raw_edits)
+    except json.JSONDecodeError as exc:
+        raise CliError("invalid_arguments", f"--edits is not valid JSON: {exc}")
+    if not isinstance(edits, list) or not edits:
+        raise CliError("invalid_arguments", "--edits must be a non-empty JSON array")
+
+    allowed = {"old_text", "new_text", "occurrence"}
+    validated: List[Dict[str, Any]] = []
+    for index, edit in enumerate(edits):
+        if not isinstance(edit, dict):
+            raise CliError("invalid_arguments", f"--edits item {index} must be a JSON object")
+        unknown = sorted(set(edit) - allowed)
+        if unknown:
+            raise CliError(
+                "invalid_arguments",
+                f"--edits item {index} has unknown key(s): {', '.join(unknown)}",
+            )
+        old_text = edit.get("old_text")
+        new_text = edit.get("new_text")
+        occurrence = edit.get("occurrence")
+        if not isinstance(old_text, str) or not old_text:
+            raise CliError(
+                "invalid_arguments", f"--edits item {index} old_text must be non-empty"
+            )
+        if not isinstance(new_text, str):
+            raise CliError(
+                "invalid_arguments", f"--edits item {index} new_text must be a string"
+            )
+        if occurrence is not None and (
+            not isinstance(occurrence, int)
+            or isinstance(occurrence, bool)
+            or occurrence < 1
+        ):
+            raise CliError(
+                "invalid_arguments",
+                f"--edits item {index} occurrence must be a positive integer",
+            )
+        validated.append(
+            {"old_text": old_text, "new_text": new_text, "occurrence": occurrence}
+        )
+    return validated
+
+
+def _non_overlapping_occurrences(text: str, needle: str) -> List[int]:
+    positions: List[int] = []
+    start = 0
+    while (position := text.find(needle, start)) != -1:
+        positions.append(position)
+        start = position + len(needle)
+    return positions
+
+
+def _apply_text_edits(body: str, edits: List[Dict[str, Any]]) -> str:
+    replacements: List[Tuple[int, int, str, int]] = []
+    for index, edit in enumerate(edits):
+        old_text = edit["old_text"]
+        positions = _non_overlapping_occurrences(body, old_text)
+        occurrence = edit["occurrence"]
+        if occurrence is None:
+            if not positions:
+                raise CliError(
+                    "not_found", f"--edits item {index} old_text was not found in the note body"
+                )
+            if len(positions) > 1:
+                raise CliError(
+                    "ambiguous_target",
+                    f"--edits item {index} old_text occurs {len(positions)} times; "
+                    "specify occurrence",
+                )
+            position = positions[0]
+        else:
+            if occurrence > len(positions):
+                raise CliError(
+                    "not_found",
+                    f"--edits item {index} occurrence {occurrence} was not found "
+                    f"({len(positions)} occurrence(s) exist)",
+                )
+            position = positions[occurrence - 1]
+        replacements.append((position, position + len(old_text), edit["new_text"], index))
+
+    ordered = sorted(replacements)
+    for previous, current in zip(ordered, ordered[1:]):
+        if current[0] < previous[1]:
+            raise CliError(
+                "invalid_arguments",
+                f"--edits items {previous[3]} and {current[3]} overlap",
+            )
+
+    updated = body
+    for start, end, replacement, _ in reversed(ordered):
+        updated = updated[:start] + replacement + updated[end:]
+    return updated
+
+
+def _render_note_diff(path: str, before: str, after: str) -> str:
+    lines = difflib.unified_diff(
+        before.splitlines(keepends=True),
+        after.splitlines(keepends=True),
+        fromfile=f"a/{path}",
+        tofile=f"b/{path}",
+    )
+    rendered: List[str] = []
+    for line in lines:
+        rendered.append(line)
+        if (
+            line[:1] in {"-", "+", " "}
+            and not line.startswith(("--- ", "+++ "))
+            and not line.endswith(("\n", "\r"))
+        ):
+            rendered.append("\n\\ No newline at end of file\n")
+    return "".join(rendered)
+
+
+def _with_updated_for_diff(raw: str, stamp: Optional[str]) -> str:
+    """Render the frontmatter change that Obsidian property:set will make."""
+    if stamp is None:
+        return raw
+    newline = "\r\n" if "\r\n" in raw else "\n"
+    opening = f"---{newline}"
+    if raw.startswith(opening):
+        lines = raw.splitlines(keepends=True)
+        closing = next(
+            (index for index, line in enumerate(lines[1:], start=1) if line.strip() == "---"),
+            None,
+        )
+        if closing is not None:
+            for index in range(1, closing):
+                if re.match(r"^updated\s*:", lines[index]):
+                    ending = (
+                        "\r\n"
+                        if lines[index].endswith("\r\n")
+                        else "\n"
+                        if lines[index].endswith("\n")
+                        else ""
+                    )
+                    lines[index] = f"updated: {stamp}{ending}"
+                    return "".join(lines)
+            lines.insert(closing, f"updated: {stamp}{newline}")
+            return "".join(lines)
+    return f"---{newline}updated: {stamp}{newline}---{newline}{raw}"
+
+
+def cmd_edit_note(args: argparse.Namespace) -> Dict[str, Any]:
+    """Apply exact body text replacements guarded by the full note content hash."""
+    edits = _parse_text_edits(args.edits)
+    expected_sha256 = args.expected_sha256
+    if not args.dry_run and expected_sha256 is None:
+        raise CliError(
+            "invalid_arguments",
+            "--expected-sha256 is required when applying; use the value from --dry-run",
+        )
+    if expected_sha256 is not None:
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha256):
+            raise CliError("invalid_arguments", "--expected-sha256 must be a SHA-256 hex digest")
+        expected_sha256 = expected_sha256.lower()
+
+    raw = backend.read_note_snapshot(args.path)
+    current_sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    if expected_sha256 is not None and expected_sha256 != current_sha256:
+        raise CliError(
+            "contract_violation",
+            "note changed since dry run; run edit-note --dry-run again",
+            {
+                "path": args.path,
+                "expected_sha256": expected_sha256,
+                "current_sha256": current_sha256,
+            },
+        )
+
+    prefix, body = split_note(raw)
+    updated_body = _apply_text_edits(body, edits)
+    updated_raw = prefix + updated_body
+    changed = updated_raw != raw
+    result: Dict[str, Any] = {
+        "changed": changed,
+        "path": args.path,
+        "expected_sha256": current_sha256,
+        "edits_applied": len(edits),
+    }
+
+    if args.dry_run:
+        stamp = _bump_updated_if_managed(args.path, changed, True, result)
+        preview_raw = _with_updated_for_diff(updated_raw, stamp)
+        result["proposed_sha256"] = hashlib.sha256(preview_raw.encode("utf-8")).hexdigest()
+        result["diff"] = _render_note_diff(args.path, raw, preview_raw)
+        return success("edit-note", result, {"dry_run": True})
+
+    if changed:
+        backend.compare_and_write_note(args.path, raw, updated_raw)
+    stamp = _bump_updated_if_managed(args.path, changed, False, result)
+    applied_raw = _with_updated_for_diff(updated_raw, stamp)
+    result["proposed_sha256"] = hashlib.sha256(applied_raw.encode("utf-8")).hexdigest()
+    result["diff"] = _render_note_diff(args.path, raw, applied_raw)
+    return success("edit-note", result, {"dry_run": False})
 
 
 def cmd_merge_frontmatter(args: argparse.Namespace) -> Dict[str, Any]:
@@ -540,6 +743,7 @@ def cmd_open_note(args: argparse.Namespace) -> Dict[str, Any]:
 HANDLERS = {
     "create-note": cmd_create_note,
     "read-note": cmd_read_note,
+    "edit-note": cmd_edit_note,
     "merge-frontmatter": cmd_merge_frontmatter,
     "add-links": cmd_add_links,
     "insert-related": cmd_insert_related,

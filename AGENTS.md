@@ -9,7 +9,8 @@ lives in `config.yaml` (gitignored; copy `config.yaml.example`). Secrets live in
 ## Project Overview
 
 The project indexes `.md` files from the vault into ChromaDB, builds BM25 indexes, and exposes
-hybrid retrieval and answer synthesis with stable JSON contracts. It also carries the vault's
+hybrid retrieval and answer synthesis with stable JSON contracts. Those contracts are also exposed
+through a dual-transport MCP server for Claude Desktop and ChatGPT. It also carries the vault's
 write path: contract-enforcing note mutations executed through the running Obsidian app (the
 former standalone `obsctl` tool, merged into this CLI). It is organized as the `vault_spider`
 Python package with a JSON-only CLI (`vault-spider`) plus a Streamlit UI.
@@ -72,7 +73,7 @@ by the `granularity` metadata field.
     `source_type` restricted to the four allowed values, unsafe titles and non-numeric
     confidences dropped with warnings). `--note` must be a vault-relative `.md` path resolving
     inside `--root`.
-- **Note mutations** — `create-note`, `read-note`, `merge-frontmatter`, `add-links`,
+- **Note mutations** — `create-note`, `read-note`, `edit-note`, `merge-frontmatter`, `add-links`,
   `insert-related`, `move-note`, `rename-note`, `open-note` (all `./bin/vault-spider <command>`).
   - Executed through the official Obsidian CLI; **the Obsidian app must be running** (macOS only).
     Vault resolution is flags > `config.yaml` > the active vault. Obsidian's registry bridges the
@@ -83,6 +84,14 @@ by the `granularity` metadata field.
     overrides config.
   - Every mutating command accepts `--dry-run`: it computes and returns exactly what would change
     with `meta.dry_run: true` and makes no backend mutation calls.
+  - `edit-note --edits '[{"old_text":"...","new_text":"...","occurrence":1}]'` edits note
+    bodies only. Dry-run returns a rendered unified `diff` plus `expected_sha256`; a real apply
+    requires that hash and performs an Obsidian-side compare-and-write against the entire raw note.
+    Any body/frontmatter/plugin change after preview fails with `contract_violation`. An omitted
+    `occurrence` requires exactly one match, and overlapping operations are rejected. When
+    `obsidian.manage_updated: true`, dry-run/apply diffs also render the `updated` value that Vault
+    Spider proposes/writes; with the default false, the plugin-owned timestamp is not presented as
+    a Vault Spider change.
   - `create-note --auto-id` mints `id` (ULID) and `created`/`updated` (the same timestamp,
     formatted per `timestamps.policy`) for whichever of the three are missing from
     `--frontmatter`; explicit values always win. Templater does not fire on CLI-created notes,
@@ -99,6 +108,11 @@ by the `granularity` metadata field.
     envelope carries `meta.backend: "obsidian-cli"`.
 - `uv run streamlit run scripts/streamlit_app.py`
   - Streamlit UI: Retrieve (mode + granularity selectors), Synthesize, Notes browser.
+- `./bin/vault-spider-mcp [--transport stdio|streamable-http] [--host <host>] [--port <port>]`
+  - MCP server exposing stats, sync, retrieval, synthesis, lint, enrichment, note reads, and safe
+    mutations. Defaults to `stdio` for local clients such as Claude Desktop. Streamable HTTP serves
+    `/mcp` for remote clients such as ChatGPT; it binds to `127.0.0.1:8000` by default and has no
+    built-in application authentication. Mutation tools default to `dry_run: true`.
 - `uv run pytest`
   - Network-free test suite (uses a fake provider; no API key required).
 
@@ -166,7 +180,8 @@ The `vault_spider` package is layered:
 
 6. `vault_spider/obsidian/`
    - `backend.py` — invocation layer for the official Obsidian CLI: binary discovery, vault
-     targeting, noise stripping, error mapping (`obsidian_not_running`, `not_found`, ...).
+     targeting, noise stripping, error mapping (`obsidian_not_running`, `not_found`, ...), and the
+     atomic compare-and-write primitive used by guarded body edits.
    - `notes.py` — the mutation commands: dry-run, no-op detection, collision safety, ambiguity
      rejection, idempotent link/alias merging, `id`/`created` immutability. Uses its own minimal
      untyped frontmatter parser on purpose (the YAML-typed `corpus/frontmatter.py` would not
@@ -178,7 +193,11 @@ The `vault_spider` package is layered:
 
 8. `vault_spider/cli.py` + `vault_spider/envelope.py` — the JSON CLI, envelope helpers, and `CliError`.
 
-9. `scripts/streamlit_*.py` — Streamlit pages that import from `vault_spider`.
+9. `vault_spider/mcp_server.py` — FastMCP adapter over the JSON CLI. Each call runs in an isolated
+   subprocess so CLI validation/contracts remain authoritative and concurrent mutation calls do not
+   share the Obsidian backend's process state. Supports stdio and stateless Streamable HTTP.
+
+10. `scripts/streamlit_*.py` — Streamlit pages that import from `vault_spider`.
 
 `tools/backfill.py` — standalone one-time migration that adds `id`/`created`/`updated`
 frontmatter to existing notes (dry-run by default; `--apply` to write; never touches bodies).

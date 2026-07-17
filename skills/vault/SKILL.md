@@ -25,7 +25,7 @@ never exit codes.**
   - *Query commands* (`retrieve`, `synthesize`, `enrich`, `stats`, `sync`, `lint`) need `.env`
     (OpenRouter) except `stats` and `lint`. `vault-spider stats` needs no API key — it is the cheap
     "is the index alive?" check.
-  - *Mutation commands* (`create-note`, `read-note`, `merge-frontmatter`, `add-links`,
+  - *Mutation commands* (`create-note`, `read-note`, `edit-note`, `merge-frontmatter`, `add-links`,
     `insert-related`, `move-note`, `rename-note`, `open-note`) **need the Obsidian app running**;
     they go through the official Obsidian CLI so links update and plugins fire.
 - **`obsidian`** — the official CLI; read-only use here (`backlinks`, `unresolved`, `tags`).
@@ -88,8 +88,16 @@ changed, `sync --dry-run` previews adds/updates/deletes without touching the ind
 
 ## Mutations — hard rules
 
-- Every mutation (`create-note`, `merge-frontmatter`, `add-links`, `insert-related`, `move-note`,
-  `rename-note`): run with `--dry-run` first, show the diff, then apply on confirmation.
+- Every mutation (`create-note`, `edit-note`, `merge-frontmatter`, `add-links`, `insert-related`,
+  `move-note`, `rename-note`): run with `--dry-run` first, show the result, then apply on
+  confirmation.
+- For body changes, use `edit-note` with exact `old_text` → `new_text` operations; never rewrite
+  the vault file directly. Its dry run returns a rendered unified `result.diff` and
+  `result.expected_sha256`. Apply the identical edits with `--expected-sha256 <that value>`.
+  Never reuse a guard after `contract_violation`; read the note again and repeat the dry run.
+  If `old_text` repeats, set the intended 1-based `occurrence`. Use `merge-frontmatter` for
+  metadata — `edit-note` only touches frontmatter when `obsidian.manage_updated: true`, in which
+  case `result.diff` includes the exact `updated` value it proposes/writes.
 - If a mutation fails with `error.type: obsidian_not_running`, tell the user to open Obsidian;
   do not retry blindly.
 - Never construct a frontmatter patch containing `id`, `created`, `updated`, or `tags`.
