@@ -157,6 +157,18 @@ def _schema() -> Dict[str, Any]:
                 },
                 "result": "enrichment_plan",
             },
+            "eval": {
+                "mutates_state": False,
+                "args": {
+                    "validate": "--dataset <dataset.yaml|dir> — check the golden dataset "
+                                "against its corpus (invalid labels fail as contract_violation)",
+                    "run": "--dataset ... [--stage retrieval|synthesis] [--mode thorough] "
+                           "[--granularity mixed] [-n 10] [--k 5] [--n-context 8] "
+                           "[--only <query-id> ...] [--out results.json] — validate, "
+                           "execute against the index, and score",
+                },
+                "result": "eval_validation (validate) | eval_results (run)",
+            },
             # Note mutations. All go through the official Obsidian CLI, so the
             # Obsidian app must be running; every mutating one takes --dry-run
             # (compute + return the diff, mutate nothing) and the per-command
@@ -341,6 +353,37 @@ def _schema() -> Dict[str, Any]:
                     "stale_distilled": "int",
                 },
                 "findings": "object (per-check lists)",
+            },
+            "eval_validation": {
+                "dataset": {"name": "str", "path": "str", "corpus_root": "str"},
+                "valid": "true (an invalid dataset returns a contract_violation failure instead)",
+                "warnings": ["str"],
+                "stats": {
+                    "notes": "int",
+                    "queries": "int",
+                    "answerable": "int",
+                    "unanswerable": "int",
+                    "labeled_notes": "int",
+                    "distractor_notes": "int",
+                    "categories": "object (category -> count)",
+                },
+            },
+            "eval_results": {
+                "results_schema_version": 1,
+                "dataset": "name/path/eval_schema_version/corpus_root/notes/queries",
+                "run": "stage/mode/granularity/n/k/timestamp/models "
+                       "(+n_context/chat_model with --stage synthesis)",
+                "aggregates": {
+                    "retrieval": "queries_scored, mean_ndcg_at_k, mean_group_recall_at_k, "
+                                 "complete_rate_at_k, mrr",
+                    "synthesis": "(--stage synthesis) abstention_accuracy, false_abstain_rate, "
+                                 "false_answer_rate, citation_complete_rate, gold_fact_coverage, "
+                                 "forbidden_fact_violation_rate, judge_failures",
+                },
+                "by_category": "per-category retrieval aggregates",
+                "by_slice": "per-slice retrieval aggregates",
+                "queries": ["per-query scores (labels matched/missed, unsatisfied groups; "
+                            "abstention + judged facts with --stage synthesis)"],
             },
             "enrichment_plan": {
                 "input": {"path": "str|null", "given_title": "str|null", "intent": "str|null", "source_type": "str|null"},
@@ -795,6 +838,88 @@ def cmd_lint(args: argparse.Namespace) -> Dict[str, Any]:
     return success("lint", result=report)
 
 
+def cmd_eval(args: argparse.Namespace) -> Dict[str, Any]:
+    from vault_spider.evaluation.dataset import (
+        DatasetError,
+        DatasetNotFoundError,
+        load_dataset,
+        validate,
+    )
+
+    if not getattr(args, "eval_command", None):
+        return failure(
+            "eval", "invalid_arguments", "eval requires a subcommand: validate or run"
+        )
+
+    try:
+        dataset = load_dataset(args.dataset)
+    except DatasetNotFoundError as exc:
+        return failure("eval", "not_found", str(exc))
+    except DatasetError as exc:
+        return failure("eval", "invalid_arguments", str(exc))
+
+    # Both subcommands validate; run refuses to score against broken labels.
+    report = validate(dataset)
+    if not report.valid:
+        return failure(
+            "eval",
+            "contract_violation",
+            f"dataset failed validation with {len(report.errors)} error(s)",
+            {"errors": report.errors, "warnings": report.warnings, "stats": report.stats},
+        )
+
+    if args.eval_command == "validate":
+        return success(
+            "eval",
+            result={
+                "dataset": {
+                    "name": dataset.name,
+                    "path": str(dataset.path),
+                    "corpus_root": str(dataset.corpus_root),
+                },
+                "valid": True,
+                "warnings": report.warnings,
+                "stats": report.stats,
+            },
+            meta={"subcommand": "validate"},
+        )
+
+    if args.n < 1:
+        return failure("eval", "invalid_arguments", "-n must be at least 1")
+    if args.k < 1:
+        return failure("eval", "invalid_arguments", "--k must be at least 1")
+    if args.k > args.n:
+        return failure("eval", "invalid_arguments", "--k cannot exceed -n")
+    if args.n_context < 1:
+        return failure("eval", "invalid_arguments", "--n-context must be at least 1")
+
+    from vault_spider.evaluation.runner import run_eval
+
+    provider = get_provider()
+    store = get_store(args.chroma_path, args.collection, provider)
+    results = run_eval(
+        dataset,
+        store,
+        provider,
+        stage=args.stage,
+        mode=args.mode,
+        granularity=args.granularity,
+        n=args.n,
+        k=args.k,
+        n_context=args.n_context,
+        only=args.only,
+    )
+    meta: Dict[str, Any] = {"subcommand": "run"}
+    if report.warnings:
+        meta["validation_warnings"] = report.warnings
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as handle:
+            json.dump(results, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        meta["out"] = args.out
+    return success("eval", result=results, meta=meta)
+
+
 def _obsidian_handler(args: argparse.Namespace) -> Dict[str, Any]:
     """Route a note-mutation subcommand to vault_spider.obsidian with the
     configured connection facts (CLI flags override config.yaml).
@@ -927,6 +1052,44 @@ def build_parser() -> argparse.ArgumentParser:
         help="Normalize created/updated/date to timestamps.policy",
     )
 
+    p_eval = sub.add_parser(
+        "eval", parents=[common], help="Golden-dataset benchmark: validate labels, run and score"
+    )
+    eval_sub = p_eval.add_subparsers(dest="eval_command")
+    eval_common = JsonArgumentParser(add_help=False)
+    eval_common.add_argument(
+        "--dataset", required=True, help="Path to dataset.yaml or its directory"
+    )
+    eval_sub.add_parser(
+        "validate",
+        parents=[common, eval_common],
+        help="Check the golden dataset against its corpus",
+    )
+    p_eval_run = eval_sub.add_parser(
+        "run",
+        parents=[common, eval_common],
+        help="Validate, execute against the index, and score",
+    )
+    p_eval_run.add_argument(
+        "--stage",
+        choices=["retrieval", "synthesis"],
+        default="retrieval",
+        help="synthesis adds abstention scoring and LLM fact judging",
+    )
+    p_eval_run.add_argument("--mode", choices=["fast", "thorough"], default="thorough")
+    p_eval_run.add_argument(
+        "--granularity", choices=["document", "section", "mixed"], default="mixed"
+    )
+    p_eval_run.add_argument("-n", type=int, default=10)
+    p_eval_run.add_argument("--k", type=int, default=5, help="Rank cutoff for @k metrics")
+    p_eval_run.add_argument("--n-context", dest="n_context", type=int, default=8)
+    p_eval_run.add_argument(
+        "--only", action="append", default=None, help="Query id to run (repeatable)"
+    )
+    p_eval_run.add_argument(
+        "--out", default=None, help="Also write the results contract to this file"
+    )
+
     p_enrich = sub.add_parser(
         "enrich", parents=[common], help="Propose an enrichment plan (no mutations)"
     )
@@ -1030,6 +1193,7 @@ _HANDLERS = {
     "synthesize": cmd_synthesize,
     "lint": cmd_lint,
     "enrich": cmd_enrich,
+    "eval": cmd_eval,
 }
 
 

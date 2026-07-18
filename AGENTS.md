@@ -75,6 +75,15 @@ by the `granularity` metadata field.
     `source_type` restricted to the four allowed values, unsafe titles and non-numeric
     confidences dropped with warnings). `--note` must be a vault-relative `.md` path resolving
     inside `--root`.
+- `./bin/vault-spider eval validate --dataset eval` / `./bin/vault-spider eval run --dataset eval [--stage retrieval|synthesis] [--mode thorough] [--granularity mixed] [-n 10] [--k 5] [--only <qid>] [--out results.json]`
+  - Golden-dataset benchmark over the committed `eval/` corpus (see `eval/README.md`). `validate`
+    cross-checks every label (paths, note ids, H1–H3 headings, group membership, expected counts)
+    against the corpus as sync sees it and fails with `contract_violation` on drift. `run`
+    validates first, refuses (`config_mismatch`) an index that does not exactly match the corpus,
+    and emits a versioned results contract: deterministic retrieval metrics (nDCG@k, per-group
+    evidence recall@k, complete@k, MRR) overall and per category/slice. `--stage synthesis` adds
+    abstention scoring, citation group coverage, and gold/forbidden fact checks via an LLM judge.
+    Always run it against a dedicated `--chroma-path`, never the live-vault index.
 - **Note mutations** — `create-note`, `read-note`, `edit-note`, `merge-frontmatter`, `add-links`,
   `insert-related`, `move-note`, `rename-note`, `open-note` (all `./bin/vault-spider <command>`).
   - Executed through the official Obsidian CLI; **the Obsidian app must be running** (macOS only).
@@ -184,7 +193,14 @@ The `vault_spider` package is layered:
    - `lint.py` — `lint_vault()` read-only health checks.
    `vault_spider/enrich/planner.py` — `plan()` enrichment planner (read-only; proposes, never mutates).
 
-6. `vault_spider/obsidian/`
+6. `vault_spider/evaluation/`
+   - `dataset.py` — golden-dataset loading and label validation (`eval_schema_version: 1`;
+     manifest + JSONL queries cross-checked against the corpus via `load_notes`/`split_sections`).
+   - `runner.py` — benchmark execution and scoring (`results_schema_version: 1`): graded
+     (path, heading) label matching, required-evidence groups, retrieval aggregates and
+     breakdowns, plus the synthesis-stage abstention scoring and LLM fact judge.
+
+7. `vault_spider/obsidian/`
    - `backend.py` — invocation layer for the official Obsidian CLI: binary discovery, vault
      targeting, noise stripping, error mapping (`obsidian_not_running`, `not_found`, ...), and the
      atomic compare-and-write primitive used by guarded body edits.
@@ -193,17 +209,17 @@ The `vault_spider` package is layered:
      untyped frontmatter parser on purpose (the YAML-typed `corpus/frontmatter.py` would not
      round-trip values faithfully).
 
-7. `vault_spider/llm/openrouter.py` — embeddings, rerank, and chat via OpenRouter. Responses are
+8. `vault_spider/llm/openrouter.py` — embeddings, rerank, and chat via OpenRouter. Responses are
    strictly validated (index coverage, duplicate detection, dimensions, finite values); anything
    malformed raises `OpenRouterError` (`provider_error`) instead of misaligning the index.
 
-8. `vault_spider/cli.py` + `vault_spider/envelope.py` — the JSON CLI, envelope helpers, and `CliError`.
+9. `vault_spider/cli.py` + `vault_spider/envelope.py` — the JSON CLI, envelope helpers, and `CliError`.
 
-9. `vault_spider/mcp_server.py` — FastMCP adapter over the JSON CLI. Each call runs in an isolated
-   subprocess so CLI validation/contracts remain authoritative and concurrent mutation calls do not
-   share the Obsidian backend's process state. Supports stdio and stateless Streamable HTTP.
+10. `vault_spider/mcp_server.py` — FastMCP adapter over the JSON CLI. Each call runs in an isolated
+    subprocess so CLI validation/contracts remain authoritative and concurrent mutation calls do not
+    share the Obsidian backend's process state. Supports stdio and stateless Streamable HTTP.
 
-10. `scripts/streamlit_*.py` — Streamlit pages that import from `vault_spider`.
+11. `scripts/streamlit_*.py` — Streamlit pages that import from `vault_spider`.
 
 `tools/backfill.py` — standalone one-time migration that adds `id`/`created`/`updated`
 frontmatter to existing notes (dry-run by default; `--apply` to write; never touches bodies).
