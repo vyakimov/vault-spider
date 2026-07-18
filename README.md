@@ -29,6 +29,21 @@ if you do not want to use Obsidian's active vault by default. Then:
 ./bin/vault-spider stats
 ```
 
+## Periodic sync on macOS
+
+Install the per-user LaunchAgent to run an incremental sync at login and every hour:
+
+```bash
+uv run scripts/setup_launchd.py          # dry-run plan
+uv run scripts/setup_launchd.py --apply  # install, load, and run now
+```
+
+An unchanged vault is a no-op: no notes are embedded or replaced. Read-only lint can be enabled
+explicitly with `--with-lint`; it is disabled by default because a complete corpus scan every hour
+is usually unnecessary. Enrichment is deliberately not scheduled because it requires a specific
+note and produces a plan that should be reviewed. See [docs/launchd.md](docs/launchd.md) for interval,
+logs, status, and uninstall commands.
+
 ## Use
 
 ```bash
