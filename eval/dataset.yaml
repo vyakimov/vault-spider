@@ -1,0 +1,11 @@
+eval_schema_version: 1
+name: vault-spider-public-eval
+description: Fictional public benchmark for Vault Spider retrieval, synthesis, and abstention.
+corpus_root: public_vault
+queries_file: golden_queries.jsonl
+expected_note_count: 26
+expected_query_count: 30
+privacy: synthetic-public
+timestamp_policy: utc_z
+license_note: Created specifically for this repository; contains no private-vault content.
+

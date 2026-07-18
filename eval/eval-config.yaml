@@ -1,0 +1,13 @@
+vault:
+  root: public_vault
+  skip_dirs:
+    - .trash
+    - .obsidian
+    - Templates
+  ignore_tags:
+    - ignore
+    - secret
+
+timestamps:
+  policy: utc_z
+
