@@ -84,6 +84,50 @@ class TestPostprocessSafety:
         assert result["frontmatter_patch"]["source_type"] == "web"
         assert result["frontmatter_patch"]["source_url"] == "https://example.com/a"
 
+    def test_caller_unknown_source_type_accepted_with_warning(self):
+        parsed = {"title": "T", "type": None, "aliases": [], "inline_links": [],
+                  "related": [], "warnings": []}
+        result = postprocess(parsed, make_input(source_type="podcast"), NEIGHBORS)
+        assert result["frontmatter_patch"]["source_type"] == "podcast"
+        assert any("unrecognized source_type=podcast" in w for w in result["warnings"])
+
+    def test_caller_malformed_source_type_dropped(self):
+        parsed = {"title": "T", "type": None, "aliases": [], "inline_links": [],
+                  "related": [], "warnings": []}
+        result = postprocess(parsed, make_input(source_type="not a slug!"), NEIGHBORS)
+        assert "source_type" not in result["frontmatter_patch"]
+        assert any("malformed source_type" in w for w in result["warnings"])
+
+    def test_llm_is_in_default_vocabulary(self):
+        parsed = {"title": "T", "type": None, "aliases": [], "inline_links": [],
+                  "related": [], "warnings": []}
+        result = postprocess(parsed, make_input(source_type="llm"), NEIGHBORS)
+        assert result["frontmatter_patch"]["source_type"] == "llm"
+        assert not any("source_type" in w for w in result["warnings"])
+
+    def test_model_proposed_source_type_still_gated(self):
+        # Vocabulary member proposed by the model is accepted...
+        parsed = {"title": "T", "type": None, "aliases": [], "inline_links": [],
+                  "related": [], "warnings": [], "source_type": "web"}
+        result = postprocess(parsed, make_input(), NEIGHBORS)
+        assert result["frontmatter_patch"]["source_type"] == "web"
+        # ...but a well-formed slug outside it is dropped, not warned-through.
+        parsed["source_type"] = "podcast"
+        result = postprocess(parsed, make_input(), NEIGHBORS)
+        assert "source_type" not in result["frontmatter_patch"]
+        assert any("invalid source_type=podcast" in w for w in result["warnings"])
+
+    def test_config_extends_model_vocabulary(self, isolated_config):
+        from tests.conftest import write_config
+        write_config(
+            isolated_config,
+            "vault:\n  source_types: [transcript, podcast]\n",
+        )
+        parsed = {"title": "T", "type": None, "aliases": [], "inline_links": [],
+                  "related": [], "warnings": [], "source_type": "podcast"}
+        result = postprocess(parsed, make_input(), NEIGHBORS)
+        assert result["frontmatter_patch"]["source_type"] == "podcast"
+
     def test_anchor_not_in_body_demotes(self):
         parsed = {
             "title": "T", "type": None, "aliases": [], "related": [], "warnings": [],

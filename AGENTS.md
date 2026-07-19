@@ -66,15 +66,18 @@ by the `granularity` metadata field.
     `utc_z` are offset-aware. `obsidian_local` writes local `YYYY-MM-DDTHH:mm:ss` values so
     Obsidian Date & time properties use the OS-localized renderer. Normalization preserves file
     mtimes so the formatting-only migration does not trigger false recency.
-- `./bin/vault-spider enrich --root <dir> (--note <path> | --stdin) [--intent ...] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]`
+- `./bin/vault-spider enrich --root <dir> (--note <path> | --stdin) [--intent ...] [--source-type <slug>] [--source-url ...] [--title ...]`
   - App-agnostic **enrichment planner**: retrieves a note's neighborhood and proposes a title,
     frontmatter patch (`type`/`aliases`/`source_type`/`source_url` only), inline links, related
     candidates, and placement — as JSON. It **never mutates** files or the index; apply a plan
     with the mutation commands below. Only links to retrieved neighbors are proposed; the LLM
     output is validated in code (confidence gating, anchor resolution, existing-type/link guards,
-    `source_type` restricted to the four allowed values, unsafe titles and non-numeric
-    confidences dropped with warnings). `--note` must be a vault-relative `.md` path resolving
-    inside `--root`.
+    unsafe titles and non-numeric confidences dropped with warnings). `source_type` has split
+    trust: the caller's `--source-type` is a free-form lowercase slug (malformed values are
+    `invalid_arguments`; slugs outside the configured vocabulary are accepted with a warning),
+    while **LLM-proposed** values are dropped unless they are in the vocabulary. The vocabulary
+    is config `vault.source_types` (default `transcript|web|pdf|manual|llm`). `--note` must be a
+    vault-relative `.md` path resolving inside `--root`.
 - `./bin/vault-spider eval validate --dataset eval` / `./bin/vault-spider eval run --dataset eval [--stage retrieval|synthesis] [--mode thorough] [--granularity mixed] [-n 10] [--k 5] [--only <qid>] [--out results.json]`
   - Golden-dataset benchmark over the committed `eval/` corpus (see `eval/README.md`). `validate`
     cross-checks every label (paths, note ids, H1–H3 headings, group membership, expected counts)

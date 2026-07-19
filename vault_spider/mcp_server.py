@@ -53,7 +53,9 @@ NONDESTRUCTIVE_SIDE_EFFECT = ToolAnnotations(
 
 Mode = Literal["fast", "thorough"]
 Granularity = Literal["document", "section", "mixed"]
-SourceType = Literal["transcript", "web", "pdf", "manual"]
+# Free-form provenance slug (case-insensitive; the CLI lowercases). The known
+# vocabulary comes from config `vault.source_types`; unknown slugs warn.
+SourceType = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9-]{0,39}$")]
 NoteView = Literal["full", "frontmatter", "body"]
 ResultLimit = Annotated[int, Field(ge=1, le=50)]
 ContextLimit = Annotated[int, Field(ge=1, le=25)]

@@ -24,7 +24,7 @@ tell the user to fix config.
                            [--n-context 8] [--save [--root <dir>] [--save-dir Distilled]] [FILTERS]
 ./bin/vault-spider lint [--root <dir>] [--format json|text] [--fix] [--fix-timestamps]
 ./bin/vault-spider enrich (--note <vault-rel-path> | --stdin) [--root <dir>]
-                       [--intent "..."] [--source-type transcript|web|pdf|manual] [--source-url ...] [--title ...]
+                       [--intent "..."] [--source-type <slug>] [--source-url ...] [--title ...]
 
 FILTERS (retrieve & synthesize):
   [--folder <prefix>] [--tag <t>]... [--type <note_type>] [--since <ISO>] [--until <ISO>]

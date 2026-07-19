@@ -151,7 +151,11 @@ def _schema() -> Dict[str, Any]:
                     "--note": "vault-relative path (xor --stdin)",
                     "--stdin": "flag: enrich raw text from stdin",
                     "--intent": "free text",
-                    "--source-type": "transcript|web|pdf|manual",
+                    "--source-type": "provenance slug (lowercase letters/digits/dashes). "
+                                     "Config `vault.source_types` names the known vocabulary "
+                                     "(default transcript|web|pdf|manual|llm); other slugs are "
+                                     "accepted with a warning. LLM-proposed values outside the "
+                                     "vocabulary are dropped.",
                     "--source-url": "url",
                     "--title": "known title override",
                 },
@@ -954,6 +958,19 @@ def _obsidian_handler(args: argparse.Namespace) -> Dict[str, Any]:
 
 # -- parser -------------------------------------------------------------------
 
+def _source_type_argument(value: str) -> str:
+    """Normalize --source-type to a lowercase slug; malformed values fail fast.
+
+    Vocabulary membership is not checked here — unknown-but-well-formed slugs
+    are accepted by the planner with a warning (config: `vault.source_types`)."""
+    slug = value.strip().lower()
+    if not re.match(r"^[a-z0-9][a-z0-9-]{0,39}$", slug):
+        raise argparse.ArgumentTypeError(
+            "must be a slug: letters/digits/dashes, max 40 chars"
+        )
+    return slug
+
+
 def _add_filter_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--folder", default=None)
     parser.add_argument("--tag", dest="tags", action="append", default=None)
@@ -1104,7 +1121,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_enrich.add_argument("--intent", default=None)
     p_enrich.add_argument(
         "--source-type", dest="source_type",
-        choices=["transcript", "web", "pdf", "manual"], default=None,
+        type=_source_type_argument, default=None,
+        help="Provenance slug; config `vault.source_types` names the known set",
     )
     p_enrich.add_argument("--source-url", dest="source_url", default=None)
     p_enrich.add_argument("--title", default=None, help="Known title override")
