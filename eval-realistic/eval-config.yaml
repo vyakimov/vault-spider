@@ -1,0 +1,12 @@
+vault:
+  root: corpus
+  skip_dirs:
+    - .trash
+    - .obsidian
+    - Templates
+  ignore_tags:
+    - ignore
+    - secret
+
+timestamps:
+  policy: obsidian_local

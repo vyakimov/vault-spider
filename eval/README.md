@@ -6,7 +6,7 @@ addresses, and no personal or employer information.
 
 ## Layout
 
-- `public_vault/` — 26 Markdown notes with stable frontmatter IDs.
+- `public_vault/` — 36 Markdown notes with stable frontmatter IDs.
 - `golden_queries.jsonl` — one labelled query per line.
 - `dataset.yaml` — the manifest `vault-spider eval` consumes (schema version, file locations,
   expected counts).

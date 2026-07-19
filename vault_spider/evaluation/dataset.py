@@ -132,15 +132,19 @@ def load_dataset(dataset_arg: str) -> EvalDataset:
 @dataclass
 class CorpusNote:
     note_id: str
-    headings: Set[str]  # section headings retrieval can address (H1-H3, non-empty)
+    headings: Set[str]  # section headings retrieval can address (H1-H3; "" = preamble)
 
 
 def corpus_labels(corpus_root: Path) -> Dict[str, CorpusNote]:
-    """Corpus notes exactly as sync sees them, keyed by vault-relative path."""
+    """Corpus notes exactly as sync sees them, keyed by vault-relative path.
+
+    A note whose body has no H1-H3 headings yields one preamble section with
+    heading "" — labels may target it with an empty heading string.
+    """
     return {
         note.path: CorpusNote(
             note_id=note.note_id,
-            headings={section.heading for section in split_sections(note) if section.heading},
+            headings={section.heading for section in split_sections(note)},
         )
         for note in load_notes(str(corpus_root))
     }
@@ -175,9 +179,12 @@ def _shape_errors(label: str, row: Dict[str, Any]) -> List[str]:
             if missing:
                 errors.append(f"{where} is missing {', '.join(missing)}")
                 continue
-            for key in ("note_id", "path", "heading"):
+            for key in ("note_id", "path"):
                 if not isinstance(entry[key], str) or not entry[key].strip():
                     errors.append(f"{where}: {key} must be a non-empty string")
+            # "" is a valid heading: it addresses a heading-less note's preamble.
+            if not isinstance(entry["heading"], str):
+                errors.append(f"{where}: heading must be a string")
             grade = entry["grade"]
             if isinstance(grade, bool) or grade not in _GRADES:
                 errors.append(f"{where}: grade must be an integer 0-3")
@@ -308,7 +315,8 @@ def validate(dataset: EvalDataset) -> ValidationReport:
             if entry["heading"] not in note.headings:
                 errors.append(
                     f"{label}: heading {entry['heading']!r} is not a retrievable "
-                    f"section of {entry['path']} (H1-H3 headings only)"
+                    f"section of {entry['path']} (H1-H3 headings, or '' for the "
+                    "preamble of a heading-less note)"
                 )
 
         for group in groups:

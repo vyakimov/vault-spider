@@ -140,7 +140,16 @@ class TestValidate:
         dataset = load_dataset(str(REPO_ROOT / "eval"))
         report = validate(dataset)
         assert report.errors == []
-        assert report.stats["notes"] == 26
+        assert report.stats["notes"] == 36
+        assert report.stats["queries"] == 30
+
+    def test_realistic_dataset_is_valid(self):
+        dataset_dir = REPO_ROOT / "eval-realistic"
+        if not dataset_dir.exists():
+            pytest.skip("eval-realistic corpus not present")
+        report = validate(load_dataset(str(dataset_dir)))
+        assert report.errors == []
+        assert report.stats["notes"] == 57
         assert report.stats["queries"] == 30
 
     def test_valid_dataset_passes(self, tmp_path):
@@ -155,6 +164,33 @@ class TestValidate:
             "distractor_notes": 1,
             "categories": {"known_item": 1, "metadata_filter": 1, "unanswerable": 1},
         }
+
+    def test_preamble_label_on_headingless_note(self, tmp_path):
+        dataset_dir = write_dataset(tmp_path)
+        (dataset_dir / "corpus" / "Ops" / "Stub.md").write_text(
+            "---\nid: 01JEV00000000000000000000D\ntitle: Stub\n---\n"
+            "A body with no headings that answers the quokka retry question.\n",
+            encoding="utf-8",
+        )
+        manifest = dataset_dir / "dataset.yaml"
+        manifest.write_text(
+            manifest.read_text().replace("expected_note_count: 3", "expected_note_count: 4")
+        )
+        rewrite_query(
+            dataset_dir,
+            "q2",
+            relevant_evidence=[
+                {
+                    "note_id": "01JEV00000000000000000000D",
+                    "path": "Ops/Stub.md",
+                    "heading": "",
+                    "grade": 3,
+                }
+            ],
+            required_evidence_groups=[["01JEV00000000000000000000D#"]],
+        )
+        report = validate(load_dataset(str(dataset_dir)))
+        assert report.errors == []
 
     def test_missing_dataset_raises_not_found(self, tmp_path):
         with pytest.raises(DatasetNotFoundError):
