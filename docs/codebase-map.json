@@ -1,0 +1,2618 @@
+{
+  "project": {
+    "name": "vault-spider",
+    "description": "JSON-only CLI (plus MCP server and Streamlit UI) for an Obsidian vault: hybrid retrieval over ChromaDB + BM25, cited answer synthesis with abstention, corpus health lint, plan-only enrichment, a golden eval harness, and safe note mutations executed through the running Obsidian app.",
+    "language": "Python (uv-managed)",
+    "entry_points": {
+      "cli": "bin/vault-spider -> vault_spider/cli.py:main",
+      "mcp": "bin/vault-spider-mcp -> vault_spider/mcp_server.py:main",
+      "ui": "scripts/streamlit_app.py"
+    },
+    "canonical_instructions": "AGENTS.md",
+    "json_envelope": "{ok: true, action, result, meta} | {ok: false, action, error}; always check `ok`, not just the exit code"
+  },
+  "generated": "2026-07-22",
+  "generator_note": "Structure extracted from the git-tracked source via Python ast; line numbers refer to the commit current on the generation date.",
+  "architecture": {
+    "data_flow": {
+      "read_path": [
+        "vault .md files",
+        "corpus.loader / corpus.frontmatter / corpus.identity / corpus.chunker",
+        "index.store (Chroma collection: document + section entries; BM25 corpus)",
+        "retrieval.searcher (BM25 + embeddings via llm.openrouter, fused by retrieval.fusion; thorough mode reranks)",
+        "retrieval.evidence (retrieval output contract)",
+        "synthesis.answer (cited answer or abstention)",
+        "compounding.distill (--save: write answer back as a distilled note)"
+      ],
+      "write_path": [
+        "cli.py mutation commands (create-note, edit-note, merge-frontmatter, add-links, insert-related, move-note, rename-note, open-note)",
+        "obsidian.notes (contract enforcement, dry-run diffs, sha256 compare-and-write)",
+        "obsidian.backend (official Obsidian CLI invocation)",
+        "running Obsidian app -> vault files (wikilinks update, plugins fire)"
+      ],
+      "surfaces": [
+        "bin/vault-spider -> vault_spider.cli (JSON envelope on stdout, exit 1 on error)",
+        "bin/vault-spider-mcp -> vault_spider.mcp_server (dual-transport MCP for Claude Desktop / ChatGPT)",
+        "scripts/streamlit_app.py (interactive UI)"
+      ]
+    },
+    "invariants": [
+      "Every CLI command prints exactly one JSON envelope: {ok: true, action, result, meta} or {ok: false, action, error}; check `ok`, not just the exit code.",
+      "Read path (sync, retrieve, lint) works on vault files directly; the write path goes only through the Obsidian CLI. Never write vault files directly from mutation code.",
+      "One note indexes as one document-granularity entry plus N section entries in a single Chroma collection (granularity metadata field). Section splitting is deterministic and heading-based.",
+      "`provenance` frontmatter (human | reference | llm | distilled) is set at note creation, immutable once set, never proposed by enrichment, and orthogonal to `type`.",
+      "`id`, `created`, and `provenance` are immutable once set; `lint --fix` writes only missing values, never edits existing ones.",
+      "Sync is failure-safe: old index entries are deleted only after all new embeddings are computed and validated.",
+      "Every mutating command accepts --dry-run and returns exactly what would change with meta.dry_run: true, making no backend calls.",
+      "Eval runs go against a dedicated --chroma-path, never the live-vault index.",
+      "Distilled notes are regenerable pointers to their sources; raw notes always win on conflict."
+    ]
+  },
+  "commands": [
+    {
+      "command": "schema",
+      "summary": "Print the machine-readable command + contract schema (version 2)."
+    },
+    {
+      "command": "sync [--root DIR] [--reset]",
+      "summary": "Incremental index sync: add new, re-embed changed/moved, delete removed notes."
+    },
+    {
+      "command": "stats",
+      "summary": "Index statistics (no API key needed)."
+    },
+    {
+      "command": "retrieve --query Q [--mode fast|thorough] [--granularity document|section|mixed] [filters]",
+      "summary": "Hybrid retrieval returning the scored-candidate contract. Filters: --folder --tag --type --provenance --since --until."
+    },
+    {
+      "command": "synthesize --query Q [--mode thorough] [--retrieval FILE] [--save]",
+      "summary": "Retrieve then synthesize a cited answer; abstains when unsupported; --save persists a distilled note."
+    },
+    {
+      "command": "enrich --root DIR (--note PATH | --stdin) [--intent ...]",
+      "summary": "Plan-only enrichment: proposed title/frontmatter/links/placement as JSON; never mutates."
+    },
+    {
+      "command": "lint --root DIR [--format json|text] [--fix] [--fix-timestamps]",
+      "summary": "Read-only corpus health report; --fix writes only missing id/created/updated."
+    },
+    {
+      "command": "eval validate|run --dataset DIR [--stage retrieval|synthesis]",
+      "summary": "Golden-dataset validation and scored benchmark with a versioned results contract."
+    },
+    {
+      "command": "create-note / read-note / edit-note / merge-frontmatter / add-links / insert-related / move-note / rename-note / open-note",
+      "summary": "Note mutations through the running Obsidian app; all mutating commands accept --dry-run."
+    }
+  ],
+  "packages": {
+    "vault_spider (root)": {
+      "role": "Entry points and cross-cutting plumbing: the JSON-only CLI, the MCP server, configuration, the JSON envelope, and shared helpers.",
+      "modules": [
+        {
+          "path": "vault_spider/cli.py",
+          "loc": 1256,
+          "summary": "JSON-only CLI for the vault: retrieval/synthesis plus safe note mutations.",
+          "internal_deps": [
+            "vault_spider",
+            "vault_spider.compounding.distill",
+            "vault_spider.compounding.lint",
+            "vault_spider.corpus.frontmatter",
+            "vault_spider.enrich.planner",
+            "vault_spider.envelope",
+            "vault_spider.evaluation.dataset",
+            "vault_spider.evaluation.runner",
+            "vault_spider.index.reader",
+            "vault_spider.index.store",
+            "vault_spider.llm.openrouter",
+            "vault_spider.obsidian",
+            "vault_spider.retrieval.evidence",
+            "vault_spider.retrieval.searcher",
+            "vault_spider.synthesis.answer",
+            "vault_spider.utils"
+          ],
+          "classes": [
+            {
+              "name": "JsonArgumentParser",
+              "bases": [
+                "argparse.ArgumentParser"
+              ],
+              "doc": "Convert argparse failures into the CLI's stable JSON error contract.",
+              "line": 28,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "error",
+                  "signature": "(self, message: str) -> NoReturn",
+                  "doc": null,
+                  "line": 31
+                }
+              ]
+            }
+          ],
+          "functions": [
+            {
+              "name": "get_provider",
+              "signature": "() -> OpenRouterClient",
+              "doc": null,
+              "line": 35
+            },
+            {
+              "name": "get_store",
+              "signature": "(chroma_path: str, collection: str, provider: Optional[OpenRouterClient]=None)",
+              "doc": null,
+              "line": 44
+            },
+            {
+              "name": "resolve_root",
+              "signature": "(explicit: Optional[str]) -> str",
+              "doc": null,
+              "line": 55
+            },
+            {
+              "name": "cmd_schema",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 422
+            },
+            {
+              "name": "cmd_sync",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 426
+            },
+            {
+              "name": "cmd_stats",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 444
+            },
+            {
+              "name": "cmd_retrieve",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 493
+            },
+            {
+              "name": "cmd_synthesize",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 552
+            },
+            {
+              "name": "cmd_enrich",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 674
+            },
+            {
+              "name": "cmd_lint",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 806
+            },
+            {
+              "name": "cmd_eval",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 843
+            },
+            {
+              "name": "build_parser",
+              "signature": "() -> argparse.ArgumentParser",
+              "doc": null,
+              "line": 973
+            },
+            {
+              "name": "main",
+              "signature": "(argv: Optional[list]=None) -> int",
+              "doc": null,
+              "line": 1218
+            }
+          ],
+          "constants": [
+            "SCHEMA_VERSION",
+            "_LINT_TEXT_LIMIT",
+            "_HANDLERS"
+          ]
+        },
+        {
+          "path": "vault_spider/config.py",
+          "loc": 69,
+          "summary": "Configuration for Vault Spider retrieval and ranking.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "SearchParams",
+              "bases": [],
+              "doc": null,
+              "line": 8,
+              "fields": [
+                "semantic_weight",
+                "top_k",
+                "n_results",
+                "combine_strategy",
+                "rrf_k",
+                "zsigmoid_temperature",
+                "rerank_top_k",
+                "rerank_use_ranks",
+                "recency_boost_enabled",
+                "recency_weight",
+                "recency_decay_days"
+              ],
+              "methods": [
+                {
+                  "name": "with_overrides",
+                  "signature": "(self, **overrides) -> 'SearchParams'",
+                  "doc": null,
+                  "line": 41
+                }
+              ]
+            }
+          ],
+          "functions": [],
+          "constants": [
+            "DEFAULT_SEARCH_PARAMS",
+            "BM25_CONFIG",
+            "SEARCH_CONFIG"
+          ]
+        },
+        {
+          "path": "vault_spider/envelope.py",
+          "loc": 54,
+          "summary": "JSON envelope helpers (bearctl pattern) for the vault-spider CLI.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "CliError",
+              "bases": [
+                "Exception"
+              ],
+              "doc": "Typed failure that maps 1:1 onto a failure envelope.",
+              "line": 10,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, err_type: str, message: str, details: Optional[Dict[str, Any]]=None)",
+                  "doc": null,
+                  "line": 13
+                }
+              ]
+            }
+          ],
+          "functions": [
+            {
+              "name": "success",
+              "signature": "(action: str, result: Any=None, meta: Optional[Dict[str, Any]]=None) -> Dict[str, Any]",
+              "doc": null,
+              "line": 20
+            },
+            {
+              "name": "failure",
+              "signature": "(action: str, err_type: str, message: str, details: Optional[Dict[str, Any]]=None) -> Dict[str, Any]",
+              "doc": null,
+              "line": 33
+            },
+            {
+              "name": "print_json",
+              "signature": "(payload: Dict[str, Any]) -> None",
+              "doc": null,
+              "line": 50
+            }
+          ]
+        },
+        {
+          "path": "vault_spider/mcp_server.py",
+          "loc": 451,
+          "summary": "MCP server exposing Vault Spider's stable JSON CLI contracts.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "LinkSpec",
+              "bases": [
+                "BaseModel"
+              ],
+              "doc": "A requested wikilink insertion.",
+              "line": 62,
+              "fields": [
+                "target",
+                "anchor_text",
+                "line"
+              ],
+              "methods": []
+            },
+            {
+              "name": "TextEdit",
+              "bases": [
+                "BaseModel"
+              ],
+              "doc": "One exact-text replacement in a note body.",
+              "line": 70,
+              "fields": [
+                "old_text",
+                "new_text",
+                "occurrence"
+              ],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "vault_stats",
+              "signature": "() -> dict[str, Any]",
+              "doc": "Return statistics for the current Vault Spider index.",
+              "line": 141
+            },
+            {
+              "name": "sync_index",
+              "signature": "(root: Optional[str]=None, reset: bool=False, dry_run: bool=True) -> dict[str, Any]",
+              "doc": "Plan or run an incremental vault index sync. Defaults to a non-writing dry run.",
+              "line": 146
+            },
+            {
+              "name": "search_vault",
+              "signature": "(query: str, mode: Mode='fast', granularity: Granularity='document', limit: ResultLimit=10, folder: Optional[str]=None, tags: Optional[list[str]]=None, note_type: Optional[str]=None, provenance: Optional[Provenance]=None, since: Optional[str]=None, until: Optional[str]=None, must_include: Optional[list[str]]=None) -> dict[str, Any]",
+              "doc": "Hybrid-search indexed notes and return ranked candidates with score evidence.",
+              "line": 161
+            },
+            {
+              "name": "answer_from_vault",
+              "signature": "(query: str, mode: Mode='thorough', granularity: Granularity='mixed', limit: ResultLimit=10, context_notes: ContextLimit=8, folder: Optional[str]=None, tags: Optional[list[str]]=None, note_type: Optional[str]=None, provenance: Optional[Provenance]=None, since: Optional[str]=None, until: Optional[str]=None, must_include: Optional[list[str]]=None) -> dict[str, Any]",
+              "doc": "Answer from indexed notes with citations, abstaining when evidence is insufficient.",
+              "line": 199
+            },
+            {
+              "name": "lint_vault",
+              "signature": "(root: Optional[str]=None) -> dict[str, Any]",
+              "doc": "Inspect vault health without modifying notes.",
+              "line": 240
+            },
+            {
+              "name": "plan_enrichment",
+              "signature": "(note: str, root: Optional[str]=None, intent: Optional[str]=None, source_url: Optional[str]=None, title: Optional[str]=None) -> dict[str, Any]",
+              "doc": "Propose metadata, links, and placement for an existing note without changing it.",
+              "line": 247
+            },
+            {
+              "name": "read_note",
+              "signature": "(path: str, view: NoteView='full') -> dict[str, Any]",
+              "doc": "Read one vault-relative Markdown note through the running Obsidian app.",
+              "line": 263
+            },
+            {
+              "name": "edit_note",
+              "signature": "(path: str, edits: Annotated[list[TextEdit], Field(min_length=1)], expected_sha256: Optional[str]=None, dry_run: bool=True) -> dict[str, Any]",
+              "doc": "Edit a note body with exact replacements and an optimistic concurrency guard.",
+              "line": 273
+            },
+            {
+              "name": "create_note",
+              "signature": "(path: str, content: str='', frontmatter: Optional[dict[str, Any]]=None, auto_id: bool=True, dry_run: bool=True) -> dict[str, Any]",
+              "doc": "Create a note through Obsidian. Defaults to dry-run and refuses overwrites.",
+              "line": 293
+            },
+            {
+              "name": "merge_frontmatter",
+              "signature": "(path: str, patch: dict[str, Any], dry_run: bool=True) -> dict[str, Any]",
+              "doc": "Merge frontmatter through Obsidian. Defaults to dry-run; id and created stay immutable.",
+              "line": 311
+            },
+            {
+              "name": "add_links",
+              "signature": "(path: str, links: list[LinkSpec], dry_run: bool=True) -> dict[str, Any]",
+              "doc": "Turn matching note text into wikilinks through Obsidian. Defaults to dry-run.",
+              "line": 329
+            },
+            {
+              "name": "insert_related",
+              "signature": "(path: str, targets: list[str], dry_run: bool=True) -> dict[str, Any]",
+              "doc": "Add deduplicated wikilinks under a Related heading. Defaults to dry-run.",
+              "line": 342
+            },
+            {
+              "name": "move_note",
+              "signature": "(path: str, destination: str, dry_run: bool=True) -> dict[str, Any]",
+              "doc": "Move a note through Obsidian so incoming links update. Defaults to dry-run.",
+              "line": 360
+            },
+            {
+              "name": "rename_note",
+              "signature": "(path: str, name: str, dry_run: bool=True) -> dict[str, Any]",
+              "doc": "Rename a note through Obsidian so incoming links update. Defaults to dry-run.",
+              "line": 368
+            },
+            {
+              "name": "open_note",
+              "signature": "(path: str) -> dict[str, Any]",
+              "doc": "Open a vault-relative note in the running Obsidian app.",
+              "line": 376
+            },
+            {
+              "name": "create_server",
+              "signature": "(*, host: str='127.0.0.1', port: int=8000) -> FastMCP",
+              "doc": "Build the MCP server for stdio or Streamable HTTP transport.",
+              "line": 381
+            },
+            {
+              "name": "build_parser",
+              "signature": "() -> argparse.ArgumentParser",
+              "doc": null,
+              "line": 421
+            },
+            {
+              "name": "main",
+              "signature": "(argv: Optional[list[str]]=None) -> None",
+              "doc": null,
+              "line": 436
+            }
+          ],
+          "constants": [
+            "REPO_ROOT",
+            "READ_ONLY",
+            "READ_ONLY_NETWORK",
+            "MUTATING",
+            "MUTATING_NETWORK",
+            "NONDESTRUCTIVE_SIDE_EFFECT"
+          ]
+        },
+        {
+          "path": "vault_spider/settings.py",
+          "loc": 161,
+          "summary": "Installation settings, read from an optional ``config.yaml``.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "ConfigError",
+              "bases": [
+                "ValueError"
+              ],
+              "doc": "config.yaml exists but is unusable. Surfaced as `invalid_arguments`.",
+              "line": 53,
+              "fields": [],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "config_path",
+              "signature": "() -> Path",
+              "doc": null,
+              "line": 57
+            },
+            {
+              "name": "reset",
+              "signature": "() -> None",
+              "doc": "Drop the cached config, so the next read re-parses the file.",
+              "line": 65
+            },
+            {
+              "name": "load",
+              "signature": "(refresh: bool=False) -> Dict[str, Dict[str, Any]]",
+              "doc": "Defaults, overlaid with ``config.yaml`` when it exists.",
+              "line": 71
+            },
+            {
+              "name": "vault_root",
+              "signature": "() -> Optional[str]",
+              "doc": null,
+              "line": 118
+            },
+            {
+              "name": "skip_dirs",
+              "signature": "() -> Set[str]",
+              "doc": null,
+              "line": 123
+            },
+            {
+              "name": "ignore_tags",
+              "signature": "() -> List[str]",
+              "doc": null,
+              "line": 127
+            },
+            {
+              "name": "distilled_dir",
+              "signature": "() -> str",
+              "doc": null,
+              "line": 131
+            },
+            {
+              "name": "chroma_path",
+              "signature": "() -> str",
+              "doc": null,
+              "line": 136
+            },
+            {
+              "name": "obsidian_binary",
+              "signature": "() -> Optional[str]",
+              "doc": null,
+              "line": 140
+            },
+            {
+              "name": "obsidian_vault",
+              "signature": "() -> Optional[str]",
+              "doc": null,
+              "line": 145
+            },
+            {
+              "name": "obsidian_manage_updated",
+              "signature": "() -> bool",
+              "doc": null,
+              "line": 150
+            },
+            {
+              "name": "timestamp_policy",
+              "signature": "() -> str",
+              "doc": null,
+              "line": 154
+            }
+          ],
+          "constants": [
+            "REPO_ROOT",
+            "DEFAULT_CONFIG_PATH"
+          ]
+        },
+        {
+          "path": "vault_spider/utils.py",
+          "loc": 93,
+          "summary": "Pure text/hashing helpers shared across the package.",
+          "internal_deps": [],
+          "classes": [],
+          "functions": [
+            {
+              "name": "decimal_to_base",
+              "signature": "(n: int) -> str",
+              "doc": null,
+              "line": 48
+            },
+            {
+              "name": "hash_string",
+              "signature": "(value: str) -> str",
+              "doc": null,
+              "line": 60
+            },
+            {
+              "name": "normalize_no_punct",
+              "signature": "(text: str) -> str",
+              "doc": null,
+              "line": 66
+            },
+            {
+              "name": "tokenize_for_bm25",
+              "signature": "(text: str, stop_words: Iterable[str], stemmer) -> List[str]",
+              "doc": null,
+              "line": 70
+            },
+            {
+              "name": "validate_vault_relative_path",
+              "signature": "(value: str, *, label: str='path') -> str",
+              "doc": "Return a canonical vault-relative POSIX path or raise ``ValueError``.",
+              "line": 75
+            }
+          ],
+          "constants": [
+            "WORD_RE",
+            "DEFAULT_STOP_WORDS"
+          ]
+        }
+      ]
+    },
+    "vault_spider.corpus": {
+      "role": "Reads the vault: loads Markdown notes, parses frontmatter, resolves note identity (ULID or path hash), and splits notes into deterministic heading-based sections.",
+      "modules": [
+        {
+          "path": "vault_spider/corpus/chunker.py",
+          "loc": 145,
+          "summary": "Deterministic section splitting for notes (no LLM).",
+          "internal_deps": [
+            "vault_spider.corpus.loader"
+          ],
+          "classes": [
+            {
+              "name": "Section",
+              "bases": [],
+              "doc": null,
+              "line": 15,
+              "fields": [
+                "chunk_id",
+                "note_id",
+                "heading",
+                "level",
+                "line_start",
+                "line_end",
+                "text"
+              ],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "split_sections",
+              "signature": "(note: Note, max_chars: int=6000, overlap_chars: int=300) -> List[Section]",
+              "doc": null,
+              "line": 104
+            },
+            {
+              "name": "document_text",
+              "signature": "(note: Note) -> str",
+              "doc": null,
+              "line": 133
+            },
+            {
+              "name": "section_text",
+              "signature": "(note: Note, section: Section) -> str",
+              "doc": null,
+              "line": 144
+            }
+          ],
+          "constants": [
+            "HEADING_RE"
+          ]
+        },
+        {
+          "path": "vault_spider/corpus/frontmatter.py",
+          "loc": 66,
+          "summary": "Frontmatter parsing and normalization helpers.",
+          "internal_deps": [],
+          "classes": [],
+          "functions": [
+            {
+              "name": "split_frontmatter",
+              "signature": "(raw_text: str) -> Tuple[Dict[str, Any], str]",
+              "doc": null,
+              "line": 11
+            },
+            {
+              "name": "normalize_tags",
+              "signature": "(value: Any) -> List[str]",
+              "doc": null,
+              "line": 30
+            },
+            {
+              "name": "coerce_datetime",
+              "signature": "(value: Any) -> dt.datetime | None",
+              "doc": null,
+              "line": 42
+            }
+          ]
+        },
+        {
+          "path": "vault_spider/corpus/identity.py",
+          "loc": 24,
+          "summary": "Note identity resolution: frontmatter `id` (ULID) with a path-hash fallback.",
+          "internal_deps": [
+            "vault_spider.utils"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "is_ulid",
+              "signature": "(value: Any) -> bool",
+              "doc": null,
+              "line": 13
+            },
+            {
+              "name": "resolve_note_id",
+              "signature": "(frontmatter: Dict[str, Any], relative_path: str) -> str",
+              "doc": "Frontmatter `id` (any non-empty scalar, stripped) if present, else hash_string(relative_path).",
+              "line": 17
+            }
+          ],
+          "constants": [
+            "ULID_RE"
+          ]
+        },
+        {
+          "path": "vault_spider/corpus/loader.py",
+          "loc": 150,
+          "summary": "Load Markdown notes from the vault into ``Note`` objects.",
+          "internal_deps": [
+            "vault_spider",
+            "vault_spider.corpus.frontmatter",
+            "vault_spider.corpus.identity"
+          ],
+          "classes": [
+            {
+              "name": "Note",
+              "bases": [],
+              "doc": null,
+              "line": 44,
+              "fields": [
+                "note_id",
+                "path",
+                "title",
+                "tags",
+                "created",
+                "updated",
+                "date",
+                "note_type",
+                "body",
+                "raw_text",
+                "content_hash",
+                "provenance"
+              ],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "ignore_tags",
+              "signature": "() -> List[str]",
+              "doc": "Tags that mean \"never index this note\". Configurable: `vault.ignore_tags`.",
+              "line": 18
+            },
+            {
+              "name": "skip_dirs",
+              "signature": "() -> Set[str]",
+              "doc": "Vault-relative directory names that are never indexed.",
+              "line": 29
+            },
+            {
+              "name": "has_ignore_tag",
+              "signature": "(body: str) -> bool",
+              "doc": null,
+              "line": 59
+            },
+            {
+              "name": "has_ignore_frontmatter_tag",
+              "signature": "(tags: List[str]) -> bool",
+              "doc": "True when a frontmatter tag is `ignore`/`secret` (with or without `#`).",
+              "line": 63
+            },
+            {
+              "name": "resolve_note_date",
+              "signature": "(path: Path, frontmatter: Dict[str, Any]) -> str",
+              "doc": null,
+              "line": 69
+            },
+            {
+              "name": "is_skipped_path",
+              "signature": "(relative_path: Path) -> bool",
+              "doc": "True when any parent directory is skipped or hidden.",
+              "line": 91
+            },
+            {
+              "name": "is_excalidraw",
+              "signature": "(relative_path: Path, frontmatter: Dict[str, Any]) -> bool",
+              "doc": null,
+              "line": 104
+            },
+            {
+              "name": "load_notes",
+              "signature": "(root: str) -> List[Note]",
+              "doc": null,
+              "line": 111
+            }
+          ],
+          "constants": [
+            "DATE_FILENAME_RE",
+            "EXCALIDRAW_SUFFIX",
+            "EXCALIDRAW_FRONTMATTER_KEY"
+          ]
+        }
+      ]
+    },
+    "vault_spider.index": {
+      "role": "Builds and maintains the ChromaDB collection (one document entry + N section entries per note, distinguished by the `granularity` metadata field) with failure-safe incremental sync; plus a read-only reader for the Streamlit UI.",
+      "modules": [
+        {
+          "path": "vault_spider/index/reader.py",
+          "loc": 61,
+          "summary": "Read-only Chroma access for Vault Spider.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "DatabaseReader",
+              "bases": [],
+              "doc": null,
+              "line": 10,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes')",
+                  "doc": null,
+                  "line": 11
+                },
+                {
+                  "name": "get_collection_stats",
+                  "signature": "(self) -> Dict[str, object]",
+                  "doc": null,
+                  "line": 24
+                }
+              ]
+            }
+          ],
+          "functions": []
+        },
+        {
+          "path": "vault_spider/index/store.py",
+          "loc": 408,
+          "summary": "Build and maintain a Chroma collection for Markdown notes.",
+          "internal_deps": [
+            "vault_spider.config",
+            "vault_spider.corpus.chunker",
+            "vault_spider.corpus.loader",
+            "vault_spider.llm.openrouter",
+            "vault_spider.utils"
+          ],
+          "classes": [
+            {
+              "name": "IndexStore",
+              "bases": [],
+              "doc": "Maintain the persistent vector store and in-memory BM25 indexes.",
+              "line": 27,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes', bm25_k1: Optional[float]=None, bm25_b: Optional[float]=None, provider: Optional[OpenRouterClient]=None, allow_model_mismatch: bool=False)",
+                  "doc": null,
+                  "line": 30
+                },
+                {
+                  "name": "granularity_data",
+                  "signature": "(self, granularity: str) -> Tuple[List[str], List[str], List[Dict[str, object]], Optional[BM25Okapi]]",
+                  "doc": null,
+                  "line": 144
+                },
+                {
+                  "name": "sync",
+                  "signature": "(self, root: str, reset: bool=False, dry_run: bool=False) -> Dict[str, object]",
+                  "doc": null,
+                  "line": 204
+                },
+                {
+                  "name": "get_collection_stats",
+                  "signature": "(self) -> Dict[str, object]",
+                  "doc": null,
+                  "line": 380
+                }
+              ]
+            }
+          ],
+          "functions": [],
+          "constants": [
+            "GRANULARITIES"
+          ]
+        }
+      ]
+    },
+    "vault_spider.retrieval": {
+      "role": "Hybrid search: BM25 + embeddings fused by pure scoring functions, optional rerank (thorough mode), an on-disk query-embedding cache, and assembly of the retrieval output contract (evidence/citations).",
+      "modules": [
+        {
+          "path": "vault_spider/retrieval/evidence.py",
+          "loc": 82,
+          "summary": "Assemble the retrieval output contract (the citation/evidence JSON).",
+          "internal_deps": [],
+          "classes": [],
+          "functions": [
+            {
+              "name": "build_evidence",
+              "signature": "(result_row: Dict[str, object]) -> Dict[str, object]",
+              "doc": null,
+              "line": 36
+            },
+            {
+              "name": "build_retrieval_output",
+              "signature": "(query: str, mode: str, granularity: str, rows: List[Dict[str, object]]) -> Dict[str, object]",
+              "doc": null,
+              "line": 64
+            }
+          ],
+          "constants": [
+            "EXCERPT_CHARS"
+          ]
+        },
+        {
+          "path": "vault_spider/retrieval/fusion.py",
+          "loc": 84,
+          "summary": "Score-fusion functions for hybrid retrieval (pure, no ranker state).",
+          "internal_deps": [],
+          "classes": [],
+          "functions": [
+            {
+              "name": "min_max_scale",
+              "signature": "(arr: pd.Series) -> pd.Series",
+              "doc": null,
+              "line": 11
+            },
+            {
+              "name": "reciprocal_rank_fusion",
+              "signature": "(semantic_scores: pd.Series, keyword_scores: pd.Series, allowed_ids: Optional[Collection[str]]=None, weight: float=0.5, k: int=60) -> pd.DataFrame",
+              "doc": null,
+              "line": 19
+            },
+            {
+              "name": "zscore_sigmoid_fusion",
+              "signature": "(semantic_scores: pd.Series, keyword_scores: pd.Series, allowed_ids: Optional[Collection[str]]=None, temperature: float=1.0, weight: float=0.5, eps: float=1e-08) -> pd.DataFrame",
+              "doc": null,
+              "line": 55
+            }
+          ]
+        },
+        {
+          "path": "vault_spider/retrieval/query_cache.py",
+          "loc": 68,
+          "summary": "Best-effort on-disk cache for query embeddings.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "QueryEmbeddingCache",
+              "bases": [],
+              "doc": null,
+              "line": 12,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, path: str, model: str, max_entries: int=256)",
+                  "doc": null,
+                  "line": 13
+                },
+                {
+                  "name": "get",
+                  "signature": "(self, query: str) -> Optional[List[float]]",
+                  "doc": null,
+                  "line": 39
+                },
+                {
+                  "name": "put",
+                  "signature": "(self, query: str, embedding: List[float]) -> None",
+                  "doc": null,
+                  "line": 49
+                }
+              ]
+            }
+          ],
+          "functions": []
+        },
+        {
+          "path": "vault_spider/retrieval/searcher.py",
+          "loc": 446,
+          "summary": "Hybrid retrieval over the IndexStore (BM25 + embeddings + optional rerank).",
+          "internal_deps": [
+            "vault_spider.config",
+            "vault_spider.llm.openrouter",
+            "vault_spider.retrieval.fusion",
+            "vault_spider.retrieval.query_cache",
+            "vault_spider.utils"
+          ],
+          "classes": [
+            {
+              "name": "RetrievalResult",
+              "bases": [],
+              "doc": null,
+              "line": 27,
+              "fields": [
+                "query",
+                "mode",
+                "granularity",
+                "rows",
+                "debug_info",
+                "timing_ms"
+              ],
+              "methods": []
+            },
+            {
+              "name": "Searcher",
+              "bases": [],
+              "doc": null,
+              "line": 36,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, store, granularity: str='document', provider: Optional[OpenRouterClient]=None)",
+                  "doc": null,
+                  "line": 37
+                },
+                {
+                  "name": "calculate_keyword_scores",
+                  "signature": "(self, query: str, ids: List[str], documents: List[str], bm25) -> pd.Series",
+                  "doc": null,
+                  "line": 51
+                },
+                {
+                  "name": "calculate_recency_scores",
+                  "signature": "(self, doc_ids: List[str], metadata_by_id: Dict[str, Dict[str, object]], decay_days: float=365.0) -> pd.Series",
+                  "doc": null,
+                  "line": 81
+                },
+                {
+                  "name": "hybrid_search",
+                  "signature": "(self, query: str, *, mode: str='fast', granularity: Optional[str]=None, n_results: Optional[int]=None, semantic_weight: Optional[float]=None, must_include_terms: Optional[List[str]]=None, top_k: Optional[int]=None, combine_strategy: Optional[str]=None, rrf_k: Optional[int]=None, zsigmoid_temperature: Optional[float]=None, recency_boost_enabled: Optional[bool]=None, recency_weight: Optional[float]=None, recency_decay_days: Optional[float]=None, folder: Optional[str]=None, tags: Optional[List[str]]=None, note_type: Optional[str]=None, provenance: Optional[str]=None, since: Optional[str]=None, until: Optional[str]=None) -> RetrievalResult",
+                  "doc": null,
+                  "line": 130
+                }
+              ]
+            }
+          ],
+          "functions": []
+        }
+      ]
+    },
+    "vault_spider.synthesis": {
+      "role": "Turns a retrieval output contract into an LLM-synthesized, cited answer; abstains when the notes lack the answer.",
+      "modules": [
+        {
+          "path": "vault_spider/synthesis/answer.py",
+          "loc": 257,
+          "summary": "Turn a retrieval output contract into an LLM-synthesized answer.",
+          "internal_deps": [
+            "vault_spider.llm.openrouter"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "parse_llm_json",
+              "signature": "(response: str) -> Optional[Dict[str, Any]]",
+              "doc": null,
+              "line": 57
+            },
+            {
+              "name": "generate_prompts",
+              "signature": "(query: str, context: str) -> Tuple[str, str]",
+              "doc": null,
+              "line": 101
+            },
+            {
+              "name": "build_context",
+              "signature": "(retrieval_output: Dict[str, Any], hard_cutoff: int=8) -> Tuple[str, Dict[str, Dict[str, Any]]]",
+              "doc": null,
+              "line": 112
+            },
+            {
+              "name": "synthesize",
+              "signature": "(client: OpenRouterClient, retrieval_output: Dict[str, Any], question: Optional[str]=None, hard_cutoff: int=8, max_tokens: int=4096) -> Dict[str, Any]",
+              "doc": null,
+              "line": 147
+            }
+          ],
+          "constants": [
+            "_CODE_FENCE_RE",
+            "_SYSTEM_PROMPT"
+          ]
+        }
+      ]
+    },
+    "vault_spider.compounding": {
+      "role": "Vault health and write-back: the read-only lint report, saving good answers as distilled notes, and shared frontmatter-backfill mechanics.",
+      "modules": [
+        {
+          "path": "vault_spider/compounding/backfill_core.py",
+          "loc": 221,
+          "summary": "Shared frontmatter backfill resolution and write mechanics.",
+          "internal_deps": [
+            "vault_spider",
+            "vault_spider.corpus.frontmatter"
+          ],
+          "classes": [
+            {
+              "name": "GitContext",
+              "bases": [],
+              "doc": null,
+              "line": 51,
+              "fields": [
+                "inside",
+                "confidence"
+              ],
+              "methods": []
+            },
+            {
+              "name": "Change",
+              "bases": [],
+              "doc": null,
+              "line": 109,
+              "fields": [
+                "field",
+                "value",
+                "source",
+                "confidence",
+                "warnings"
+              ],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "format_timestamp",
+              "signature": "(dt: datetime) -> str",
+              "doc": "Render a timestamp per the configured policy (`timestamps.policy`).",
+              "line": 22
+            },
+            {
+              "name": "iso_to_policy",
+              "signature": "(iso_string: str) -> str",
+              "doc": null,
+              "line": 37
+            },
+            {
+              "name": "now_timestamp",
+              "signature": "() -> str",
+              "doc": null,
+              "line": 41
+            },
+            {
+              "name": "fresh_identity",
+              "signature": "() -> Dict[str, str]",
+              "doc": null,
+              "line": 45
+            },
+            {
+              "name": "git_context",
+              "signature": "(root: Path) -> GitContext",
+              "doc": null,
+              "line": 56
+            },
+            {
+              "name": "git_first_commit",
+              "signature": "(root: Path, rel: str) -> Optional[str]",
+              "doc": null,
+              "line": 96
+            },
+            {
+              "name": "git_last_commit",
+              "signature": "(root: Path, rel: str) -> Optional[str]",
+              "doc": null,
+              "line": 103
+            },
+            {
+              "name": "detect_ambiguity",
+              "signature": "(fm: Dict[str, Any], raw: str, id_counts: Dict[str, int]) -> Optional[Tuple[str, Dict[str, Any]]]",
+              "doc": null,
+              "line": 135
+            },
+            {
+              "name": "resolve_id",
+              "signature": "(fm: Dict[str, Any]) -> Optional[Change]",
+              "doc": null,
+              "line": 154
+            },
+            {
+              "name": "resolve_created",
+              "signature": "(fm: Dict[str, Any], root: Path, rel: str, git: GitContext, stat) -> Optional[Change]",
+              "doc": null,
+              "line": 165
+            },
+            {
+              "name": "resolve_updated",
+              "signature": "(fm: Dict[str, Any], root: Path, rel: str, git: GitContext, stat) -> Optional[Change]",
+              "doc": null,
+              "line": 193
+            },
+            {
+              "name": "apply_changes_to_text",
+              "signature": "(raw: str, changes: List[Change]) -> str",
+              "doc": null,
+              "line": 210
+            }
+          ],
+          "constants": [
+            "ULID_RE",
+            "LEGACY_ID_FIELDS"
+          ]
+        },
+        {
+          "path": "vault_spider/compounding/distill.py",
+          "loc": 148,
+          "summary": "Persist a good synthesis answer as a distilled note in the vault.",
+          "internal_deps": [
+            "vault_spider.compounding.backfill_core",
+            "vault_spider.utils"
+          ],
+          "classes": [
+            {
+              "name": "EmptySlugError",
+              "bases": [
+                "ValueError"
+              ],
+              "doc": "Raised when a question slugifies to an empty string.",
+              "line": 17,
+              "fields": [],
+              "methods": []
+            },
+            {
+              "name": "InvalidSaveDirectoryError",
+              "bases": [
+                "ValueError"
+              ],
+              "doc": "Raised when a distilled-note destination is not inside the vault.",
+              "line": 21,
+              "fields": [],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "slugify",
+              "signature": "(question: str) -> str",
+              "doc": null,
+              "line": 25
+            },
+            {
+              "name": "render_distilled_note",
+              "signature": "(synth_output: Dict[str, Any]) -> str",
+              "doc": null,
+              "line": 65
+            },
+            {
+              "name": "save_distilled_note",
+              "signature": "(synth_output: Dict[str, Any], root: str, save_dir: str='Distilled') -> Dict[str, Any]",
+              "doc": "Attempt to persist ``synth_output`` as a distilled note.",
+              "line": 97
+            }
+          ]
+        },
+        {
+          "path": "vault_spider/compounding/lint.py",
+          "loc": 590,
+          "summary": "Read-only corpus health report (no LLM, no writes, no Chroma dependency).",
+          "internal_deps": [
+            "vault_spider",
+            "vault_spider.compounding.backfill_core",
+            "vault_spider.corpus.frontmatter",
+            "vault_spider.corpus.loader"
+          ],
+          "classes": [
+            {
+              "name": "NoteInfo",
+              "bases": [],
+              "doc": null,
+              "line": 35,
+              "fields": [
+                "path",
+                "stem",
+                "title",
+                "frontmatter",
+                "frontmatter_text",
+                "body",
+                "note_type",
+                "provenance",
+                "aliases",
+                "recency"
+              ],
+              "methods": []
+            },
+            {
+              "name": "_Resolver",
+              "bases": [],
+              "doc": "Resolves a wikilink target the way Obsidian does.",
+              "line": 152,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, notes: List[NoteInfo], attachments: Iterable[str]=())",
+                  "doc": null,
+                  "line": 160
+                },
+                {
+                  "name": "resolve",
+                  "signature": "(self, target: str) -> Optional[str]",
+                  "doc": "Resolve to a note path, or None. Attachments resolve via `resolve_any`.",
+                  "line": 182
+                },
+                {
+                  "name": "resolve_attachment",
+                  "signature": "(self, target: str) -> Optional[str]",
+                  "doc": null,
+                  "line": 192
+                }
+              ]
+            }
+          ],
+          "functions": [
+            {
+              "name": "extract_frontmatter_wikilinks",
+              "signature": "(frontmatter_text: str) -> List[Tuple[str, int]]",
+              "doc": "Return (target, file line) for wikilinks in frontmatter values.",
+              "line": 95
+            },
+            {
+              "name": "extract_wikilinks",
+              "signature": "(body: str) -> List[Tuple[str, int]]",
+              "doc": "Return (target, 1-based line) for wikilinks outside fences and backticks.",
+              "line": 109
+            },
+            {
+              "name": "lint_vault",
+              "signature": "(root: str) -> Dict[str, Any]",
+              "doc": null,
+              "line": 222
+            },
+            {
+              "name": "fix_naive_timestamps",
+              "signature": "(root: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]",
+              "doc": "Normalize `created`/`updated`/`date` to the configured timestamp policy.",
+              "line": 456
+            },
+            {
+              "name": "fix_missing_frontmatter",
+              "signature": "(root: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]",
+              "doc": null,
+              "line": 520
+            }
+          ],
+          "constants": [
+            "WIKILINK_RE",
+            "INLINE_CODE_RE",
+            "TIMESTAMP_FIELDS",
+            "CONTRACT_FIELDS",
+            "EMPTY_NOTE_MAX_CHARS",
+            "CONFLICT_COPY_RE"
+          ]
+        }
+      ]
+    },
+    "vault_spider.enrich": {
+      "role": "App-agnostic enrichment planner: retrieves a note's neighborhood and proposes title/frontmatter/links/placement as JSON. Never mutates files or the index; plans are applied via the mutation commands.",
+      "modules": [
+        {
+          "path": "vault_spider/enrich/planner.py",
+          "loc": 461,
+          "summary": "App-agnostic enrichment planner.",
+          "internal_deps": [
+            "vault_spider.retrieval.searcher",
+            "vault_spider.synthesis.answer",
+            "vault_spider.utils"
+          ],
+          "classes": [
+            {
+              "name": "EnrichInput",
+              "bases": [],
+              "doc": null,
+              "line": 61,
+              "fields": [
+                "body",
+                "title",
+                "path",
+                "existing_frontmatter",
+                "given_title",
+                "intent",
+                "source_url"
+              ],
+              "methods": []
+            },
+            {
+              "name": "_NeighborIndex",
+              "bases": [],
+              "doc": null,
+              "line": 244,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, neighbors: List[Dict[str, Any]])",
+                  "doc": null,
+                  "line": 245
+                },
+                {
+                  "name": "resolve",
+                  "signature": "(self, target: str) -> Optional[str]",
+                  "doc": null,
+                  "line": 255
+                }
+              ]
+            }
+          ],
+          "functions": [
+            {
+              "name": "gather_neighbors",
+              "signature": "(store, provider, inp: EnrichInput, per_query: int=NEIGHBOR_RESULTS_PER_QUERY, keep: int=NEIGHBOR_LIMIT)",
+              "doc": null,
+              "line": 93
+            },
+            {
+              "name": "build_prompts",
+              "signature": "(inp: EnrichInput, neighbors: List[Dict[str, Any]])",
+              "doc": null,
+              "line": 221
+            },
+            {
+              "name": "postprocess",
+              "signature": "(parsed: Optional[Dict[str, Any]], inp: EnrichInput, neighbors: List[Dict[str, Any]]) -> Dict[str, Any]",
+              "doc": null,
+              "line": 293
+            },
+            {
+              "name": "plan",
+              "signature": "(inp: EnrichInput, store, provider) -> Dict[str, Any]",
+              "doc": null,
+              "line": 456
+            }
+          ],
+          "constants": [
+            "ALLOWED_TYPES",
+            "NEIGHBOR_RESULTS_PER_QUERY",
+            "NEIGHBOR_LIMIT",
+            "NEIGHBOR_EXCERPT_CHARS",
+            "NEIGHBOR_RRF_K",
+            "_SYSTEM_PROMPT"
+          ]
+        }
+      ]
+    },
+    "vault_spider.obsidian": {
+      "role": "The write path: contract-enforcing note mutations executed through the official Obsidian CLI (app must be running, macOS only), plus the macOS vault registry bridge. Mutation code never writes vault files directly.",
+      "modules": [
+        {
+          "path": "vault_spider/obsidian/__init__.py",
+          "loc": 1,
+          "summary": "Safe Obsidian vault mutations, executed through the running Obsidian app.",
+          "internal_deps": [],
+          "classes": [],
+          "functions": []
+        },
+        {
+          "path": "vault_spider/obsidian/backend.py",
+          "loc": 162,
+          "summary": "Invocation layer for the official Obsidian CLI (the mutation backend).",
+          "internal_deps": [
+            "vault_spider.envelope"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "configure",
+              "signature": "(binary: Optional[str]=None, vault: Optional[str]=None, manage_updated: bool=False) -> None",
+              "doc": null,
+              "line": 32
+            },
+            {
+              "name": "manage_updated",
+              "signature": "() -> bool",
+              "doc": null,
+              "line": 40
+            },
+            {
+              "name": "run",
+              "signature": "(args: List[str], timeout: float=20.0) -> str",
+              "doc": null,
+              "line": 59
+            },
+            {
+              "name": "read_note",
+              "signature": "(path: str) -> str",
+              "doc": null,
+              "line": 92
+            },
+            {
+              "name": "read_note_snapshot",
+              "signature": "(path: str) -> str",
+              "doc": "Read exact note text through eval so terminal whitespace survives CLI formatting.",
+              "line": 96
+            },
+            {
+              "name": "note_exists",
+              "signature": "(path: str) -> bool",
+              "doc": null,
+              "line": 119
+            },
+            {
+              "name": "write_body",
+              "signature": "(path: str, content: str) -> None",
+              "doc": null,
+              "line": 129
+            },
+            {
+              "name": "compare_and_write_note",
+              "signature": "(path: str, expected_content: str, content: str) -> None",
+              "doc": "Atomically refuse a write unless Obsidian still has the expected note text.",
+              "line": 140
+            },
+            {
+              "name": "escape_for_backend",
+              "signature": "(text: str) -> str",
+              "doc": null,
+              "line": 159
+            }
+          ],
+          "constants": [
+            "BINARY_CANDIDATES",
+            "NOISE_RE"
+          ]
+        },
+        {
+          "path": "vault_spider/obsidian/notes.py",
+          "loc": 753,
+          "summary": "Note mutation commands: create, read, patch, link, move, rename, open.",
+          "internal_deps": [
+            "vault_spider.compounding.backfill_core",
+            "vault_spider.compounding.lint",
+            "vault_spider.corpus.chunker",
+            "vault_spider.envelope",
+            "vault_spider.obsidian",
+            "vault_spider.utils"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "split_note",
+              "signature": "(raw: str) -> Tuple[str, str]",
+              "doc": "Return (frontmatter_prefix_including_fence_and_newline, body).",
+              "line": 57
+            },
+            {
+              "name": "parse_frontmatter",
+              "signature": "(raw: str) -> Tuple[Dict[str, Any], List[str]]",
+              "doc": "Parse simple `key: value` lines and block/inline lists. Returns (fm, warnings).",
+              "line": 69
+            },
+            {
+              "name": "render_frontmatter",
+              "signature": "(fields: Dict[str, Any]) -> str",
+              "doc": null,
+              "line": 116
+            },
+            {
+              "name": "cmd_create_note",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 193
+            },
+            {
+              "name": "cmd_read_note",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 230
+            },
+            {
+              "name": "cmd_edit_note",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": "Apply exact body text replacements guarded by the full note content hash.",
+              "line": 392
+            },
+            {
+              "name": "cmd_merge_frontmatter",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 446
+            },
+            {
+              "name": "cmd_add_links",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 532
+            },
+            {
+              "name": "cmd_insert_related",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 608
+            },
+            {
+              "name": "cmd_move_note",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 711
+            },
+            {
+              "name": "cmd_rename_note",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 724
+            },
+            {
+              "name": "cmd_open_note",
+              "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
+              "doc": null,
+              "line": 738
+            }
+          ],
+          "constants": [
+            "CONTRACT_IMMUTABLE",
+            "_PATCH_EMPTY_REJECT",
+            "HANDLERS"
+          ]
+        },
+        {
+          "path": "vault_spider/obsidian/registry.py",
+          "loc": 149,
+          "summary": "Read Obsidian's macOS vault registry.",
+          "internal_deps": [
+            "vault_spider.envelope"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "registry_path",
+              "signature": "() -> Path",
+              "doc": null,
+              "line": 12
+            },
+            {
+              "name": "registered_vaults",
+              "signature": "() -> list[dict]",
+              "doc": null,
+              "line": 16
+            },
+            {
+              "name": "active_vault_path",
+              "signature": "() -> str",
+              "doc": null,
+              "line": 35
+            },
+            {
+              "name": "vault_name_for_root",
+              "signature": "(root: str) -> str",
+              "doc": null,
+              "line": 62
+            },
+            {
+              "name": "vault_path_for_name",
+              "signature": "(name: str) -> str",
+              "doc": null,
+              "line": 99
+            },
+            {
+              "name": "resolve_mutation_vault",
+              "signature": "(explicit: Optional[str], configured_vault: Optional[str], configured_root: Optional[str]) -> Optional[str]",
+              "doc": null,
+              "line": 117
+            }
+          ]
+        }
+      ]
+    },
+    "vault_spider.evaluation": {
+      "role": "Golden-dataset benchmark: strict label validation against the corpus, then scored retrieval (nDCG@k, evidence recall, complete@k, MRR) and optional LLM-judged synthesis runs. Always run against a dedicated --chroma-path.",
+      "modules": [
+        {
+          "path": "vault_spider/evaluation/__init__.py",
+          "loc": 1,
+          "summary": "Golden-dataset evaluation: label validation and scored benchmark runs.",
+          "internal_deps": [],
+          "classes": [],
+          "functions": []
+        },
+        {
+          "path": "vault_spider/evaluation/dataset.py",
+          "loc": 344,
+          "summary": "Load and validate a golden evaluation dataset (manifest, queries, corpus labels).",
+          "internal_deps": [
+            "vault_spider.corpus.chunker",
+            "vault_spider.corpus.loader"
+          ],
+          "classes": [
+            {
+              "name": "DatasetError",
+              "bases": [
+                "ValueError"
+              ],
+              "doc": "The dataset cannot be loaded at all (missing or unparseable files).",
+              "line": 52,
+              "fields": [],
+              "methods": []
+            },
+            {
+              "name": "DatasetNotFoundError",
+              "bases": [
+                "DatasetError"
+              ],
+              "doc": "The --dataset path (or its dataset.yaml) does not exist.",
+              "line": 56,
+              "fields": [],
+              "methods": []
+            },
+            {
+              "name": "EvalDataset",
+              "bases": [],
+              "doc": null,
+              "line": 61,
+              "fields": [
+                "path",
+                "manifest",
+                "corpus_root",
+                "queries"
+              ],
+              "methods": [
+                {
+                  "name": "name",
+                  "signature": "(self) -> str",
+                  "doc": null,
+                  "line": 68
+                }
+              ]
+            },
+            {
+              "name": "ValidationReport",
+              "bases": [],
+              "doc": null,
+              "line": 73,
+              "fields": [
+                "errors",
+                "warnings",
+                "stats"
+              ],
+              "methods": [
+                {
+                  "name": "valid",
+                  "signature": "(self) -> bool",
+                  "doc": null,
+                  "line": 79
+                }
+              ]
+            },
+            {
+              "name": "CorpusNote",
+              "bases": [],
+              "doc": null,
+              "line": 133,
+              "fields": [
+                "note_id",
+                "headings"
+              ],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "load_dataset",
+              "signature": "(dataset_arg: str) -> EvalDataset",
+              "doc": "Parse the manifest and query file strictly; semantic checks live in validate().",
+              "line": 83
+            },
+            {
+              "name": "corpus_labels",
+              "signature": "(corpus_root: Path) -> Dict[str, CorpusNote]",
+              "doc": "Corpus notes exactly as sync sees them, keyed by vault-relative path.",
+              "line": 138
+            },
+            {
+              "name": "validate",
+              "signature": "(dataset: EvalDataset) -> ValidationReport",
+              "doc": "Semantic validation: labels resolve, contracts hold, counts match.",
+              "line": 225
+            }
+          ],
+          "constants": [
+            "EVAL_SCHEMA_VERSION",
+            "_MANIFEST_REQUIRED",
+            "_MANIFEST_KNOWN",
+            "_QUERY_REQUIRED",
+            "_EVIDENCE_REQUIRED",
+            "_FILTER_KEYS",
+            "_GRADES",
+            "_GROUP_MIN_GRADE"
+          ]
+        },
+        {
+          "path": "vault_spider/evaluation/runner.py",
+          "loc": 426,
+          "summary": "Execute a validated golden dataset against the index and score the results.",
+          "internal_deps": [
+            "vault_spider.corpus.loader",
+            "vault_spider.envelope",
+            "vault_spider.evaluation.dataset",
+            "vault_spider.retrieval.evidence",
+            "vault_spider.retrieval.searcher",
+            "vault_spider.synthesis.answer"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "score_retrieval",
+              "signature": "(row: Dict[str, Any], candidates: List[Dict[str, Any]], k: int, note_level: bool=False) -> Dict[str, Any]",
+              "doc": null,
+              "line": 63
+            },
+            {
+              "name": "score_synthesis",
+              "signature": "(row: Dict[str, Any], synth: Dict[str, Any], provider, note_level: bool=False) -> Dict[str, Any]",
+              "doc": null,
+              "line": 158
+            },
+            {
+              "name": "run_eval",
+              "signature": "(dataset: EvalDataset, store, provider, *, stage: str='retrieval', mode: str='thorough', granularity: str='mixed', n: int=10, k: int=5, n_context: int=8, only: Optional[List[str]]=None) -> Dict[str, Any]",
+              "doc": null,
+              "line": 291
+            }
+          ],
+          "constants": [
+            "RESULTS_SCHEMA_VERSION",
+            "_JUDGE_SYSTEM_PROMPT"
+          ]
+        }
+      ]
+    },
+    "vault_spider.llm": {
+      "role": "OpenRouter client: embeddings, reranking, and chat completions. The only module that talks to the LLM provider.",
+      "modules": [
+        {
+          "path": "vault_spider/llm/openrouter.py",
+          "loc": 263,
+          "summary": "OpenRouter-backed embedding, rerank, and chat helpers.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "OpenRouterError",
+              "bases": [
+                "RuntimeError"
+              ],
+              "doc": "Raised when an OpenRouter request fails.",
+              "line": 17,
+              "fields": [],
+              "methods": []
+            },
+            {
+              "name": "OpenRouterClient",
+              "bases": [],
+              "doc": null,
+              "line": 21,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, api_key: str, embedding_model: str, chat_model: str, rerank_model: Optional[str]=None, base_url: str='https://openrouter.ai/api/v1', http_referer: Optional[str]=None, app_title: Optional[str]=None, timeout_seconds: float=60.0)",
+                  "doc": null,
+                  "line": 22
+                },
+                {
+                  "name": "from_env",
+                  "signature": "(cls) -> 'OpenRouterClient'",
+                  "doc": null,
+                  "line": 45
+                },
+                {
+                  "name": "embed_texts",
+                  "signature": "(self, texts: List[str], batch_size: int=32) -> List[List[float]]",
+                  "doc": null,
+                  "line": 115
+                },
+                {
+                  "name": "rerank",
+                  "signature": "(self, query: str, documents: List[str], ids: List[str]) -> pd.DataFrame",
+                  "doc": null,
+                  "line": 168
+                },
+                {
+                  "name": "chat",
+                  "signature": "(self, system_prompt: str, user_prompt: str, temperature: float=0.2, max_tokens: int=1024, model: Optional[str]=None) -> str",
+                  "doc": null,
+                  "line": 224
+                }
+              ]
+            }
+          ],
+          "functions": []
+        }
+      ]
+    },
+    "scripts": {
+      "role": "Operational surfaces: the Streamlit UI (app/search/llm/db pages), launchd periodic-sync installer and runner, and the Obsidian-side setup script.",
+      "modules": [
+        {
+          "path": "scripts/periodic_maintenance.py",
+          "loc": 177,
+          "summary": "Run serialized Vault Spider maintenance for launchd.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "MaintenanceError",
+              "bases": [
+                "RuntimeError"
+              ],
+              "doc": null,
+              "line": 25,
+              "fields": [],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "main",
+              "signature": "(argv: Optional[List[str]]=None) -> int",
+              "doc": null,
+              "line": 121
+            }
+          ]
+        },
+        {
+          "path": "scripts/setup_launchd.py",
+          "loc": 318,
+          "summary": "Install Vault Spider's periodic sync as a macOS per-user LaunchAgent.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "SetupError",
+              "bases": [
+                "RuntimeError"
+              ],
+              "doc": null,
+              "line": 28,
+              "fields": [],
+              "methods": []
+            },
+            {
+              "name": "JsonArgumentParser",
+              "bases": [
+                "argparse.ArgumentParser"
+              ],
+              "doc": null,
+              "line": 32,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "error",
+                  "signature": "(self, message: str) -> NoReturn",
+                  "doc": null,
+                  "line": 33
+                }
+              ]
+            }
+          ],
+          "functions": [
+            {
+              "name": "build_plist",
+              "signature": "(repo: Path, uv_binary: Path, home: Path, interval_minutes: int, with_lint: bool) -> Dict[str, Any]",
+              "doc": null,
+              "line": 68
+            },
+            {
+              "name": "build_plan",
+              "signature": "(repo: Path, uv_binary: Path, home: Path, interval_minutes: int, with_lint: bool, uninstall: bool) -> Dict[str, Any]",
+              "doc": null,
+              "line": 119
+            },
+            {
+              "name": "apply_install",
+              "signature": "(plist: Dict[str, Any], home: Path) -> Dict[str, Any]",
+              "doc": null,
+              "line": 200
+            },
+            {
+              "name": "apply_uninstall",
+              "signature": "(home: Path) -> Dict[str, Any]",
+              "doc": null,
+              "line": 235
+            },
+            {
+              "name": "main",
+              "signature": "(argv: Optional[List[str]]=None) -> int",
+              "doc": null,
+              "line": 271
+            }
+          ],
+          "constants": [
+            "LABEL",
+            "DEFAULT_INTERVAL_MINUTES",
+            "MIN_INTERVAL_MINUTES"
+          ]
+        },
+        {
+          "path": "scripts/setup_obsidian.py",
+          "loc": 377,
+          "summary": "Install and configure the Obsidian-side requirements for Vault Spider.",
+          "internal_deps": [
+            "vault_spider",
+            "vault_spider.obsidian"
+          ],
+          "classes": [
+            {
+              "name": "SetupError",
+              "bases": [
+                "RuntimeError"
+              ],
+              "doc": null,
+              "line": 52,
+              "fields": [],
+              "methods": []
+            },
+            {
+              "name": "JsonArgumentParser",
+              "bases": [
+                "argparse.ArgumentParser"
+              ],
+              "doc": null,
+              "line": 56,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "error",
+                  "signature": "(self, message: str) -> NoReturn",
+                  "doc": null,
+                  "line": 57
+                }
+              ]
+            }
+          ],
+          "functions": [
+            {
+              "name": "build_plan",
+              "signature": "(root: Path, min_update_minutes: int | None=None) -> dict[str, Any]",
+              "doc": null,
+              "line": 131
+            },
+            {
+              "name": "apply_setup",
+              "signature": "(root: Path, vault: str | None, binary: str | None, configure_only: bool, min_update_minutes: int | None) -> dict[str, Any]",
+              "doc": null,
+              "line": 238
+            },
+            {
+              "name": "main",
+              "signature": "(argv: list[str] | None=None) -> int",
+              "doc": null,
+              "line": 332
+            }
+          ],
+          "constants": [
+            "PLUGIN_ID",
+            "PLUGIN_REPO",
+            "PROPERTY_TYPES",
+            "APP_SETTINGS",
+            "CORE_PLUGINS",
+            "CLI_CANDIDATES"
+          ]
+        },
+        {
+          "path": "scripts/streamlit_app.py",
+          "loc": 8,
+          "summary": null,
+          "internal_deps": [],
+          "classes": [],
+          "functions": []
+        },
+        {
+          "path": "scripts/streamlit_db.py",
+          "loc": 117,
+          "summary": null,
+          "internal_deps": [
+            "vault_spider",
+            "vault_spider.index.reader"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "get_reader",
+              "signature": "() -> Optional[DatabaseReader]",
+              "doc": null,
+              "line": 12
+            },
+            {
+              "name": "show_document",
+              "signature": "(reader: DatabaseReader, doc_id: str, scores: Optional[Dict[str, str]]=None, index: int=0)",
+              "doc": null,
+              "line": 20
+            },
+            {
+              "name": "main",
+              "signature": "()",
+              "doc": null,
+              "line": 56
+            }
+          ]
+        },
+        {
+          "path": "scripts/streamlit_llm.py",
+          "loc": 112,
+          "summary": null,
+          "internal_deps": [
+            "vault_spider",
+            "vault_spider.index.reader",
+            "vault_spider.synthesis.answer"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "transform_citations_to_links",
+              "signature": "(answer: str, key_to_docid: Dict[str, str], base_url: str='streamlit_db') -> str",
+              "doc": null,
+              "line": 22
+            },
+            {
+              "name": "show_document_dialog",
+              "signature": "(doc_id: str, citation_key: str)",
+              "doc": null,
+              "line": 40
+            },
+            {
+              "name": "write_response",
+              "signature": "(synth: Dict[str, object])",
+              "doc": null,
+              "line": 59
+            }
+          ]
+        },
+        {
+          "path": "scripts/streamlit_models.py",
+          "loc": 34,
+          "summary": "Cached providers and search resources for Streamlit pages.",
+          "internal_deps": [
+            "vault_spider",
+            "vault_spider.index.store",
+            "vault_spider.llm.openrouter",
+            "vault_spider.retrieval.searcher"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "get_openrouter_client",
+              "signature": "() -> OpenRouterClient",
+              "doc": null,
+              "line": 16
+            },
+            {
+              "name": "get_store_and_searcher",
+              "signature": "() -> Tuple[Optional[IndexStore], Optional[Searcher], Optional[str]]",
+              "doc": null,
+              "line": 21
+            }
+          ]
+        },
+        {
+          "path": "scripts/streamlit_search.py",
+          "loc": 205,
+          "summary": "Streamlit interface for searching vault notes.",
+          "internal_deps": [
+            "vault_spider.config",
+            "vault_spider.retrieval.evidence"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "display_candidate",
+              "signature": "(index: int, candidate: Dict[str, object])",
+              "doc": null,
+              "line": 48
+            },
+            {
+              "name": "main",
+              "signature": "()",
+              "doc": null,
+              "line": 89
+            }
+          ]
+        }
+      ]
+    },
+    "tools": {
+      "role": "One-off migration tools: backfill id/created/updated and backfill provenance frontmatter onto existing vaults (dry-run by default).",
+      "modules": [
+        {
+          "path": "tools/backfill.py",
+          "loc": 233,
+          "summary": "Backfill id / created / updated frontmatter onto existing vault notes.",
+          "internal_deps": [
+            "vault_spider.compounding.backfill_core",
+            "vault_spider.corpus.frontmatter",
+            "vault_spider.corpus.loader"
+          ],
+          "classes": [
+            {
+              "name": "NoteRecord",
+              "bases": [],
+              "doc": null,
+              "line": 69,
+              "fields": [
+                "path",
+                "rel",
+                "raw",
+                "fm"
+              ],
+              "methods": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "build_report",
+              "signature": "(root: Path, include_glob: str, apply: bool) -> Dict[str, Any]",
+              "doc": null,
+              "line": 76
+            },
+            {
+              "name": "print_summary",
+              "signature": "(report: Dict[str, Any]) -> None",
+              "doc": null,
+              "line": 166
+            },
+            {
+              "name": "main",
+              "signature": "(argv: Optional[List[str]]=None) -> int",
+              "doc": null,
+              "line": 202
+            }
+          ],
+          "constants": [
+            "CONTRACT_ORDER"
+          ]
+        },
+        {
+          "path": "tools/backfill_provenance.py",
+          "loc": 126,
+          "summary": "Backfill `provenance` frontmatter onto existing vault notes.",
+          "internal_deps": [
+            "vault_spider.corpus.frontmatter",
+            "vault_spider.corpus.loader"
+          ],
+          "classes": [],
+          "functions": [
+            {
+              "name": "derive_provenance",
+              "signature": "(frontmatter: Dict) -> str",
+              "doc": null,
+              "line": 37
+            },
+            {
+              "name": "stamp",
+              "signature": "(raw: str, value: str) -> str",
+              "doc": "Insert `provenance: value` as the last frontmatter line. Body untouched.",
+              "line": 48
+            },
+            {
+              "name": "main",
+              "signature": "() -> int",
+              "doc": null,
+              "line": 61
+            }
+          ],
+          "constants": [
+            "VALUES"
+          ]
+        }
+      ]
+    }
+  },
+  "tests": {
+    "runner": "uv run pytest",
+    "files": [
+      {
+        "path": "tests/conftest.py",
+        "loc": 179,
+        "test_count": 0,
+        "summary": "Shared pytest fixtures: a network-free FakeProvider and a tiny vault.",
+        "covers": [
+          "vault_spider",
+          "vault_spider.obsidian"
+        ]
+      },
+      {
+        "path": "tests/test_backfill.py",
+        "loc": 188,
+        "test_count": 14,
+        "summary": "Tests for tools/backfill.py.",
+        "covers": []
+      },
+      {
+        "path": "tests/test_chunker.py",
+        "loc": 136,
+        "test_count": 9,
+        "summary": "Tests for vault_spider.corpus.chunker.split_sections.",
+        "covers": [
+          "vault_spider.corpus.chunker",
+          "vault_spider.corpus.loader"
+        ]
+      },
+      {
+        "path": "tests/test_cli.py",
+        "loc": 321,
+        "test_count": 22,
+        "summary": "Tests for the vault-spider CLI, driven in-process with a fake provider.",
+        "covers": [
+          "vault_spider",
+          "vault_spider.obsidian"
+        ]
+      },
+      {
+        "path": "tests/test_distill.py",
+        "loc": 108,
+        "test_count": 12,
+        "summary": "Tests for vault_spider.compounding.distill (synthesize --save).",
+        "covers": [
+          "vault_spider.compounding",
+          "vault_spider.corpus.frontmatter"
+        ]
+      },
+      {
+        "path": "tests/test_enrich.py",
+        "loc": 302,
+        "test_count": 16,
+        "summary": "Tests for vault_spider.enrich.planner.",
+        "covers": [
+          "vault_spider.enrich.planner",
+          "vault_spider.index.store"
+        ]
+      },
+      {
+        "path": "tests/test_eval.py",
+        "loc": 574,
+        "test_count": 30,
+        "summary": "Tests for the eval commands: dataset validation, scoring, and the run loop.",
+        "covers": [
+          "vault_spider",
+          "vault_spider.evaluation.dataset",
+          "vault_spider.evaluation.runner"
+        ]
+      },
+      {
+        "path": "tests/test_evidence.py",
+        "loc": 112,
+        "test_count": 7,
+        "summary": "Tests for vault_spider.retrieval.evidence and the mixed-mode per-note cap.",
+        "covers": [
+          "vault_spider.index.store",
+          "vault_spider.retrieval.evidence",
+          "vault_spider.retrieval.searcher"
+        ]
+      },
+      {
+        "path": "tests/test_filters.py",
+        "loc": 89,
+        "test_count": 7,
+        "summary": null,
+        "covers": [
+          "vault_spider",
+          "vault_spider.index.store",
+          "vault_spider.retrieval.searcher"
+        ]
+      },
+      {
+        "path": "tests/test_frontmatter.py",
+        "loc": 70,
+        "test_count": 12,
+        "summary": "Tests for vault_spider.corpus.frontmatter (parsing + normalization).",
+        "covers": [
+          "vault_spider.corpus.frontmatter"
+        ]
+      },
+      {
+        "path": "tests/test_fusion.py",
+        "loc": 55,
+        "test_count": 4,
+        "summary": "Golden-value tests for vault_spider.retrieval.fusion.",
+        "covers": [
+          "vault_spider.retrieval.fusion"
+        ]
+      },
+      {
+        "path": "tests/test_identity.py",
+        "loc": 39,
+        "test_count": 9,
+        "summary": "Tests for vault_spider.corpus.identity.",
+        "covers": [
+          "vault_spider.corpus.identity",
+          "vault_spider.utils"
+        ]
+      },
+      {
+        "path": "tests/test_lint.py",
+        "loc": 415,
+        "test_count": 35,
+        "summary": "Tests for vault_spider.compounding.lint.",
+        "covers": [
+          "vault_spider",
+          "vault_spider.compounding.backfill_core",
+          "vault_spider.compounding.lint",
+          "vault_spider.corpus.frontmatter"
+        ]
+      },
+      {
+        "path": "tests/test_loader.py",
+        "loc": 161,
+        "test_count": 21,
+        "summary": "Tests for vault_spider.corpus.loader (Note loading, date resolution, doc text).",
+        "covers": [
+          "vault_spider.corpus.chunker",
+          "vault_spider.corpus.loader"
+        ]
+      },
+      {
+        "path": "tests/test_mcp_server.py",
+        "loc": 233,
+        "test_count": 7,
+        "summary": "Network-free tests for the MCP adapter and generated tool contracts.",
+        "covers": [
+          "vault_spider"
+        ]
+      },
+      {
+        "path": "tests/test_obsidian_notes.py",
+        "loc": 890,
+        "test_count": 56,
+        "summary": "Tests for the note-mutation commands (no Obsidian; the backend is faked).",
+        "covers": [
+          "vault_spider",
+          "vault_spider.envelope",
+          "vault_spider.obsidian"
+        ]
+      },
+      {
+        "path": "tests/test_openrouter.py",
+        "loc": 123,
+        "test_count": 9,
+        "summary": "Tests for vault_spider.llm.openrouter request/response hardening (no network).",
+        "covers": [
+          "vault_spider.llm",
+          "vault_spider.llm.openrouter"
+        ]
+      },
+      {
+        "path": "tests/test_periodic_maintenance.py",
+        "loc": 102,
+        "test_count": 3,
+        "summary": "Tests for the launchd maintenance runner without a real vault or provider.",
+        "covers": []
+      },
+      {
+        "path": "tests/test_provenance.py",
+        "loc": 166,
+        "test_count": 13,
+        "summary": "Tests for the provenance field: loading, filtering, synthesis framing,",
+        "covers": [
+          "vault_spider",
+          "vault_spider.compounding.distill",
+          "vault_spider.compounding.lint",
+          "vault_spider.corpus.loader",
+          "vault_spider.synthesis.answer"
+        ]
+      },
+      {
+        "path": "tests/test_query_cache.py",
+        "loc": 62,
+        "test_count": 5,
+        "summary": null,
+        "covers": [
+          "vault_spider.index.store",
+          "vault_spider.retrieval.query_cache",
+          "vault_spider.retrieval.searcher"
+        ]
+      },
+      {
+        "path": "tests/test_registry.py",
+        "loc": 196,
+        "test_count": 15,
+        "summary": "Tests for Obsidian registry parsing and read-path root fallback.",
+        "covers": [
+          "vault_spider",
+          "vault_spider.envelope",
+          "vault_spider.obsidian"
+        ]
+      },
+      {
+        "path": "tests/test_search_params.py",
+        "loc": 35,
+        "test_count": 3,
+        "summary": null,
+        "covers": [
+          "vault_spider.config"
+        ]
+      },
+      {
+        "path": "tests/test_searcher_unit.py",
+        "loc": 32,
+        "test_count": 2,
+        "summary": null,
+        "covers": [
+          "vault_spider.index.store",
+          "vault_spider.retrieval.searcher",
+          "vault_spider.utils"
+        ]
+      },
+      {
+        "path": "tests/test_settings.py",
+        "loc": 151,
+        "test_count": 15,
+        "summary": "Tests for vault_spider.settings (the optional config.yaml).",
+        "covers": [
+          "vault_spider",
+          "vault_spider.corpus.loader"
+        ]
+      },
+      {
+        "path": "tests/test_setup_launchd.py",
+        "loc": 131,
+        "test_count": 7,
+        "summary": "Tests for the launchd plist renderer; no real service is loaded.",
+        "covers": []
+      },
+      {
+        "path": "tests/test_setup_obsidian.py",
+        "loc": 226,
+        "test_count": 9,
+        "summary": "Tests for scripts/setup_obsidian.py (no network and no real Obsidian).",
+        "covers": []
+      },
+      {
+        "path": "tests/test_store_sync.py",
+        "loc": 249,
+        "test_count": 12,
+        "summary": "Tests for vault_spider.index.store.IndexStore.sync against a real Chroma db.",
+        "covers": [
+          "vault_spider.index.store",
+          "vault_spider.llm.openrouter"
+        ]
+      },
+      {
+        "path": "tests/test_synthesis.py",
+        "loc": 181,
+        "test_count": 15,
+        "summary": "Tests for vault_spider.synthesis.answer.",
+        "covers": [
+          "vault_spider.synthesis.answer"
+        ]
+      },
+      {
+        "path": "tests/test_utils.py",
+        "loc": 80,
+        "test_count": 14,
+        "summary": "Tests for pure helpers in vault_spider.utils.",
+        "covers": [
+          "vault_spider.utils"
+        ]
+      },
+      {
+        "path": "tests/test_wrapper.py",
+        "loc": 101,
+        "test_count": 2,
+        "summary": "Smoke tests for the stable vault-spider wrapper entrypoint.",
+        "covers": []
+      }
+    ]
+  },
+  "other_files": [
+    {
+      "path": "AGENTS.md",
+      "role": "Canonical project instructions (CLAUDE.md delegates here)."
+    },
+    {
+      "path": "README.md",
+      "role": "User-facing overview and install/usage guide."
+    },
+    {
+      "path": "bin/vault-spider",
+      "role": "Stable CLI wrapper; locates the project and delegates to `uv run vault-spider`."
+    },
+    {
+      "path": "bin/vault-spider-mcp",
+      "role": "Wrapper launching the MCP server."
+    },
+    {
+      "path": "config.yaml.example",
+      "role": "Template for installation settings (vault root, folders, tag rules, timestamps policy). Real config.yaml is gitignored."
+    },
+    {
+      "path": ".env.example",
+      "role": "Template for secrets: OpenRouter key and model names."
+    },
+    {
+      "path": "pyproject.toml",
+      "role": "Package metadata and dependencies (uv-managed)."
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "role": "CI workflow."
+    },
+    {
+      "path": "docs/launchd.md",
+      "role": "Periodic-sync LaunchAgent: interval, logs, status, uninstall."
+    },
+    {
+      "path": "docs/obsidian-setup.md",
+      "role": "Obsidian-side setup for the mutation backend."
+    },
+    {
+      "path": "skills/vault/SKILL.md",
+      "role": "Agent skill for operating the vault (plus references/ for capture, commands, eval/server)."
+    },
+    {
+      "path": "eval/",
+      "role": "Committed golden dataset #1: public_vault corpus, golden_queries.jsonl, dataset.yaml, eval-config.yaml."
+    },
+    {
+      "path": "eval-realistic/",
+      "role": "Committed golden dataset #2: larger realistic corpus with the same layout."
+    },
+    {
+      "path": "tests/fixtures/notes/",
+      "role": "Small fixture vault used by the pytest suite."
+    },
+    {
+      "path": "chroma_db/ (gitignored)",
+      "role": "Local Chroma index of the live vault."
+    }
+  ]
+}
