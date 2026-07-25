@@ -5,23 +5,25 @@ from __future__ import annotations
 import difflib
 import os
 import re
-from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from vault_spider import settings
 from vault_spider.corpus.frontmatter import coerce_datetime, normalize_tags, split_frontmatter
+from vault_spider.corpus.links import INLINE_CODE_RE, WIKILINK_RE, build_link_graph
 from vault_spider.corpus.loader import (
-    EXCALIDRAW_SUFFIX,
     has_ignore_frontmatter_tag,
     has_ignore_tag,
     is_excalidraw,
-    is_skipped_path,
+)
+from vault_spider.corpus.vault import (
+    VaultNote,
+    iter_attachment_files,
+    iter_note_files,
+    load_vault_notes,
 )
 
-WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
-INLINE_CODE_RE = re.compile(r"`[^`]*`")
 TIMESTAMP_FIELDS = ("created", "updated", "date")
 CONTRACT_FIELDS = ("id", "created", "updated")
 
@@ -29,97 +31,6 @@ CONTRACT_FIELDS = ("id", "created", "updated")
 EMPTY_NOTE_MAX_CHARS = 20
 # Obsidian sync writes conflict copies as "Note 1.md" alongside "Note.md".
 CONFLICT_COPY_RE = re.compile(r"^(?P<base>.+) \d+$")
-
-
-@dataclass
-class NoteInfo:
-    path: str            # vault-relative posix
-    stem: str
-    title: str
-    frontmatter: Dict[str, Any]
-    frontmatter_text: str  # raw YAML block, for links declared in frontmatter
-    body: str
-    note_type: str
-    provenance: str = ""
-    aliases: List[str] = field(default_factory=list)
-    recency: Optional[datetime] = field(default=None)
-
-
-def _iter_note_files(root: Path):
-    for path in sorted(root.rglob("*.md")):
-        rel = path.relative_to(root)
-        if is_skipped_path(rel):
-            continue
-        yield path, rel.as_posix()
-
-
-def _iter_attachment_files(root: Path) -> Iterable[str]:
-    """Vault-relative paths of every linkable file that is not an indexed note.
-
-    That means real attachments (images, PDFs, ...) plus Excalidraw drawings: those are
-    `.md` files, but they are skipped as notes, and a link to one still resolves in
-    Obsidian — so it must not be reported broken.
-    """
-    for path in sorted(root.rglob("*")):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(root)
-        if is_skipped_path(rel):
-            continue
-        if path.suffix.lower() == ".md" and not rel.name.lower().endswith(EXCALIDRAW_SUFFIX):
-            continue
-        yield rel.as_posix()
-
-
-def _alias_list(value: Any) -> List[str]:
-    """Frontmatter `aliases`, as a list. A bare string is one alias, not many words."""
-    if value is None:
-        return []
-    if isinstance(value, (list, tuple, set)):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).strip()
-    return [text] if text else []
-
-
-def _frontmatter_text(raw: str) -> str:
-    """The YAML block between the opening and closing fences, or ''."""
-    if not raw.startswith("---\n"):
-        return ""
-    lines = raw.splitlines()
-    for index in range(1, len(lines)):
-        if lines[index].strip() == "---":
-            return "\n".join(lines[1:index])
-    return ""
-
-
-def extract_frontmatter_wikilinks(frontmatter_text: str) -> List[Tuple[str, int]]:
-    """Return (target, file line) for wikilinks in frontmatter values.
-
-    Obsidian treats `parents: "[[Daily Notes]]"` as a real link; so do we. Lines are
-    file-relative (frontmatter starts at line 1), unlike body links, whose lines are
-    body-relative — each finding records which via its ``location`` field.
-    """
-    results: List[Tuple[str, int]] = []
-    for index, line in enumerate(frontmatter_text.split("\n"), start=2):  # line 1 is `---`
-        for match in WIKILINK_RE.finditer(line):
-            results.append((match.group(1).strip(), index))
-    return results
-
-
-def extract_wikilinks(body: str) -> List[Tuple[str, int]]:
-    """Return (target, 1-based line) for wikilinks outside fences and backticks."""
-    results: List[Tuple[str, int]] = []
-    in_fence = False
-    for index, line in enumerate(body.split("\n"), start=1):
-        if line.strip().startswith("```"):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        cleaned = INLINE_CODE_RE.sub("", line)
-        for match in WIKILINK_RE.finditer(cleaned):
-            results.append((match.group(1).strip(), index))
-    return results
 
 
 def _timestamp_problem(value: Any) -> Optional[str]:
@@ -147,50 +58,6 @@ def _note_recency(frontmatter: Dict[str, Any]) -> Optional[datetime]:
         if resolved is not None:
             return resolved
     return None
-
-
-class _Resolver:
-    """Resolves a wikilink target the way Obsidian does.
-
-    Beyond note titles/stems/paths this covers two cases the vault relies on:
-    frontmatter ``aliases``, and attachments — `[[diagram.png]]` names a real file
-    even though it is not a note, so it must not be reported as a broken link.
-    """
-
-    def __init__(self, notes: List[NoteInfo], attachments: Iterable[str] = ()):
-        self.by_title: Dict[str, str] = {}
-        self.by_stem: Dict[str, str] = {}
-        self.by_path: Dict[str, str] = {}
-        self.by_alias: Dict[str, str] = {}
-        self.attachments: Dict[str, str] = {}
-        for note in notes:
-            self.by_title.setdefault(note.title.lower(), note.path)
-            self.by_stem.setdefault(note.stem.lower(), note.path)
-            self.by_path.setdefault(note.path.lower(), note.path)
-            if note.path.lower().endswith(".md"):
-                self.by_path.setdefault(note.path[:-3].lower(), note.path)
-            for alias in note.aliases:
-                self.by_alias.setdefault(alias.lower(), note.path)
-        for rel in attachments:
-            self.attachments.setdefault(rel.lower(), rel)
-            name = Path(rel).name
-            self.attachments.setdefault(name.lower(), rel)
-            if name.lower().endswith(".md"):
-                # `[[map0.excalidraw]]` names `Excalidraw/map0.excalidraw.md`.
-                self.attachments.setdefault(name[:-3].lower(), rel)
-
-    def resolve(self, target: str) -> Optional[str]:
-        """Resolve to a note path, or None. Attachments resolve via `resolve_any`."""
-        key = target.strip().lower()
-        for table in (self.by_title, self.by_stem, self.by_path, self.by_alias):
-            if key in table:
-                return table[key]
-        if not key.endswith(".md") and (key + ".md") in self.by_path:
-            return self.by_path[key + ".md"]
-        return None
-
-    def resolve_attachment(self, target: str) -> Optional[str]:
-        return self.attachments.get(target.strip().lower())
 
 
 def _sources_wikilinks(body: str) -> List[Tuple[str, int]]:
@@ -221,39 +88,12 @@ def _sources_wikilinks(body: str) -> List[Tuple[str, int]]:
 
 def lint_vault(root: str) -> Dict[str, Any]:
     root_path = Path(root)
-    notes: List[NoteInfo] = []
-    notes_ignored = 0
-
-    for path, rel in _iter_note_files(root_path):
-        try:
-            raw = path.read_text(encoding="utf-8", errors="strict")
-        except UnicodeDecodeError:
-            continue
-        frontmatter, body = split_frontmatter(raw)
-        if has_ignore_tag(body) or has_ignore_frontmatter_tag(
-            normalize_tags(frontmatter.get("tags"))
-        ):
-            notes_ignored += 1
-            continue
-        if is_excalidraw(Path(rel), frontmatter):
-            notes_ignored += 1
-            continue
-        note = NoteInfo(
-            path=rel,
-            stem=Path(rel).stem,
-            title=str(frontmatter.get("title") or Path(rel).stem),
-            frontmatter=frontmatter,
-            frontmatter_text=_frontmatter_text(raw),
-            body=body,
-            note_type=str(frontmatter.get("type") or ""),
-            provenance=str(frontmatter.get("provenance") or "").strip().lower(),
-            aliases=_alias_list(frontmatter.get("aliases")),
-            recency=_note_recency(frontmatter),
-        )
-        notes.append(note)
+    notes, notes_ignored = load_vault_notes(root)
 
     notes_by_path = {note.path: note for note in notes}
-    resolver = _Resolver(notes, _iter_attachment_files(root_path))
+    graph = build_link_graph(notes, iter_attachment_files(root_path))
+    resolver = graph.resolver
+    outgoing, incoming = graph.outgoing, graph.incoming
 
     findings: Dict[str, List[Dict[str, Any]]] = {
         "missing_frontmatter_fields": [],
@@ -303,7 +143,7 @@ def lint_vault(root: str) -> Dict[str, Any]:
             findings["duplicate_ids"].append({"id": note_id, "paths": sorted(paths)})
 
     # duplicate_titles
-    titles: Dict[str, List[NoteInfo]] = {}
+    titles: Dict[str, List[VaultNote]] = {}
     for note in notes:
         titles.setdefault(note.title.lower(), []).append(note)
     for title_notes in titles.values():
@@ -316,28 +156,12 @@ def lint_vault(root: str) -> Dict[str, Any]:
             )
     findings["duplicate_titles"].sort(key=lambda finding: str(finding["title"]).lower())
 
-    # broken_wikilinks + link graph. Frontmatter links (`parents: "[[Daily Notes]]"`)
-    # count exactly like body links; attachments resolve to files, not notes.
-    outgoing: Dict[str, set] = {note.path: set() for note in notes}
-    incoming: Dict[str, set] = {note.path: set() for note in notes}
-    for note in notes:
-        links = [
-            (target, line, "body") for target, line in extract_wikilinks(note.body)
-        ] + [
-            (target, line, "frontmatter")
-            for target, line in extract_frontmatter_wikilinks(note.frontmatter_text)
-        ]
-        for target, line, location in links:
-            resolved = resolver.resolve(target)
-            if resolved is None:
-                if resolver.resolve_attachment(target) is not None:
-                    continue  # a real file, just not a note
-                findings["broken_wikilinks"].append(
-                    {"path": note.path, "target": target, "line": line, "location": location}
-                )
-            elif resolved != note.path:
-                outgoing[note.path].add(resolved)
-                incoming[resolved].add(note.path)
+    # broken_wikilinks — every target the graph could resolve to neither a note nor an
+    # attachment, in vault order (body links before frontmatter links, per note).
+    findings["broken_wikilinks"] = [
+        {"path": link.path, "target": link.target, "line": link.line, "location": link.location}
+        for link in graph.unresolved
+    ]
 
     # dangling_targets — unresolved targets aggregated by how often they are linked.
     # The most-linked missing note is the most valuable one to write next.
@@ -467,7 +291,7 @@ def fix_naive_timestamps(root: str) -> Tuple[List[Dict[str, Any]], List[Dict[str
     fixed: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
 
-    for path, rel in _iter_note_files(root_path):
+    for path, rel in iter_note_files(root_path):
         try:
             original_stat = path.stat()
             raw = path.read_text(encoding="utf-8", errors="strict")
@@ -536,7 +360,7 @@ def fix_missing_frontmatter(root: str) -> Tuple[List[Dict[str, Any]], List[Dict[
     }
     records = []
     id_counts: Dict[str, int] = {}
-    for path, rel in _iter_note_files(root_path):
+    for path, rel in iter_note_files(root_path):
         try:
             raw = path.read_text(encoding="utf-8", errors="strict")
         except (UnicodeDecodeError, OSError):

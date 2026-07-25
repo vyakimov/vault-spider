@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{# The whole-page form of an answer, served when the request did not come from HTMX
+   — the action still works with JavaScript unavailable. #}
+
+{% block title %}Answer — Vault Spider{% endblock %}
+
+{% block masthead %}
+  <a class="masthead__back"
+     href="/{% if search.query %}?q={{ search.query | urlencode }}{% endif %}">‹ Results</a>
+  <span class="masthead__count">answer</span>
+{% endblock %}
+
+{% block content %}
+  <section class="said">
+    <span class="said__label">You asked</span>
+    <h1 class="said__query">{{ search.query }}</h1>
+  </section>
+  {% include "_answer.html" %}
+{% endblock %}

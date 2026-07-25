@@ -1,0 +1,19 @@
+{% if error %}
+  <section class="answer">
+    <span class="answer__label">Cannot answer</span>
+    <div class="answer__body"><p>{{ error.message }}</p></div>
+    {% if error.guidance %}<p class="answer__meta">{{ error.guidance }}</p>{% endif %}
+  </section>
+{% elif answer %}
+  <section class="answer">
+    <span class="answer__label">
+      {%- if answer.abstained %}Not in the vault{% else %}From your notes{% endif -%}
+    </span>
+    <div class="answer__body">{{ answer.html | safe }}</div>
+    <p class="answer__meta">
+      {%- if not answer.abstained %}{{ answer.confidence }} confidence ·
+      {{ answer.citations | length }} cited{% endif -%}
+      {%- for warning in answer.warnings %} · {{ warning }}{% endfor -%}
+    </p>
+  </section>
+{% endif %}

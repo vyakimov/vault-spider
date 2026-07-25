@@ -1,0 +1,13 @@
+{# The synthesize action and the slot its answer lands in. #}
+<form class="ask-answer" method="post" action="/answer"
+      hx-post="/answer" hx-target="#answer" hx-swap="innerHTML"
+      hx-indicator="#synthesizing">
+  <input type="hidden" name="q" value="{{ search.query }}" />
+  <input type="hidden" name="mode" value="{{ search.mode }}" />
+  <input type="hidden" name="granularity" value="{{ search.granularity }}" />
+  <input type="hidden" name="n" value="{{ search.n_results }}" />
+  <button class="button" type="submit">Answer from these notes</button>
+  <span class="spinner" id="synthesizing">reading…</span>
+</form>
+
+<div id="answer"></div>

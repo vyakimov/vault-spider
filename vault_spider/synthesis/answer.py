@@ -1,7 +1,7 @@
 """Turn a retrieval output contract into an LLM-synthesized answer.
 
-Kept free of Streamlit imports so both the CLI and the Streamlit UI share the
-same prompt, context assembly, and JSON-parsing logic.
+Kept free of any presentation concern so the CLI, the MCP server and the web app
+share the same prompt, context assembly, and JSON-parsing logic.
 """
 
 from __future__ import annotations

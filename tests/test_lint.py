@@ -12,11 +12,7 @@ from conftest import write_config
 
 from vault_spider import cli
 from vault_spider.compounding.backfill_core import ULID_RE
-from vault_spider.compounding.lint import (
-    extract_frontmatter_wikilinks,
-    extract_wikilinks,
-    lint_vault,
-)
+from vault_spider.compounding.lint import lint_vault
 from vault_spider.corpus.frontmatter import coerce_datetime, split_frontmatter
 
 VALID_TS = "2025-01-01T00:00:00Z"
@@ -65,22 +61,6 @@ def lint_dir(tmp_path: Path) -> Path:
           + "# Q\n\nanswer\n\n## Sources\n- [[B]]\n")
 
     return tmp_path
-
-
-class TestExtractWikilinks:
-    def test_alias_and_heading_links(self):
-        links = extract_wikilinks("See [[Target|shown]] and [[Other#Section]].")
-        targets = [t for t, _ in links]
-        assert targets == ["Target", "Other"]
-
-    def test_ignores_fenced_and_backtick(self):
-        body = "Real [[Here]].\n```\n[[InFence]]\n```\n`[[InCode]]`\n"
-        targets = [t for t, _ in extract_wikilinks(body)]
-        assert targets == ["Here"]
-
-    def test_line_numbers(self):
-        body = "line1\n[[Two]]\n"
-        assert extract_wikilinks(body) == [("Two", 2)]
 
 
 class TestLint:
@@ -154,15 +134,6 @@ class TestLint:
         # 9 markdown files, none ignored.
         assert report["notes_scanned"] == 9
         assert report["notes_ignored"] == 0
-
-
-class TestExtractFrontmatterWikilinks:
-    def test_reads_links_from_values(self):
-        block = 'parents: "[[Daily Notes]]"\ntags:\n  - x\n'
-        assert extract_frontmatter_wikilinks(block) == [("Daily Notes", 2)]
-
-    def test_no_links_is_empty(self):
-        assert extract_frontmatter_wikilinks("tags:\n  - x\n") == []
 
 
 class TestLinkResolution:

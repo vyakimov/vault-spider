@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>{% block title %}Vault Spider{% endblock %}</title>
+    <link rel="stylesheet" href="/static/app.css" />
+    <script src="/static/htmx.min.js" defer></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">{% block masthead %}{% endblock %}</div>
+    </header>
+    <main class="wrap">{% block content %}{% endblock %}</main>
+  </body>
+</html>

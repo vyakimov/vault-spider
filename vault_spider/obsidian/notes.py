@@ -19,8 +19,8 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 from vault_spider.compounding.backfill_core import fresh_identity, now_timestamp
-from vault_spider.compounding.lint import WIKILINK_RE
 from vault_spider.corpus.chunker import HEADING_RE
+from vault_spider.corpus.links import WIKILINK_RE
 from vault_spider.envelope import CliError, success
 from vault_spider.obsidian import backend
 from vault_spider.utils import validate_vault_relative_path

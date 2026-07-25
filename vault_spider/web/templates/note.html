@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{{ note.title }} — Vault Spider{% endblock %}
+
+{% block masthead %}
+  <a class="masthead__back"
+     href="/{% if back_query %}?q={{ back_query | urlencode }}{% endif %}">‹ Back</a>
+  {# The folder, not the whole path: it orients you in the vault and fits the bar. #}
+  <span class="masthead__count">{{ note.path.rsplit("/", 1)[0] if "/" in note.path else "vault root" }}</span>
+{% endblock %}
+
+{% block content %}
+  <article class="note">
+    <h1 class="note__title">{{ note.title }}</h1>
+    {% if masthead.facts %}
+      <p class="note__facts">{{ masthead.facts | join(" · ") }}</p>
+    {% endif %}
+    {% if masthead.tags %}
+      <ul class="note__tags">
+        {% for tag in masthead.tags %}<li>#{{ tag }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    {% if masthead.source_url %}
+      <p class="note__facts">
+        <a href="{{ masthead.source_url }}" target="_blank" rel="noopener noreferrer">Source</a>
+      </p>
+    {% endif %}
+
+    <hr class="note__rule" />
+
+    <div class="prose">{{ body_html | safe }}</div>
+
+    {% if backlinks %}
+      <nav class="backlinks">
+        <span class="backlinks__label">
+          Linked from — {{ backlinks | length }}
+          note{{ "" if backlinks | length == 1 else "s" }}
+        </span>
+        <ul>
+          {% for link in backlinks %}
+            <li><a href="/note/{{ link.path }}">{{ link.title }}</a></li>
+          {% endfor %}
+        </ul>
+      </nav>
+    {% endif %}
+  </article>
+
+  {% if highlight %}
+    <script>
+      // Land on the retrieved passage rather than the top of the note.
+      document.addEventListener("DOMContentLoaded", function () {
+        var target = document.getElementById({{ highlight.anchor | tojson }});
+        if (target) {
+          target.scrollIntoView({ block: "center", behavior: "auto" });
+        }
+      });
+    </script>
+  {% endif %}
+{% endblock %}

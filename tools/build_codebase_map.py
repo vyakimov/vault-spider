@@ -157,7 +157,7 @@ PACKAGES = {
         "match": lambda p: p.startswith("vault_spider/index/"),
         "role": "Builds and maintains the ChromaDB collection (one document entry + N section "
                 "entries per note, distinguished by the `granularity` metadata field) with "
-                "failure-safe incremental sync; plus a read-only reader for the Streamlit UI.",
+                "failure-safe incremental sync; plus a read-only reader for stats without BM25.",
     },
     "vault_spider.retrieval": {
         "match": lambda p: p.startswith("vault_spider/retrieval/"),
@@ -198,10 +198,18 @@ PACKAGES = {
         "role": "OpenRouter client: embeddings, reranking, and chat completions. The only "
                 "module that talks to the LLM provider.",
     },
+    "vault_spider.web": {
+        "match": lambda p: p.startswith("vault_spider/web/"),
+        "role": "Read-only web app (FastAPI + Jinja2 + HTMX, no build step): retrieval page, "
+                "note reading view with resolved wikilinks and backlinks, and the retrieval "
+                "contract as JSON. Holds the IndexStore/Searcher singletons and a cached vault "
+                "link graph; renders Obsidian Markdown (wikilinks, callouts) with raw HTML off. "
+                "Never writes to the vault.",
+    },
     "scripts": {
         "match": lambda p: p.startswith("scripts/"),
-        "role": "Operational surfaces: the Streamlit UI (app/search/llm/db pages), launchd "
-                "periodic-sync installer and runner, and the Obsidian-side setup script.",
+        "role": "Operational surfaces: the launchd periodic-sync installer and runner, and the "
+                "Obsidian-side setup script.",
     },
     "tools": {
         "match": lambda p: p.startswith("tools/"),
@@ -232,7 +240,7 @@ DATA_FLOW = {
         "bin/vault-spider -> vault_spider.cli (JSON envelope on stdout, exit 1 on error)",
         "bin/vault-spider-mcp -> vault_spider.mcp_server (dual-transport MCP for Claude "
         "Desktop / ChatGPT)",
-        "scripts/streamlit_app.py (interactive UI)",
+        "bin/vault-spider-web -> vault_spider.web (phone-first read-only app on 127.0.0.1:8765)",
     ],
 }
 
@@ -240,7 +248,7 @@ MERMAID_CODE_AND_DATA_FLOW = """flowchart LR
     subgraph surfaces["Surfaces"]
         CLI["bin/vault-spider<br/>JSON CLI"]
         MCP["bin/vault-spider-mcp<br/>MCP server"]
-        UI["Streamlit UI"]
+        UI["bin/vault-spider-web<br/>web app"]
     end
 
     subgraph read["Read, index, and query"]
@@ -268,6 +276,7 @@ MERMAID_CODE_AND_DATA_FLOW = """flowchart LR
     MCP -->|"isolated CLI subprocess"| CLI
     UI --> Search
     UI --> Synthesis
+    UI --> Corpus
     CLI -->|"sync"| Corpus
     Vault -->|"direct reads"| Corpus
     Corpus --> Store
@@ -351,6 +360,14 @@ OTHER_FILES = [
     {"path": "bin/vault-spider",
      "role": "Stable CLI wrapper; locates the project and delegates to `uv run vault-spider`."},
     {"path": "bin/vault-spider-mcp", "role": "Wrapper launching the MCP server."},
+    {"path": "bin/vault-spider-web", "role": "Wrapper launching the web app."},
+    {"path": "vault_spider/web/templates/",
+     "role": "Jinja2 templates for the web app: base, index (retrieval), note (reading view), "
+             "answer, error, and the HTMX fragments. Not visible to the module extractor "
+             "below, which only reads Python."},
+    {"path": "vault_spider/web/static/",
+     "role": "app.css (hand-written, phone-first, light+dark) and a vendored htmx.min.js. "
+             "No build step and no external requests: the app works offline."},
     {"path": "config.yaml.example",
      "role": "Template for installation settings (vault root, folders, tag rules, timestamps "
              "policy). Real config.yaml is gitignored."},
@@ -413,7 +430,7 @@ def build_json(code_modules: list[dict], test_modules: list[dict]) -> dict:
     return {
         "project": {
             "name": "vault-spider",
-            "description": "JSON-only CLI (plus MCP server and Streamlit UI) for an Obsidian "
+            "description": "JSON-only CLI (plus MCP server and a read-only web app) for an Obsidian "
                            "vault: hybrid retrieval over ChromaDB + BM25, cited answer "
                            "synthesis with abstention, corpus health lint, plan-only "
                            "enrichment, a golden eval harness, and safe note mutations "
@@ -422,7 +439,7 @@ def build_json(code_modules: list[dict], test_modules: list[dict]) -> dict:
             "entry_points": {
                 "cli": "bin/vault-spider -> vault_spider/cli.py:main",
                 "mcp": "bin/vault-spider-mcp -> vault_spider/mcp_server.py:main",
-                "ui": "scripts/streamlit_app.py",
+                "ui": "bin/vault-spider-web -> vault_spider/web/__main__.py:main",
             },
             "canonical_instructions": "AGENTS.md",
             "json_envelope": "{ok: true, action, result, meta} | {ok: false, action, error}; "
@@ -608,7 +625,7 @@ footer {{ margin-top: 3rem; color: var(--muted); font-size: .8rem; }}
 </style>
 <main>
 <h1>vault-spider — codebase map</h1>
-<p class="subtitle">JSON-only CLI, MCP server, and Streamlit UI for an Obsidian vault:
+<p class="subtitle">JSON-only CLI, MCP server, and a read-only web app for an Obsidian vault:
 hybrid retrieval (ChromaDB + BM25), cited answer synthesis with abstention, corpus lint,
 plan-only enrichment, a golden eval harness, and safe note mutations through the running
 Obsidian app. Canonical instructions: <code>AGENTS.md</code>.</p>

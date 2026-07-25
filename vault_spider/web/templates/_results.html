@@ -1,0 +1,59 @@
+{% if not has_query %}
+  <section class="empty">
+    <p class="empty__lead">Ask a question and the vault answers with the notes that hold it.</p>
+    <p class="empty__hint">{{ stats.get("total_documents", 0) }} notes ·
+      {{ stats.get("section_entries", 0) }} sections indexed</p>
+  </section>
+{% elif error %}
+  <section class="notice">
+    <h2 class="notice__title">{{ error.message }}</h2>
+    {% if error.guidance %}<p class="notice__body">{{ error.guidance }}</p>{% endif %}
+    <p class="notice__hint">{{ error.type }}</p>
+  </section>
+{% else %}
+  {# The question is already set large in the field above; repeating it here would
+     just push the results further down the phone screen. #}
+  {% include "_ask_answer.html" %}
+
+  <p class="tally">
+    {{ candidates | length }} note{{ "" if candidates | length == 1 else "s" }}
+    · {{ search.mode }} · {{ search.granularity }}
+    {%- if meta.timing_ms %} · {{ meta.timing_ms }} ms{% endif %}
+  </p>
+
+  <ul class="results">
+    {% for candidate in candidates %}
+      <li class="result">
+        <a class="result__title" href="{{ candidate.url }}">
+          {{ candidate.title or candidate.path }}
+          {%- if candidate.heading %} <span class="result__heading">› {{ candidate.heading }}</span>{% endif %}
+        </a>
+        <p class="result__path">{{ candidate.path }}{% if candidate.lines %} · {{ candidate.lines }}{% endif %}</p>
+
+        <div class="evidence" title="{{ candidate.why }}">
+          <div class="evidence__row {% if candidate.bar.lead == 'keyword' %}evidence__row--lead{% endif %}">
+            <span class="evidence__key">KEY</span>
+            <span class="evidence__track"><span class="evidence__fill" style="width: {{ candidate.bar.keyword }}%"></span></span>
+            <span class="evidence__rerank">{% if candidate.bar.reranked %}●{% endif %}</span>
+          </div>
+          <div class="evidence__row {% if candidate.bar.lead == 'semantic' %}evidence__row--lead{% endif %}">
+            <span class="evidence__key">SEM</span>
+            <span class="evidence__track"><span class="evidence__fill" style="width: {{ candidate.bar.semantic }}%"></span></span>
+            <span class="evidence__rerank"></span>
+          </div>
+        </div>
+
+        {% if candidate.excerpt %}
+          <p class="result__excerpt">{{ candidate.excerpt }}</p>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+
+  {% if not candidates %}
+    <section class="empty">
+      <p class="empty__lead">No notes matched.</p>
+      <p class="empty__hint">Try different words, or widen the match to sections.</p>
+    </section>
+  {% endif %}
+{% endif %}

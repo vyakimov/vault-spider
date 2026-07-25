@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}{{ error.message }} — Vault Spider{% endblock %}
+
+{% block masthead %}
+  <a class="masthead__back" href="/">‹ Back</a>
+  <span class="masthead__count">{{ error.type }}</span>
+{% endblock %}
+
+{% block content %}
+  <section class="notice">
+    <h1 class="notice__title">{{ error.message }}</h1>
+    {% if error.guidance %}<p class="notice__body">{{ error.guidance }}</p>{% endif %}
+  </section>
+{% endblock %}

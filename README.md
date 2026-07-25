@@ -77,11 +77,33 @@ Every command returns `{"ok": true, "action", "result", "meta"}` on success, or
 not rely on the exit code alone.** Even a bad flag or an unknown command returns this same JSON
 shape — the tool never prints plain usage text to stdout.
 
-There is also a Streamlit UI:
+### The web app
+
+There is also a web app. Start it:
 
 ```bash
-uv run streamlit run scripts/streamlit_app.py
+./bin/vault-spider-web
 ```
+
+Then open `http://127.0.0.1:8765`. The first page is retrieval. Select a result to read the note:
+the app renders your Markdown, and wikilinks work — select one to move to that note. Each note
+lists the notes that link to it. The passage that matched your question is marked.
+
+The app only reads. It never changes a note. Continue to use Obsidian to write.
+
+#### Read your notes on a phone
+
+By default the app is available only on this computer. To read your notes on a phone on the same
+network:
+
+```bash
+./bin/vault-spider-web --host 0.0.0.0
+```
+
+The app prints the address to open on the phone. **Every person on that network can then read
+your vault.** There is no password. Use this only on a network you trust.
+
+The app finds your vault with `vault.root` in `config.yaml`. Set that value before you start it.
 
 ### Filters
 

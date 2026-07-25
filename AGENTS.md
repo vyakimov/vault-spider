@@ -13,7 +13,8 @@ hybrid retrieval and answer synthesis with stable JSON contracts. Those contract
 through a dual-transport MCP server for Claude Desktop and ChatGPT. It also carries the vault's
 write path: contract-enforcing note mutations executed through the running Obsidian app (the
 former standalone `obsctl` tool, merged into this CLI). It is organized as the `vault_spider`
-Python package with a JSON-only CLI (`vault-spider`) plus a Streamlit UI.
+Python package with a JSON-only CLI (`vault-spider`) plus a read-only web app
+(`vault-spider-web`).
 
 The read path (indexing, retrieval, lint) works on vault files directly; the write path goes
 through the official Obsidian CLI so wikilinks update on move/rename, unknown frontmatter keys
@@ -128,8 +129,11 @@ imported ones and treats `distilled` notes as pointers; retrieval filters on it
     paths — absolute paths, backslashes and `.`/`..` segments are `invalid_arguments` before the
     backend is invoked; link targets must be plain note names (no `[[`/`]]`/newlines). Every
     envelope carries `meta.backend: "obsidian-cli"`.
-- `uv run streamlit run scripts/streamlit_app.py`
-  - Streamlit UI: Retrieve (mode + granularity selectors), Synthesize, Notes browser.
+- `./bin/vault-spider-web [--host <host>] [--port <port>] [--reload]`
+  - Phone-first web app: retrieval on `/`, a reading view at `/note/<vault path>`, and the same
+    retrieval contract as JSON at `/api/retrieve`. Read-only — it never writes to the vault.
+    Binds `127.0.0.1:8765` by default; pass `--host 0.0.0.0` to reach it from a phone on the same
+    network, which serves the vault to everyone on that network and has no authentication.
 - `./bin/vault-spider-mcp [--transport stdio|streamable-http] [--host <host>] [--port <port>]`
   - MCP server exposing stats, sync, retrieval, synthesis, lint, enrichment, note reads, and safe
     mutations. Defaults to `stdio` for local clients such as Claude Desktop. Streamable HTTP serves
@@ -230,7 +234,14 @@ The `vault_spider` package is layered:
     subprocess so CLI validation/contracts remain authoritative and concurrent mutation calls do not
     share the Obsidian backend's process state. Supports stdio and stateless Streamable HTTP.
 
-11. `scripts/streamlit_*.py` — Streamlit pages that import from `vault_spider`.
+11. `vault_spider/web/` — the FastAPI + Jinja2 + HTMX app. `state.py` holds the process-wide
+    `IndexStore`/`Searcher` singletons (an `IndexStore` rehydrates the whole collection on
+    construction, so it is built once at startup, never per request) and caches the vault link
+    graph, refreshing it when a note file's mtime changes. `markdown.py` renders Obsidian's
+    dialect — wikilinks, callouts, `==mark==` — with raw HTML disabled and math deliberately off,
+    since every `$…$` in this vault is a shell variable in code. Route handlers are sync `def` so
+    Starlette threadpools them; the whole package is blocking. The app is **read-only**: it never
+    touches `obsidian/`, so the mutation backend's process-global state is never involved.
 
 `tools/backfill.py` — standalone one-time migration that adds `id`/`created`/`updated`
 frontmatter to existing notes (dry-run by default; `--apply` to write; never touches bodies).
@@ -249,7 +260,9 @@ All of these are configurable in `config.yaml`; the values below are the default
 - Obsidian mutation backend: binary auto-discovered; vault from `--vault`, then guarded config,
   then the app's active vault; `manage_updated: false` (`obsidian.binary` / `obsidian.vault` /
   `obsidian.manage_updated`)
-- Streamlit entrypoint: `scripts/streamlit_app.py`
+- Web app: `127.0.0.1:8765` (`vault-spider-web`). It resolves the vault from `vault.root` only
+  and refuses to start when that is unset — a server must not follow whichever vault the Obsidian
+  desktop app happens to have open.
 
 ## Development Notes
 
