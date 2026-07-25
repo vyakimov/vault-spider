@@ -2754,7 +2754,7 @@
         },
         {
           "path": "tools/build_codebase_map.py",
-          "loc": 1034,
+          "loc": 1035,
           "summary": "Generate docs/codebase-map.json and docs/codebase-map.html.",
           "internal_deps": [],
           "classes": [],
@@ -2769,19 +2769,19 @@
               "name": "build_json",
               "signature": "(code_modules: list[dict], test_modules: list[dict]) -> dict",
               "doc": null,
-              "line": 396
+              "line": 397
             },
             {
               "name": "build_html",
               "signature": "(codebase_map: dict) -> str",
               "doc": null,
-              "line": 801
+              "line": 802
             },
             {
               "name": "main",
               "signature": "() -> None",
               "doc": null,
-              "line": 1017
+              "line": 1018
             }
           ],
           "constants": [
@@ -3191,7 +3191,7 @@
     },
     {
       "path": "docs/launchd.md",
-      "role": "Periodic-sync LaunchAgent: interval, logs, status, uninstall."
+      "role": "LaunchAgents: periodic-sync (interval, logs, status, uninstall) and the web-app supervisor behind a reverse proxy."
     },
     {
       "path": "docs/obsidian-setup.md",

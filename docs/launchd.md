@@ -1,10 +1,13 @@
-# Periodic Vault Spider sync with launchd
+# Vault Spider launchd agents
 
-Vault Spider ships a macOS per-user LaunchAgent named `ai.vault-spider.sync`. A LaunchAgent is a
-better fit than a system daemon: it runs as the signed-in user, can read the user's vault and
-repository `.env`, and does not require root.
+Two macOS per-user LaunchAgents: `ai.vault-spider.sync` (periodic indexing, installed by
+`scripts/setup_launchd.py`) and the optional `ai.vault-spider.web` (keeps the read-only web app
+running). A LaunchAgent is a better fit than a system daemon for both: it runs as the signed-in
+user, can read the user's vault and repository `.env`, and does not require root.
 
-## Default behavior
+## Periodic sync — `ai.vault-spider.sync`
+
+### Default behavior
 
 - Runs once when loaded and every 60 minutes afterward.
 - Launches through the absolute `uv` binary recorded at install time, then executes the serialized
@@ -19,7 +22,7 @@ Incremental sync computes a content/path diff first. When every indexed note is 
 no embedding calls and does not replace index entries; the result simply reports the unchanged
 count.
 
-## Install or update
+### Install or update
 
 The setup command is a dry run unless `--apply` is supplied:
 
@@ -40,7 +43,7 @@ uv run scripts/setup_launchd.py --apply --interval-minutes 30
 
 Five minutes is the enforced minimum. Hourly is the recommended default for a personal vault.
 
-## Optional lint
+### Optional lint
 
 Enable a read-only `vault-spider lint` after each successful sync with:
 
@@ -56,7 +59,7 @@ Enrichment is intentionally excluded. `enrich` requires a particular note or std
 and produces a proposal that still needs a deliberate apply step. Scheduling it without a note
 selection and review workflow would spend tokens without safely improving the vault.
 
-## Status and logs
+### Status and logs
 
 Inspect the loaded service:
 
@@ -83,7 +86,7 @@ The logs and state directories are mode `0700`; full state files are mode `0600`
 paths and options but no API keys. The job's working directory is the repository root, allowing
 `python-dotenv` to load the gitignored `.env` normally.
 
-### macOS Documents-folder permission
+#### macOS Documents-folder permission
 
 When either the repository or vault is under `~/Documents`, macOS may deny some background
 executables with `Operation not permitted` even though the same command succeeds in Terminal. The
@@ -104,7 +107,7 @@ tail -20 ~/Library/Logs/VaultSpider/sync.stderr.log
 A successful run writes `last-sync.json` under `~/Library/Caches/VaultSpider/` and reports exit code
 zero in `launchctl print`.
 
-## Disable lint or uninstall
+### Disable lint or uninstall
 
 Reapply without `--with-lint` to return to sync-only operation:
 
@@ -121,3 +124,106 @@ uv run scripts/setup_launchd.py --uninstall --apply
 
 Uninstalling unloads and removes the plist but preserves logs and latest-run state. If the repository
 is moved, rerun the setup command from its new location so the installed absolute paths are updated.
+
+## Web app — `ai.vault-spider.web`
+
+`vault-spider-web` is a long-running server, not a scheduled job, so it has no setup script: the
+plist is written by hand and the agent is a plain `KeepAlive` supervisor. It is optional — the app
+is equally usable started from a terminal — but without it the server dies at logout and does not
+come back after a reboot.
+
+### Install
+
+Write `~/Library/LaunchAgents/ai.vault-spider.web.plist`, substituting the absolute path of the
+repository and of the `uv` binary (`command -v uv`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>ai.vault-spider.web</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/absolute/path/to/uv</string>
+		<string>run</string>
+		<string>--project</string>
+		<string>/absolute/path/to/vault-spider</string>
+		<string>vault-spider-web</string>
+		<string>--host</string>
+		<string>127.0.0.1</string>
+		<string>--port</string>
+		<string>8765</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/absolute/path/to/vault-spider</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/Users/YOU/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>StandardOutPath</key>
+	<string>/Users/YOU/Library/Logs/VaultSpider/web.stdout.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/YOU/Library/Logs/VaultSpider/web.stderr.log</string>
+</dict>
+</plist>
+```
+
+Then validate and load it:
+
+```bash
+plutil -lint ~/Library/LaunchAgents/ai.vault-spider.web.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.vault-spider.web.plist
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8765/   # 200
+```
+
+Notes on the settings that matter:
+
+- **Working directory** is the repository root, so `python-dotenv` loads the gitignored `.env` and
+  `config.yaml` resolves normally. The web app reads the vault from `vault.root` only and refuses
+  to start when that is unset, so a missing `config.yaml` shows up as an immediate exit loop.
+- **`KeepAlive`** restarts the server on crash; `ThrottleInterval` keeps a config error from
+  spinning. `ProcessType: Interactive` avoids the throttled background scheduling class used by the
+  sync agent — this one serves requests.
+- **`--host 127.0.0.1`** keeps the app loopback-only. Do not change it to `0.0.0.0` here: the app
+  has no authentication, and binding the LAN address in an agent that starts at login serves the
+  vault to the whole network permanently. Put a TLS reverse proxy in front instead.
+- The same **Documents-folder permission** caveat as the sync agent applies, for the same reason.
+
+### Status and restart
+
+```bash
+launchctl print gui/$(id -u)/ai.vault-spider.web
+launchctl kickstart -k gui/$(id -u)/ai.vault-spider.web
+tail -20 ~/Library/Logs/VaultSpider/web.stderr.log
+```
+
+Allow roughly ten seconds after a kickstart before the port answers, while `uv` resolves the
+environment. Uninstall with
+`launchctl bootout gui/$(id -u)/ai.vault-spider.web` followed by removing the plist.
+
+### Behind a reverse proxy
+
+Exposing the app beyond loopback is the proxy's job, not the agent's. A Caddy site block is enough:
+
+```caddyfile
+spider.example.com {
+	reverse_proxy 127.0.0.1:8765
+}
+```
+
+The proxy terminates TLS and is where any authentication belongs. When the proxy itself runs as a
+root LaunchDaemon under `/Library/LaunchDaemons`, restarting it needs `sudo`
+(`sudo launchctl kickstart -k system/<label>`) — unlike either agent above.

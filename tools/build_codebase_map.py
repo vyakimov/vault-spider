@@ -376,7 +376,8 @@ OTHER_FILES = [
     {"path": "pyproject.toml", "role": "Package metadata and dependencies (uv-managed)."},
     {"path": ".github/workflows/ci.yml", "role": "CI workflow."},
     {"path": "docs/launchd.md",
-     "role": "Periodic-sync LaunchAgent: interval, logs, status, uninstall."},
+     "role": "LaunchAgents: periodic-sync (interval, logs, status, uninstall) and the "
+             "web-app supervisor behind a reverse proxy."},
     {"path": "docs/obsidian-setup.md", "role": "Obsidian-side setup for the mutation backend."},
     {"path": "skills/vault/SKILL.md",
      "role": "Agent skill for operating the vault (plus references/ for capture, commands, "

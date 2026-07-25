@@ -48,7 +48,8 @@ A sync of an unchanged vault does nothing: no note is re-embedded. Lint is off b
 a full scan every hour is usually not needed. Add `--with-lint` to turn it on. Enrichment never
 runs on a schedule — it needs a specific note and a plan the user must review.
 
-See [docs/launchd.md](docs/launchd.md) for the interval, logs, status, and uninstall commands.
+See [docs/launchd.md](docs/launchd.md) for the interval, logs, status, and uninstall commands — and
+for the optional `ai.vault-spider.web` agent that keeps the web app running across logins.
 
 ## Basic commands
 
