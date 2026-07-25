@@ -194,3 +194,45 @@ def test_lint_uses_active_vault_when_root_is_unconfigured(
     assert code == 0
     assert envelope["ok"] is True
     assert envelope["result"]["root"] == str(vault)
+
+
+class TestDisplayVaultName:
+    def test_configured_vault_wins_even_without_registry(self, monkeypatch):
+        monkeypatch.setattr(registry.settings, "obsidian_vault", lambda: "Configured")
+        assert registry.display_vault_name() == "Configured"
+
+    def test_falls_back_to_root_registry_lookup(
+        self, isolated_obsidian_registry, tmp_path, monkeypatch
+    ):
+        vault = tmp_path / "MyVault"
+        vault.mkdir()
+        write_registry(
+            isolated_obsidian_registry,
+            {"one": {"path": str(vault), "open": False}},
+        )
+        monkeypatch.setattr(registry.settings, "obsidian_vault", lambda: None)
+        monkeypatch.setattr(registry.settings, "vault_root", lambda: str(vault))
+        assert registry.display_vault_name() == "MyVault"
+
+    def test_falls_back_to_active_vault(
+        self, isolated_obsidian_registry, tmp_path, monkeypatch
+    ):
+        write_registry(
+            isolated_obsidian_registry,
+            {"one": {"path": str(tmp_path / "ActiveVault"), "open": True}},
+        )
+        monkeypatch.setattr(registry.settings, "obsidian_vault", lambda: None)
+        monkeypatch.setattr(registry.settings, "vault_root", lambda: None)
+        assert registry.display_vault_name() == "ActiveVault"
+
+    def test_returns_none_instead_of_raising(self, tmp_path, monkeypatch):
+        # No config, no registry file, unregistered root: every path is a dead
+        # end, and each must yield None rather than a CliError.
+        monkeypatch.setattr(registry.settings, "obsidian_vault", lambda: None)
+        monkeypatch.setattr(registry.settings, "vault_root", lambda: None)
+        assert registry.display_vault_name() is None
+
+        monkeypatch.setattr(
+            registry.settings, "vault_root", lambda: str(tmp_path / "Unregistered")
+        )
+        assert registry.display_vault_name() is None

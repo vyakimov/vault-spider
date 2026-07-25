@@ -11,6 +11,7 @@ import streamlit as st
 from streamlit_models import get_store_and_searcher
 
 from vault_spider.config import DEFAULT_SEARCH_PARAMS
+from vault_spider.obsidian import registry
 from vault_spider.retrieval.evidence import build_retrieval_output
 
 st.set_page_config(
@@ -62,6 +63,8 @@ def display_candidate(index: int, candidate: Dict[str, object]):
         footer = " • ".join(part for part in footer_parts if part)
         if footer:
             st.caption(footer)
+        if candidate.get("obsidian_url"):
+            st.markdown(f"[Open in Obsidian]({candidate['obsidian_url']})")
 
         chips = []
         for key, label_text, css_class in [
@@ -148,7 +151,8 @@ def main():
                 n_results=int(n_results),
             )
             st.session_state.last_results = build_retrieval_output(
-                query, mode, granularity, result.rows
+                query, mode, granularity, result.rows,
+                vault_name=registry.display_vault_name(),
             )
 
     if st.session_state.last_results is None:

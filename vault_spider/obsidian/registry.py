@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
+from vault_spider import settings
 from vault_spider.envelope import CliError
 
 
@@ -112,6 +113,28 @@ def vault_path_for_name(name: str) -> str:
             {"vault_name": name, "matching_paths": matches},
         )
     return matches[0]
+
+
+def display_vault_name() -> Optional[str]:
+    """Best-effort vault name for building ``obsidian://`` links.
+
+    Display-only companion to :func:`resolve_mutation_vault`: same resolution
+    order (config ``obsidian.vault``, then ``vault.root`` via the registry,
+    then the single active vault) but it never raises — a missing or ambiguous
+    vault just means no link, and must not break retrieval. Unlike the
+    mutation path, a configured ``obsidian.vault`` is trusted verbatim so
+    links still form on hosts without a local Obsidian registry.
+    """
+    try:
+        configured = settings.obsidian_vault()
+        if configured:
+            return configured
+        root = settings.vault_root()
+        if root:
+            return vault_name_for_root(root)
+        return _vault_name(active_vault_path())
+    except (CliError, settings.ConfigError):
+        return None
 
 
 def resolve_mutation_vault(
