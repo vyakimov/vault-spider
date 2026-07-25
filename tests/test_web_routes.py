@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+from chromadb.errors import InternalError as ChromaInternalError
 from conftest import FakeProvider
 from fastapi.testclient import TestClient
 
@@ -299,6 +300,67 @@ class TestVaultSnapshot:
         response = client.get("/note/Infra/New.md")
         assert response.status_code == 200
         assert "Fresh." in response.text
+
+
+class TestStaleIndex:
+    """`sync` rewrites Chroma's segments underneath the long-lived server.
+
+    The open handle then queries ids that no longer exist and every search fails until
+    the process restarts, so the app has to notice and rebuild on its own.
+    """
+
+    def test_reconnects_when_the_index_changes_on_disk(self, client, web_vault, tmp_path):
+        app_state = client.app.state.vault
+        first = app_state.store
+        assert client.get("/?q=wireguard").status_code == 200
+
+        # Re-index in a separate store, exactly as the sync agent does.
+        rebuilt = IndexStore(chroma_db_path=str(tmp_path / "chroma"), provider=FakeProvider())
+        write(web_vault / "Infra/Extra.md", "---\ntitle: Extra\n---\n\nA WireGuard peer.\n")
+        rebuilt.sync(str(web_vault))
+
+        response = client.get("/?q=wireguard")
+        assert response.status_code == 200
+        assert app_state.store is not first, "a rewritten index must be reconnected"
+
+    def test_retries_once_when_a_query_hits_a_stale_handle(self, client):
+        """The sync can land mid-request, past the freshness check."""
+        app_state = client.app.state.vault
+        calls = []
+        real = app_state.searcher.hybrid_search
+
+        def flaky(**kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise ChromaInternalError("Error executing plan: Error finding id")
+            return real(**kwargs)
+
+        app_state.searcher.hybrid_search = flaky
+        # Pin the signature so only the retry path can recover.
+        app_state.ensure_fresh_index = lambda: None
+        before = app_state.store
+
+        response = client.get("/?q=wireguard")
+        assert response.status_code == 200
+        assert len(calls) == 1, "the stale handle must be hit exactly once"
+        # The retry runs against the reconnected searcher, not the stale one.
+        assert app_state.store is not before
+        assert "WireGuard setup" in response.text
+
+    def test_surfaces_an_error_when_reconnecting_does_not_help(self, client):
+        app_state = client.app.state.vault
+        app_state.ensure_fresh_index = lambda: None
+
+        def always_stale(**kwargs):
+            raise ChromaInternalError("Error executing plan: Error finding id")
+
+        app_state.searcher.hybrid_search = always_stale
+        # Reconnect installs a fresh searcher, so keep the failure in place across it.
+        app_state.reconnect = lambda: True
+
+        response = client.get("/?q=wireguard")
+        assert response.status_code == 200  # the page renders; the notice carries the error
+        assert "internal_error" in response.text
 
 
 def test_json_routes_are_valid_json(client):

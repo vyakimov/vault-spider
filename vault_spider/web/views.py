@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from chromadb.errors import InternalError as ChromaInternalError
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -89,19 +90,35 @@ def run_retrieval(
     state: AppState, search: SearchRequest
 ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, str]], Dict[str, Any]]:
     """Retrieve, returning (output, error, meta). Exactly one of output/error is set."""
-    try:
-        result = state.searcher.hybrid_search(
+    # A `sync` between requests replaces the index under us; reconnect before querying.
+    state.ensure_fresh_index()
+
+    def search_once():
+        return state.searcher.hybrid_search(
             query=search.query,
             mode=search.mode,
             granularity=search.granularity,
             n_results=search.n_results,
         )
+
+    try:
+        try:
+            result = search_once()
+        except ChromaInternalError:
+            # A sync that lands mid-request slips past the freshness check above, and the
+            # stale handle then fails for every later query too. Rebuild once and retry;
+            # if it fails again the error is real, not staleness.
+            if not state.reconnect():
+                raise
+            result = search_once()
     except OpenRouterError as exc:
         return None, fmt.humanize_error("provider_error", str(exc)), {}
     except ValueError as exc:
         # `hybrid_search` raises bare ValueError for an empty index and for a query
         # nothing matched; the CLI maps both to not_found.
         return None, fmt.humanize_error("not_found", str(exc)), {}
+    except ChromaInternalError as exc:
+        return None, fmt.humanize_error("internal_error", str(exc)), {}
     output = build_retrieval_output(
         search.query,
         search.mode,

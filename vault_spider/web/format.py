@@ -180,6 +180,8 @@ def humanize_error(error_type: str, message: str) -> Dict[str, str]:
         "not_found": "Nothing in the vault matched. Try different words, or widen the filters.",
         "invalid_arguments": "Adjust the query and try again.",
         "config_mismatch": "Check `vault.root` and `index.chroma_path` in config.yaml.",
+        "internal_error": "The index could not be read, and reconnecting to it did not "
+        "help. Restart the web app; if that fails, re-run `./bin/vault-spider sync`.",
     }
     return {
         "type": error_type,

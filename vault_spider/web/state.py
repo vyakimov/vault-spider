@@ -66,6 +66,8 @@ class AppState:
         self.vault_name = vault_name
         self._snapshot: Optional[VaultSnapshot] = None
         self._lock = threading.Lock()
+        self._index_lock = threading.Lock()
+        self._index_signature = self._read_index_signature()
 
     @classmethod
     def connect(
@@ -102,6 +104,81 @@ class AppState:
 
     def stats(self) -> Dict[str, object]:
         return self.store.get_collection_stats()
+
+    # -- index freshness ---------------------------------------------------
+
+    def _read_index_signature(self) -> Optional[int]:
+        """A fingerprint of the Chroma index on disk, or ``None`` if it cannot be read.
+
+        Covers `chroma.sqlite3` and the per-segment files (`data_level0.bin` and friends),
+        which is what an hourly `sync` rewrites underneath a long-lived process.
+
+        Deliberately ignores every other top-level file: `query_embedding_cache.json`
+        lives in this same directory and is written on *every* query, so including it
+        would report the index as stale continuously.
+        """
+        path = getattr(self.store, "chroma_db_path", None)
+        if not path:
+            return None
+        root = Path(path)
+        total = 0
+        try:
+            sqlite = root / "chroma.sqlite3"
+            if sqlite.exists():
+                total ^= hash(("chroma.sqlite3", sqlite.stat().st_mtime_ns))
+            for segment in sorted(root.iterdir()):
+                if not segment.is_dir():
+                    continue
+                for entry in sorted(segment.iterdir()):
+                    if not entry.is_file():
+                        continue
+                    rel = f"{segment.name}/{entry.name}"
+                    total ^= hash((rel, entry.stat().st_mtime_ns))
+        except OSError:
+            return None
+        return total
+
+    def reconnect(self) -> bool:
+        """Rebuild the store and searcher against the index as it now stands on disk.
+
+        Returns False when the store is not a real ``IndexStore`` (tests hand in fakes)
+        or the rebuild fails — callers then surface the original retrieval error rather
+        than a second one about reconnecting.
+        """
+        path = getattr(self.store, "chroma_db_path", None)
+        collection = getattr(self.store, "collection_name", None)
+        if not path or not collection:
+            return False
+        with self._index_lock:
+            try:
+                store = IndexStore(
+                    chroma_db_path=path, collection_name=collection, provider=self.provider
+                )
+                searcher = Searcher(
+                    store,
+                    granularity=self.searcher.default_granularity,
+                    provider=self.provider,
+                )
+            except Exception:  # noqa: BLE001 - a failed reconnect must not mask the cause
+                return False
+            self.store = store
+            self.searcher = searcher
+            self._index_signature = self._read_index_signature()
+        self.warm()
+        return True
+
+    def ensure_fresh_index(self) -> None:
+        """Reconnect when `sync` has rewritten the index since we last looked.
+
+        Chroma holds its HNSW segments in memory; once they are replaced on disk the
+        open handle keeps querying ids that no longer exist and every search fails with
+        an InternalError until the process restarts. Catching it here means a search
+        that lands after a sync pays one rebuild instead of returning a 500 forever.
+        """
+        signature = self._read_index_signature()
+        if signature is None or signature == self._index_signature:
+            return
+        self.reconnect()
 
     # -- vault -------------------------------------------------------------
 
