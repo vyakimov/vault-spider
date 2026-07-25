@@ -26,6 +26,7 @@ from vault_spider.corpus.vault import (
 )
 from vault_spider.index.store import IndexStore
 from vault_spider.llm.openrouter import OpenRouterClient
+from vault_spider.obsidian import registry
 from vault_spider.retrieval.searcher import Searcher
 
 
@@ -50,11 +51,19 @@ class AppState:
     provider and a temp index without reaching into the object.
     """
 
-    def __init__(self, vault_root: str, provider, store: IndexStore, searcher: Searcher):
+    def __init__(
+        self,
+        vault_root: str,
+        provider,
+        store: IndexStore,
+        searcher: Searcher,
+        vault_name: Optional[str] = None,
+    ):
         self.vault_root = vault_root
         self.provider = provider
         self.store = store
         self.searcher = searcher
+        self.vault_name = vault_name
         self._snapshot: Optional[VaultSnapshot] = None
         self._lock = threading.Lock()
 
@@ -68,7 +77,13 @@ class AppState:
             chroma_db_path=chroma_path, collection_name=collection, provider=provider
         )
         searcher = Searcher(store, granularity="document", provider=provider)
-        return cls(vault_root=vault_root, provider=provider, store=store, searcher=searcher)
+        return cls(
+            vault_root=vault_root,
+            provider=provider,
+            store=store,
+            searcher=searcher,
+            vault_name=resolve_vault_name(),
+        )
 
     # -- retrieval ---------------------------------------------------------
 
@@ -141,6 +156,20 @@ def resolve_vault_root() -> str:
     if not Path(root).is_dir():
         raise StartupError(f"Configured vault.root does not exist: {root}")
     return root
+
+
+def resolve_vault_name() -> Optional[str]:
+    """The Obsidian vault name used to build `obsidian://` deep links, pinned at startup.
+
+    Resolved once rather than per request: it is a process constant, and
+    `display_vault_name` reads config and the Obsidian registry off disk.
+
+    That helper's last resort is the *active* vault, which would contradict the pinning
+    rule in `resolve_vault_root`. It cannot be reached here — the app refuses to start
+    without `vault.root`, so resolution always stops at the config name or that root.
+    A name is display-only: when it is `None`, results simply carry no link.
+    """
+    return registry.display_vault_name()
 
 
 def build_state() -> AppState:

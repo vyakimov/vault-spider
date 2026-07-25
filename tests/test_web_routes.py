@@ -7,6 +7,7 @@ API key and no OpenRouter call is involved.
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -48,20 +49,39 @@ def web_vault(tmp_path) -> Path:
 
 
 @pytest.fixture
-def client(web_vault, tmp_path):
+def client_for(web_vault, tmp_path):
+    """Build a test client, optionally with an Obsidian vault name pinned on the state."""
     provider = FakeProvider()
     store = IndexStore(chroma_db_path=str(tmp_path / "chroma"), provider=provider)
     store.sync(str(web_vault))
 
-    def factory() -> AppState:
-        return AppState(
-            vault_root=str(web_vault),
-            provider=provider,
-            store=store,
-            searcher=Searcher(store, granularity="document", provider=provider),
-        )
+    @contextmanager
+    def build(vault_name=None):
+        def factory() -> AppState:
+            return AppState(
+                vault_root=str(web_vault),
+                provider=provider,
+                store=store,
+                searcher=Searcher(store, granularity="document", provider=provider),
+                vault_name=vault_name,
+            )
 
-    with TestClient(create_app(state_factory=factory)) as test_client:
+        with TestClient(create_app(state_factory=factory)) as test_client:
+            yield test_client
+
+    return build
+
+
+@pytest.fixture
+def client(client_for):
+    with client_for() as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def named_client(client_for):
+    """A client whose vault resolves a name, so `obsidian://` links can form."""
+    with client_for(vault_name="Test Vault") as test_client:
         yield test_client
 
 
@@ -168,6 +188,25 @@ class TestAttachments:
 
     def test_skipped_directory_is_404(self, client):
         assert client.get("/attachment/Templates/T.md").status_code == 404
+
+
+class TestObsidianLinks:
+    def test_results_offer_an_obsidian_link(self, named_client):
+        body = named_client.get("/", params={"q": "wireguard"}).text
+        assert 'class="result__obsidian"' in body
+        assert "obsidian://open?vault=Test%20Vault&amp;file=" in body
+
+    def test_link_is_absent_without_a_vault_name(self, client):
+        """No name resolved means no link — the results themselves are unaffected."""
+        body = client.get("/", params={"q": "wireguard"}).text
+        assert "result__obsidian" not in body
+        assert "obsidian://" not in body
+        assert 'class="result__path"' in body
+
+    def test_api_carries_the_link_for_each_candidate(self, named_client):
+        payload = named_client.get("/api/retrieve", params={"q": "wireguard"}).json()
+        urls = [c["obsidian_url"] for c in payload["result"]["candidates"]]
+        assert urls and all(u.startswith("obsidian://open?vault=Test%20Vault&file=") for u in urls)
 
 
 class TestJsonApi:

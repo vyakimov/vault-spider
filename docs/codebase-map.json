@@ -2287,7 +2287,7 @@
         },
         {
           "path": "vault_spider/web/state.py",
-          "loc": 157,
+          "loc": 186,
           "summary": "Process-wide singletons for the web app.",
           "internal_deps": [
             "vault_spider",
@@ -2295,6 +2295,7 @@
             "vault_spider.corpus.vault",
             "vault_spider.index.store",
             "vault_spider.llm.openrouter",
+            "vault_spider.obsidian",
             "vault_spider.retrieval.searcher"
           ],
           "classes": [
@@ -2304,7 +2305,7 @@
                 "RuntimeError"
               ],
               "doc": "Raised when the app cannot serve: no vault, no index, no API key.",
-              "line": 32,
+              "line": 33,
               "fields": [],
               "methods": []
             },
@@ -2312,7 +2313,7 @@
               "name": "VaultSnapshot",
               "bases": [],
               "doc": "The vault as last walked: notes, link graph, and the signature that dated it.",
-              "line": 37,
+              "line": 38,
               "fields": [
                 "notes",
                 "graph",
@@ -2325,44 +2326,44 @@
               "name": "AppState",
               "bases": [],
               "doc": "Everything a request needs, built once.",
-              "line": 46,
+              "line": 47,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
-                  "signature": "(self, vault_root: str, provider, store: IndexStore, searcher: Searcher)",
+                  "signature": "(self, vault_root: str, provider, store: IndexStore, searcher: Searcher, vault_name: Optional[str]=None)",
                   "doc": null,
-                  "line": 53
+                  "line": 54
                 },
                 {
                   "name": "connect",
                   "signature": "(cls, vault_root: str, chroma_path: str, collection: str='vault_notes') -> 'AppState'",
                   "doc": "Build the real singletons: provider, store, searcher.",
-                  "line": 62
+                  "line": 71
                 },
                 {
                   "name": "warm",
                   "signature": "(self) -> None",
                   "doc": "Build both BM25 pools up front.",
-                  "line": 75
+                  "line": 90
                 },
                 {
                   "name": "stats",
                   "signature": "(self) -> Dict[str, object]",
                   "doc": null,
-                  "line": 88
+                  "line": 103
                 },
                 {
                   "name": "snapshot",
                   "signature": "(self) -> VaultSnapshot",
                   "doc": "The current vault walk, rebuilt only when a note file has changed.",
-                  "line": 108
+                  "line": 123
                 },
                 {
                   "name": "note",
                   "signature": "(self, relative_path: str) -> Optional[VaultNote]",
                   "doc": "Read one note from disk. ``None`` covers missing, unreadable and ignored.",
-                  "line": 124
+                  "line": 139
                 }
               ]
             }
@@ -2372,19 +2373,25 @@
               "name": "resolve_vault_root",
               "signature": "() -> str",
               "doc": "The vault to serve, pinned at startup.",
-              "line": 129
+              "line": 144
+            },
+            {
+              "name": "resolve_vault_name",
+              "signature": "() -> Optional[str]",
+              "doc": "The Obsidian vault name used to build `obsidian://` deep links, pinned at startup.",
+              "line": 161
             },
             {
               "name": "build_state",
               "signature": "() -> AppState",
               "doc": "Construct the singletons, turning setup problems into readable failures.",
-              "line": 146
+              "line": 175
             }
           ]
         },
         {
           "path": "vault_spider/web/views.py",
-          "loc": 346,
+          "loc": 350,
           "summary": "Routes.",
           "internal_deps": [
             "vault_spider.corpus.loader",
@@ -2443,43 +2450,43 @@
               "name": "index",
               "signature": "(request: Request) -> Response",
               "doc": "The retrieval page.",
-              "line": 118
+              "line": 122
             },
             {
               "name": "answer",
               "signature": "(request: Request, q: str=Form(...), mode: str=Form('thorough'), granularity: str=Form('mixed'), n: int=Form(10)) -> Response",
               "doc": "Synthesize an answer over the retrieved notes. Returns a fragment for HTMX.",
-              "line": 147
+              "line": 151
             },
             {
               "name": "note",
               "signature": "(request: Request, path: str) -> Response",
               "doc": "The reading view: the note's own file, rendered.",
-              "line": 197
+              "line": 201
             },
             {
               "name": "attachment",
               "signature": "(request: Request, path: str) -> Response",
               "doc": "Serve an image or file the vault links to.",
-              "line": 237
+              "line": 241
             },
             {
               "name": "healthz",
               "signature": "(request: Request) -> JSONResponse",
               "doc": null,
-              "line": 258
+              "line": 262
             },
             {
               "name": "api_retrieve",
               "signature": "(request: Request) -> JSONResponse",
               "doc": "The retrieval contract, in the same envelope the CLI emits.",
-              "line": 269
+              "line": 273
             },
             {
               "name": "api_note",
               "signature": "(request: Request, path: str) -> JSONResponse",
               "doc": null,
-              "line": 283
+              "line": 287
             }
           ],
           "constants": [
@@ -3118,8 +3125,8 @@
       },
       {
         "path": "tests/test_web_routes.py",
-        "loc": 267,
-        "test_count": 33,
+        "loc": 306,
+        "test_count": 36,
         "summary": "Tests for the web routes.",
         "covers": [
           "vault_spider.index.store",

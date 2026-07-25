@@ -103,7 +103,11 @@ def run_retrieval(
         # nothing matched; the CLI maps both to not_found.
         return None, fmt.humanize_error("not_found", str(exc)), {}
     output = build_retrieval_output(
-        search.query, search.mode, search.granularity, result.rows
+        search.query,
+        search.mode,
+        search.granularity,
+        result.rows,
+        vault_name=state.vault_name,
     )
     meta = {"timing_ms": round(result.timing_ms, 2), "tunables": result.debug_info}
     return output, None, meta
