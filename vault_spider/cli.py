@@ -296,6 +296,8 @@ def _schema() -> Dict[str, Any]:
                     {
                         "note_id": "str",
                         "path": "str",
+                        "obsidian_url": "str|null (obsidian://open deep link; null when "
+                                        "no vault name can be resolved)",
                         "title": "str",
                         "type": "str",
                         "heading": "str",
@@ -455,6 +457,7 @@ def cmd_stats(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def _run_retrieval(store, provider, query, mode, granularity, n_results, args):
+    from vault_spider.obsidian import registry
     from vault_spider.retrieval.evidence import build_retrieval_output
     from vault_spider.retrieval.searcher import Searcher
 
@@ -472,7 +475,10 @@ def _run_retrieval(store, provider, query, mode, granularity, n_results, args):
         until=args.until,
         must_include_terms=args.must_include_terms,
     )
-    output = build_retrieval_output(query, mode, granularity, result.rows)
+    output = build_retrieval_output(
+        query, mode, granularity, result.rows,
+        vault_name=registry.display_vault_name(),
+    )
     return output, result
 
 

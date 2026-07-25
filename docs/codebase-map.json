@@ -96,7 +96,7 @@
       "modules": [
         {
           "path": "vault_spider/cli.py",
-          "loc": 1256,
+          "loc": 1262,
           "summary": "JSON-only CLI for the vault: retrieval/synthesis plus safe note mutations.",
           "internal_deps": [
             "vault_spider",
@@ -158,61 +158,61 @@
               "name": "cmd_schema",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 422
+              "line": 424
             },
             {
               "name": "cmd_sync",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 426
+              "line": 428
             },
             {
               "name": "cmd_stats",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 444
+              "line": 446
             },
             {
               "name": "cmd_retrieve",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 493
+              "line": 499
             },
             {
               "name": "cmd_synthesize",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 552
+              "line": 558
             },
             {
               "name": "cmd_enrich",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 674
+              "line": 680
             },
             {
               "name": "cmd_lint",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 806
+              "line": 812
             },
             {
               "name": "cmd_eval",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 843
+              "line": 849
             },
             {
               "name": "build_parser",
               "signature": "() -> argparse.ArgumentParser",
               "doc": null,
-              "line": 973
+              "line": 979
             },
             {
               "name": "main",
               "signature": "(argv: Optional[list]=None) -> int",
               "doc": null,
-              "line": 1218
+              "line": 1224
             }
           ],
           "constants": [
@@ -1131,22 +1131,28 @@
       "modules": [
         {
           "path": "vault_spider/retrieval/evidence.py",
-          "loc": 82,
+          "loc": 97,
           "summary": "Assemble the retrieval output contract (the citation/evidence JSON).",
           "internal_deps": [],
           "classes": [],
           "functions": [
             {
+              "name": "obsidian_url",
+              "signature": "(vault_name: str, path: str) -> str",
+              "doc": "Deep link that opens a vault-relative note path in Obsidian.",
+              "line": 13
+            },
+            {
               "name": "build_evidence",
-              "signature": "(result_row: Dict[str, object]) -> Dict[str, object]",
+              "signature": "(result_row: Dict[str, object], vault_name: Optional[str]=None) -> Dict[str, object]",
               "doc": null,
-              "line": 36
+              "line": 46
             },
             {
               "name": "build_retrieval_output",
-              "signature": "(query: str, mode: str, granularity: str, rows: List[Dict[str, object]]) -> Dict[str, object]",
+              "signature": "(query: str, mode: str, granularity: str, rows: List[Dict[str, object]], vault_name: Optional[str]=None) -> Dict[str, object]",
               "doc": null,
-              "line": 64
+              "line": 78
             }
           ],
           "constants": [
@@ -1798,9 +1804,10 @@
         },
         {
           "path": "vault_spider/obsidian/registry.py",
-          "loc": 149,
+          "loc": 172,
           "summary": "Read Obsidian's macOS vault registry.",
           "internal_deps": [
+            "vault_spider",
             "vault_spider.envelope"
           ],
           "classes": [],
@@ -1809,37 +1816,43 @@
               "name": "registry_path",
               "signature": "() -> Path",
               "doc": null,
-              "line": 12
+              "line": 13
             },
             {
               "name": "registered_vaults",
               "signature": "() -> list[dict]",
               "doc": null,
-              "line": 16
+              "line": 17
             },
             {
               "name": "active_vault_path",
               "signature": "() -> str",
               "doc": null,
-              "line": 35
+              "line": 36
             },
             {
               "name": "vault_name_for_root",
               "signature": "(root: str) -> str",
               "doc": null,
-              "line": 62
+              "line": 63
             },
             {
               "name": "vault_path_for_name",
               "signature": "(name: str) -> str",
               "doc": null,
-              "line": 99
+              "line": 100
+            },
+            {
+              "name": "display_vault_name",
+              "signature": "() -> Optional[str]",
+              "doc": "Best-effort vault name for building ``obsidian://`` links.",
+              "line": 118
             },
             {
               "name": "resolve_mutation_vault",
               "signature": "(explicit: Optional[str], configured_vault: Optional[str], configured_root: Optional[str]) -> Optional[str]",
               "doc": null,
-              "line": 117
+              "line": 140
             }
           ]
         }
@@ -2860,8 +2873,8 @@
       },
       {
         "path": "tests/test_evidence.py",
-        "loc": 112,
-        "test_count": 7,
+        "loc": 141,
+        "test_count": 11,
         "summary": "Tests for vault_spider.retrieval.evidence and the mixed-mode per-note cap.",
         "covers": [
           "vault_spider.index.store",
@@ -3002,8 +3015,8 @@
       },
       {
         "path": "tests/test_registry.py",
-        "loc": 196,
-        "test_count": 15,
+        "loc": 238,
+        "test_count": 19,
         "summary": "Tests for Obsidian registry parsing and read-path root fallback.",
         "covers": [
           "vault_spider",

@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
+from urllib.parse import quote
 
 import numpy as np
 
 EXCERPT_CHARS = 700
+
+
+def obsidian_url(vault_name: str, path: str) -> str:
+    """Deep link that opens a vault-relative note path in Obsidian."""
+    file_target = path[:-3] if path.endswith(".md") else path
+    return (
+        "obsidian://open?vault=" + quote(vault_name, safe="")
+        + "&file=" + quote(file_target, safe="/")
+    )
 
 
 def _zscores(values: List[float]) -> List[float]:
@@ -33,15 +43,19 @@ def _why(row: Dict[str, object]) -> str:
     return "combined keyword+semantic signal"
 
 
-def build_evidence(result_row: Dict[str, object]) -> Dict[str, object]:
+def build_evidence(
+    result_row: Dict[str, object], vault_name: Optional[str] = None
+) -> Dict[str, object]:
     metadata: Dict[str, object] = result_row["metadata"]  # type: ignore[assignment]
     is_document = str(metadata.get("granularity", "document")) == "document"
     heading = "" if is_document else str(metadata.get("heading", ""))
     document = str(result_row["document"])
     reranker = result_row.get("reranker")
+    path = str(metadata.get("path", ""))
     return {
         "note_id": str(metadata.get("note_id", "")),
-        "path": str(metadata.get("path", "")),
+        "path": path,
+        "obsidian_url": obsidian_url(vault_name, path) if vault_name and path else None,
         "title": str(metadata.get("title", "")),
         "type": str(metadata.get("note_type", "")),
         "provenance": str(metadata.get("provenance", "")),
@@ -66,6 +80,7 @@ def build_retrieval_output(
     mode: str,
     granularity: str,
     rows: List[Dict[str, object]],
+    vault_name: Optional[str] = None,
 ) -> Dict[str, object]:
     bm25_z = _zscores([float(row["bm25"]) for row in rows])
     sem_z = _zscores([float(row["semantic"]) for row in rows])
@@ -73,7 +88,7 @@ def build_retrieval_output(
         row["_bm25_z"] = bz
         row["_sem_z"] = sz
 
-    candidates = [build_evidence(row) for row in rows]
+    candidates = [build_evidence(row, vault_name) for row in rows]
     return {
         "query": query,
         "mode": mode,

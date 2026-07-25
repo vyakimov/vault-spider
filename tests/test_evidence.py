@@ -44,7 +44,7 @@ class TestSchema:
         assert out["granularity"] == "section"
         cand = out["candidates"][0]
         for key in (
-            "note_id", "path", "title", "type", "heading", "chunk_id",
+            "note_id", "path", "obsidian_url", "title", "type", "heading", "chunk_id",
             "line_start", "line_end", "excerpt", "scores", "why",
         ):
             assert key in cand
@@ -61,6 +61,35 @@ class TestSchema:
         assert cand["heading"] == ""
         assert cand["line_start"] == 0
         assert cand["line_end"] == 0
+
+
+class TestObsidianUrl:
+    def test_url_built_when_vault_name_known(self):
+        rows = [make_row("n1", "n1::s000", bm25=1.0, semantic=2.0)]
+        rows[0]["metadata"]["path"] = "Projects/My Note.md"
+        out = build_retrieval_output("q", "fast", "section", rows, vault_name="Vault 14")
+        assert out["candidates"][0]["obsidian_url"] == (
+            "obsidian://open?vault=Vault%2014&file=Projects/My%20Note"
+        )
+
+    def test_null_without_vault_name(self):
+        rows = [make_row("n1", "n1::s000", bm25=1.0, semantic=2.0)]
+        cand = build_retrieval_output("q", "fast", "section", rows)["candidates"][0]
+        assert cand["obsidian_url"] is None
+
+    def test_null_when_path_missing(self):
+        rows = [make_row("n1", "n1::s000", bm25=1.0, semantic=2.0)]
+        rows[0]["metadata"]["path"] = ""
+        out = build_retrieval_output("q", "fast", "section", rows, vault_name="V")
+        assert out["candidates"][0]["obsidian_url"] is None
+
+    def test_non_md_path_kept_verbatim(self):
+        rows = [make_row("n1", "n1::s000", bm25=1.0, semantic=2.0)]
+        rows[0]["metadata"]["path"] = "Assets/diagram.canvas"
+        out = build_retrieval_output("q", "fast", "section", rows, vault_name="V")
+        assert out["candidates"][0]["obsidian_url"] == (
+            "obsidian://open?vault=V&file=Assets/diagram.canvas"
+        )
 
 
 class TestFastModeRerankerNull:

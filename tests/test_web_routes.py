@@ -180,8 +180,8 @@ class TestJsonApi:
         assert set(payload["result"]) == {"query", "mode", "granularity", "candidates"}
         candidate = payload["result"]["candidates"][0]
         assert set(candidate) == {
-            "note_id", "path", "title", "type", "provenance", "heading", "chunk_id",
-            "line_start", "line_end", "excerpt", "scores", "why",
+            "note_id", "path", "obsidian_url", "title", "type", "provenance", "heading",
+            "chunk_id", "line_start", "line_end", "excerpt", "scores", "why",
         }
         assert set(candidate["scores"]) == {"bm25", "semantic", "fused", "reranker", "final"}
 
