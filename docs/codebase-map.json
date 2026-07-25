@@ -2734,7 +2734,7 @@
         },
         {
           "path": "tools/build_codebase_map.py",
-          "loc": 707,
+          "loc": 1034,
           "summary": "Generate docs/codebase-map.json and docs/codebase-map.html.",
           "internal_deps": [],
           "classes": [],
@@ -2743,25 +2743,25 @@
               "name": "extract_modules",
               "signature": "() -> list[dict]",
               "doc": null,
-              "line": 64
+              "line": 65
             },
             {
               "name": "build_json",
               "signature": "(code_modules: list[dict], test_modules: list[dict]) -> dict",
               "doc": null,
-              "line": 395
+              "line": 396
             },
             {
               "name": "build_html",
               "signature": "(codebase_map: dict) -> str",
               "doc": null,
-              "line": 470
+              "line": 801
             },
             {
               "name": "main",
               "signature": "() -> None",
               "doc": null,
-              "line": 690
+              "line": 1017
             }
           ],
           "constants": [
