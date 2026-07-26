@@ -323,6 +323,22 @@ class TestStaleIndex:
         assert response.status_code == 200
         assert app_state.store is not first, "a rewritten index must be reconnected"
 
+    def test_reconnect_actually_reopens_the_index(self, client):
+        """A new IndexStore is not enough — the handle underneath it must be new too.
+
+        `chromadb.PersistentClient` caches a System per path and hands the same rust
+        bindings to every client built on it, so a rebuild that does not drop that cache
+        wraps the exact stale handle it is meant to replace and recovers nothing.
+        """
+        app_state = client.app.state.vault
+        before = app_state.store.client._system
+
+        assert app_state.reconnect() is True
+        assert app_state.store.client._system is not before
+
+        # And the reopened index still answers.
+        assert "WireGuard setup" in client.get("/?q=wireguard").text
+
     def test_retries_once_when_a_query_hits_a_stale_handle(self, client):
         """The sync can land mid-request, past the freshness check."""
         app_state = client.app.state.vault

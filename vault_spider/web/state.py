@@ -10,6 +10,7 @@ in its threadpool rather than stalling the event loop.
 
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,23 @@ from vault_spider.index.store import IndexStore
 from vault_spider.llm.openrouter import OpenRouterClient
 from vault_spider.obsidian import registry
 from vault_spider.retrieval.searcher import Searcher
+
+
+logger = logging.getLogger("vault_spider.web")
+
+
+def _clear_chroma_system_cache() -> None:
+    """Drop Chroma's per-path System cache so the next client opens the index afresh.
+
+    Guarded because this reaches into Chroma's internals: if a future version moves or
+    renames it, reconnecting degrades to the old no-op rebuild rather than taking the
+    whole app down at import time.
+    """
+    try:
+        from chromadb.api.client import SharedSystemClient
+    except ImportError:  # pragma: no cover - depends on the installed chromadb
+        return
+    SharedSystemClient.clear_system_cache()
 
 
 class StartupError(RuntimeError):
@@ -151,6 +169,11 @@ class AppState:
             return False
         with self._index_lock:
             try:
+                # `PersistentClient` hands back a cached System — and with it the same
+                # rust bindings — for a path it has already opened. Without dropping that
+                # cache a "new" IndexStore wraps the very stale handle we are replacing,
+                # and the rebuild silently changes nothing.
+                _clear_chroma_system_cache()
                 store = IndexStore(
                     chroma_db_path=path, collection_name=collection, provider=self.provider
                 )
@@ -160,11 +183,15 @@ class AppState:
                     provider=self.provider,
                 )
             except Exception:  # noqa: BLE001 - a failed reconnect must not mask the cause
+                logger.exception("index reconnect failed; keeping the existing handle")
                 return False
             self.store = store
             self.searcher = searcher
             self._index_signature = self._read_index_signature()
         self.warm()
+        # Logged because this is otherwise invisible: a silent recovery and a silently
+        # broken one look identical from the outside.
+        logger.warning("reconnected to the index at %s after it changed on disk", path)
         return True
 
     def ensure_fresh_index(self) -> None:
