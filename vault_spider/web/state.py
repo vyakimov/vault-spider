@@ -30,7 +30,6 @@ from vault_spider.llm.openrouter import OpenRouterClient
 from vault_spider.obsidian import registry
 from vault_spider.retrieval.searcher import Searcher
 
-
 logger = logging.getLogger("vault_spider.web")
 
 
@@ -42,7 +41,7 @@ def _clear_chroma_system_cache() -> None:
     whole app down at import time.
     """
     try:
-        from chromadb.api.client import SharedSystemClient
+        from chromadb.api.shared_system_client import SharedSystemClient
     except ImportError:  # pragma: no cover - depends on the installed chromadb
         return
     SharedSystemClient.clear_system_cache()
