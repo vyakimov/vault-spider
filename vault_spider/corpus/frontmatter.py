@@ -8,6 +8,27 @@ from typing import Any, Dict, List, Tuple
 import yaml
 
 
+def frontmatter_text(raw: str) -> str:
+    """The YAML block between the opening and closing fences, or ``""``."""
+    if not raw.startswith("---\n"):
+        return ""
+    lines = raw.splitlines()
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            return "\n".join(lines[1:index])
+    return ""
+
+
+def alias_list(value: Any) -> List[str]:
+    """Frontmatter ``aliases`` as a list; a bare string is one alias."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    return [text] if text else []
+
+
 def split_frontmatter(raw_text: str) -> Tuple[Dict[str, Any], str]:
     if not raw_text.startswith("---\n"):
         return {}, raw_text

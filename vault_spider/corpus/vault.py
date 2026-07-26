@@ -18,7 +18,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
-from vault_spider.corpus.frontmatter import coerce_datetime, normalize_tags, split_frontmatter
+from vault_spider.corpus.frontmatter import (
+    alias_list,
+    coerce_datetime,
+    frontmatter_text,
+    normalize_tags,
+    split_frontmatter,
+)
 from vault_spider.corpus.loader import (
     EXCALIDRAW_SUFFIX,
     has_ignore_frontmatter_tag,
@@ -47,27 +53,6 @@ class VaultNote:
     @property
     def tags(self) -> List[str]:
         return normalize_tags(self.frontmatter.get("tags"))
-
-
-def frontmatter_text(raw: str) -> str:
-    """The YAML block between the opening and closing fences, or ''."""
-    if not raw.startswith("---\n"):
-        return ""
-    lines = raw.splitlines()
-    for index in range(1, len(lines)):
-        if lines[index].strip() == "---":
-            return "\n".join(lines[1:index])
-    return ""
-
-
-def alias_list(value: Any) -> List[str]:
-    """Frontmatter `aliases`, as a list. A bare string is one alias, not many words."""
-    if value is None:
-        return []
-    if isinstance(value, (list, tuple, set)):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).strip()
-    return [text] if text else []
 
 
 def note_recency(frontmatter: Dict[str, Any]) -> Optional[datetime]:

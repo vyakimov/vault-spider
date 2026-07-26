@@ -10,7 +10,10 @@ def make_note(body: str, note_id: str = "n") -> Note:
     return Note(
         note_id=note_id,
         path="p.md",
+        stem="p",
         title="T",
+        aliases=[],
+        frontmatter_text="",
         tags=[],
         created=None,
         updated=None,

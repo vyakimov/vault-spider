@@ -4,7 +4,7 @@ description: Fully synthetic corpus styled after a real messy vault (public-safe
 corpus_root: corpus
 queries_file: golden_queries.jsonl
 expected_note_count: 57
-expected_query_count: 30
+expected_query_count: 31
 privacy: synthetic-public
 timestamp_policy: obsidian_local
 license_note: Invented for this repository; no private-vault content, verbatim or derived.

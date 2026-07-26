@@ -151,20 +151,22 @@ PACKAGES = {
     "vault_spider.corpus": {
         "match": lambda p: p.startswith("vault_spider/corpus/"),
         "role": "Reads the vault: loads Markdown notes, parses frontmatter, resolves note "
-                "identity (ULID or path hash), and splits notes into deterministic "
-                "heading-based sections.",
+                "identity (ULID or path hash) and wikilinks, and splits notes into "
+                "deterministic heading-based sections.",
     },
     "vault_spider.index": {
         "match": lambda p: p.startswith("vault_spider/index/"),
         "role": "Builds and maintains the ChromaDB collection (one document entry + N section "
                 "entries per note, distinguished by the `granularity` metadata field) with "
-                "failure-safe incremental sync; plus a read-only reader for stats without BM25.",
+                "failure-safe incremental sync and a persisted note-level wikilink graph; plus "
+                "a read-only reader for stats without BM25.",
     },
     "vault_spider.retrieval": {
         "match": lambda p: p.startswith("vault_spider/retrieval/"),
         "role": "Hybrid search: BM25 + embeddings fused by pure scoring functions, optional "
-                "rerank (thorough mode), an on-disk query-embedding cache, and assembly of the "
-                "retrieval output contract (evidence/citations).",
+                "rerank (thorough mode), one-hop expansion over the persisted wikilink graph, "
+                "an on-disk query-embedding cache, and assembly of the retrieval output "
+                "contract (evidence/citations).",
     },
     "vault_spider.synthesis": {
         "match": lambda p: p.startswith("vault_spider/synthesis/"),
@@ -223,7 +225,8 @@ DATA_FLOW = {
     "read_path": [
         "vault .md files",
         "corpus.loader / corpus.frontmatter / corpus.identity / corpus.chunker",
-        "index.store (Chroma collection: document + section entries; BM25 corpus)",
+        "index.store (Chroma collection: document + section entries, persisted wikilink graph; "
+        "BM25 corpus)",
         "retrieval.searcher (BM25 + embeddings via llm.openrouter, fused by retrieval.fusion; "
         "thorough mode reranks)",
         "retrieval.evidence (retrieval output contract)",
@@ -255,8 +258,8 @@ MERMAID_CODE_AND_DATA_FLOW = """flowchart LR
     subgraph read["Read, index, and query"]
         Vault[("Obsidian vault<br/>Markdown notes")]
         Corpus["corpus<br/>load, normalize, identify, chunk"]
-        Store["index.store<br/>sync + BM25"]
-        Index[("ChromaDB<br/>document + section entries")]
+        Store["index.store<br/>sync + graph + BM25"]
+        Index[("ChromaDB<br/>document + section entries<br/>note-level link graph")]
         Search["retrieval.searcher<br/>hybrid search + fusion"]
         Evidence["retrieval.evidence<br/>ranked candidate contract"]
         Synthesis["synthesis.answer<br/>cited answer or abstention"]
@@ -320,9 +323,15 @@ INVARIANTS = [
     "`id`, `created`, and `provenance` are immutable once set; `lint --fix` writes only "
     "missing values, never edits existing ones.",
     "Sync is failure-safe: old index entries are deleted only after all new embeddings are "
-    "computed and validated.",
+    "computed and validated; graph entry metadata is written before the collection snapshot "
+    "hash so partial graph writes rehydrate as stale.",
     "Every mutating command accepts --dry-run and returns exactly what would change with "
     "meta.dry_run: true, making no backend calls.",
+    "Graph expansion never bypasses a retrieval filter: expanded candidates must be in the "
+    "same allowed-id set as direct ones. It applies only when the reranker returns a usable "
+    "ranking; on rerank failure graph candidates and boosts are discarded and retrieval "
+    "falls back to fused ranking unchanged.",
+    "A stale or missing graph snapshot disables expansion; it never fails a command.",
     "Eval runs go against a dedicated --chroma-path, never the live-vault index.",
     "Distilled notes are regenerable pointers to their sources; raw notes always win on "
     "conflict.",
@@ -330,7 +339,7 @@ INVARIANTS = [
 
 COMMANDS = [
     {"command": "schema",
-     "summary": "Print the machine-readable command + contract schema (version 2)."},
+     "summary": "Print the machine-readable command + contract schema (version 3)."},
     {"command": "sync [--root DIR] [--reset]",
      "summary": "Incremental index sync: add new, re-embed changed/moved, delete removed notes."},
     {"command": "stats", "summary": "Index statistics (no API key needed)."},

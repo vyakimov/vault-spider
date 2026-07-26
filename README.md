@@ -279,6 +279,19 @@ reranks the top results with a cross-encoder model, and applies a boost for rece
 - `--granularity document` searches whole notes. `section` searches sections. `mixed` searches
   sections only, with a limit of 3 sections per note.
 
+In `thorough` mode — with a reranker configured and a healthy link graph — search also follows
+your wikilinks one hop. Hybrid search finds the note your words hit; it misses the complementary
+note that is *linked* from it but never mentions your words. So after fusion, the top results'
+linked neighbours join the pool, damped by how many links each end has, so that a glossary or MOC
+that links half the vault cannot swamp the results. The reranker judges them like anything else,
+and a linked note that survives gets a small nudge in the final ranking. A result that arrived
+this way is marked "↗ linked" in the web app and carries a `graph` block in the JSON naming the
+note it was reached from. Nothing to turn on, and no flags to tune. If reranking fails, graph
+results are dropped rather than guessed at.
+
+After upgrading, run `vault-spider sync` once so the index picks up the graph — `stats` reports
+`graph_status: "ok"` when it has. Until then search behaves exactly as before.
+
 `synthesize` sends the top results to a chat model, under one rule: cite every claim, or abstain.
 An answer with no citation is treated as an abstention. If the model's output cannot be parsed,
 Vault Spider also treats this as an abstention — it never shows an answer it cannot verify.

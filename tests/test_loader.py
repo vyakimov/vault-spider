@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from vault_spider.corpus.chunker import document_text
+from vault_spider.corpus.links import build_link_graph
 from vault_spider.corpus.loader import (
     Note,
     has_ignore_tag,
@@ -58,7 +59,10 @@ class TestDocumentText:
         base = dict(
             note_id="x",
             path="folder/note.md",
+            stem="note",
             title="Title",
+            aliases=[],
+            frontmatter_text="",
             tags=["a", "b"],
             created=None,
             updated=None,
@@ -105,6 +109,45 @@ class TestLoadNotes:
         notes = load_notes(str(FIXTURES))
         sourdough = next(n for n in notes if "sourdough" in n.path)
         assert "starter" in sourdough.body.lower()
+
+    def test_loaded_notes_feed_link_graph_with_aliases_and_raw_frontmatter(
+        self, tmp_path: Path
+    ):
+        (tmp_path / "source.md").write_text(
+            "---\n"
+            "title: Source\n"
+            'parent: "[[Old target name]]"\n'
+            "---\n"
+            "Self [[Source]] and attachment ![[diagram.png]].\n"
+            "`[[inline code]]`\n"
+            "```\n"
+            "[[fenced code]]\n"
+            "```\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "target.md").write_text(
+            "---\n"
+            "title: Current target name\n"
+            "aliases:\n"
+            "  - Old target name\n"
+            "---\n"
+            "Target body.\n",
+            encoding="utf-8",
+        )
+
+        notes = load_notes(str(tmp_path))
+        source = next(note for note in notes if note.path == "source.md")
+        target = next(note for note in notes if note.path == "target.md")
+        assert source.stem == "source"
+        assert target.aliases == ["Old target name"]
+        assert source.frontmatter_text == (
+            'title: Source\nparent: "[[Old target name]]"'
+        )
+
+        graph = build_link_graph(notes, ["diagram.png"])
+        assert graph.links_from("source.md") == ["target.md"]
+        assert graph.links_to("target.md") == ["source.md"]
+        assert graph.unresolved == []
 
     def test_missing_vault_raises(self, tmp_path: Path):
         with pytest.raises(FileNotFoundError):

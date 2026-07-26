@@ -150,7 +150,7 @@ class TestValidate:
         report = validate(load_dataset(str(dataset_dir)))
         assert report.errors == []
         assert report.stats["notes"] == 57
-        assert report.stats["queries"] == 30
+        assert report.stats["queries"] == 31
 
     def test_valid_dataset_passes(self, tmp_path):
         report = validate(load_dataset(str(write_dataset(tmp_path))))

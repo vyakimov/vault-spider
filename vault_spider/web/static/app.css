@@ -399,6 +399,17 @@ a {
   opacity: 1;
 }
 
+/* This result did not match the query — a wikilink from one that did carried us
+   here. Worth saying, quietly, because it changes how to read the evidence bar. */
+.result__linked {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
 /* The signature: two hairlines, keyword above semantic. Whichever runs longer
    is why this note surfaced. */
 .evidence {

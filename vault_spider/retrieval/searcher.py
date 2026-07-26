@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,34 @@ from vault_spider.retrieval.fusion import (
 )
 from vault_spider.retrieval.query_cache import QueryEmbeddingCache
 from vault_spider.utils import DEFAULT_STOP_WORDS, normalize_no_punct, tokenize_for_bm25
+
+# -- graph expansion ----------------------------------------------------------
+# One deterministic hop over the vault's wikilink graph, to reach complementary
+# evidence sitting in a linked note the query never mentions. These stay internal
+# for this release: no CLI, MCP or web control exposes them.
+GRAPH_SEED_COUNT = 10
+GRAPH_NEIGHBOR_CAP = 20
+GRAPH_DECAY = 0.5
+GRAPH_SECTIONS_PER_NOTE = 3
+# Expanded candidates lose the pool race on fused score alone — fusion min-max
+# scales into [0,1], so the 30th direct candidate outranks any realistic
+# propagated score. Reserved slots are what let the reranker ever see them.
+GRAPH_RESERVED_POOL_SLOTS = 10
+# The graph score has to survive *past* the reranker too, or expansion only ever
+# changes which documents were judged, never the order they come back in. Rerank
+# scores are a rank scale (`rerank_use_ranks`), so this reads as "shift by N
+# positions" rather than as an opaque score nudge.
+GRAPH_WEIGHT = 0.15
+
+
+@dataclass(frozen=True)
+class GraphProvenance:
+    """Why an expanded candidate is here: which seed reached it, and how strongly."""
+
+    seed_note_id: str
+    seed_path: str
+    propagated_score: float
+    hop_count: int = 1
 
 
 @dataclass
@@ -105,6 +134,132 @@ class Searcher:
                 recency_scores[doc_id] = 1.0
 
         return pd.Series(recency_scores, name="boost_factor", dtype=float)
+
+    # -- graph expansion ------------------------------------------------------
+
+    def _graph_seeds(
+        self,
+        fused: pd.DataFrame,
+        metadata_by_id: Dict[str, Dict[str, object]],
+    ) -> Tuple[List[str], Dict[str, float], Dict[str, str]]:
+        """The top notes to expand from, collapsed from entries by best fused score."""
+        best_score: Dict[str, float] = {}
+        best_entry: Dict[str, str] = {}
+        for entry_id, score in fused["fused_score"].items():
+            note_id = str(metadata_by_id.get(str(entry_id), {}).get("note_id", ""))
+            if not note_id:
+                continue
+            if note_id not in best_score or float(score) > best_score[note_id]:
+                best_score[note_id] = float(score)
+                best_entry[note_id] = str(entry_id)
+        seeds = sorted(best_score, key=lambda note_id: (-best_score[note_id], note_id))
+        return seeds[:GRAPH_SEED_COUNT], best_score, best_entry
+
+    def _graph_neighbors(
+        self, seeds: List[str], seed_scores: Dict[str, float]
+    ) -> Dict[str, Tuple[float, str]]:
+        """One-hop neighbours of the seeds, mapped to (propagated score, winning seed).
+
+        Damping divides by the log-scaled degrees of both ends, so a glossary, MOC or
+        daily note that links half the vault cannot flood the pool.
+        """
+        seed_set = set(seeds)
+        reached: Dict[str, Tuple[float, str]] = {}
+        for seed_id in seeds:
+            seed_fused = seed_scores[seed_id]
+            seed_degree = self.store.graph_degree(seed_id)
+            for neighbor_id in self.store.graph_neighbors(seed_id):
+                if neighbor_id in seed_set:
+                    continue
+                damping = max(
+                    1.0,
+                    math.sqrt(
+                        math.log(2 + seed_degree)
+                        * math.log(2 + self.store.graph_degree(neighbor_id))
+                    ),
+                )
+                score = seed_fused * GRAPH_DECAY / damping
+                current = reached.get(neighbor_id)
+                # Equal scores resolve on seed id so two runs agree on provenance.
+                if (
+                    current is None
+                    or score > current[0]
+                    or (score == current[0] and seed_id < current[1])
+                ):
+                    reached[neighbor_id] = (score, seed_id)
+        kept = sorted(reached, key=lambda note_id: (-reached[note_id][0], note_id))
+        return {note_id: reached[note_id] for note_id in kept[:GRAPH_NEIGHBOR_CAP]}
+
+    def _graph_expand(
+        self,
+        *,
+        fused: pd.DataFrame,
+        ids: List[str],
+        metadata_by_id: Dict[str, Dict[str, object]],
+        allowed_ids: Set[str],
+        query_embedding: List[float],
+        data_granularity: str,
+    ) -> Tuple[Dict[str, GraphProvenance], Dict[str, float], Dict[str, object]]:
+        """Expanded candidates keyed by entry id, their semantic scores, and a report."""
+        seeds, seed_scores, seed_entry = self._graph_seeds(fused, metadata_by_id)
+        neighbors = self._graph_neighbors(seeds, seed_scores)
+        report: Dict[str, object] = {
+            "seeds_used": len(seeds),
+            "neighbor_notes_considered": len(neighbors),
+        }
+        if not neighbors:
+            return {}, {}, report
+
+        # Ask for exactly the neighbours' entries, so one note with many sections
+        # cannot crowd every other neighbour out of a truncated result set.
+        neighbor_entry_ids = [
+            entry_id
+            for entry_id in ids
+            if str(metadata_by_id[entry_id].get("note_id", "")) in neighbors
+        ]
+        if not neighbor_entry_ids:
+            return {}, {}, report
+
+        results = self.store.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=len(neighbor_entry_ids),
+            where={
+                "$and": [
+                    {"granularity": data_granularity},
+                    {"note_id": {"$in": sorted(neighbors)}},
+                ]
+            },
+            include=["distances"],
+        )
+
+        by_note: Dict[str, List[Tuple[float, str]]] = {}
+        for entry_id, distance in zip(results["ids"][0], results["distances"][0]):
+            # allowed_ids is the single gate for folder/tag/type/provenance/date/
+            # must_include. Expansion must never route a candidate around a filter.
+            if entry_id not in allowed_ids:
+                continue
+            note_id = str(metadata_by_id.get(entry_id, {}).get("note_id", ""))
+            if note_id not in neighbors:
+                continue
+            by_note.setdefault(note_id, []).append((float(distance), entry_id))
+
+        provenance: Dict[str, GraphProvenance] = {}
+        semantic_by_id: Dict[str, float] = {}
+        for note_id, entries in by_note.items():
+            entries.sort(key=lambda item: (item[0], item[1]))
+            score, seed_id = neighbors[note_id]
+            seed_path = str(metadata_by_id[seed_entry[seed_id]].get("path", ""))
+            for distance, entry_id in entries[:GRAPH_SECTIONS_PER_NOTE]:
+                provenance[entry_id] = GraphProvenance(
+                    seed_note_id=seed_id,
+                    seed_path=seed_path,
+                    propagated_score=score,
+                )
+                # Same transform as the main semantic path, so the two are comparable.
+                semantic_by_id[entry_id] = float(np.exp(-distance) + 1.0)
+
+        report["entries_added"] = len(provenance)
+        return provenance, semantic_by_id, report
 
     # -- main pipeline --------------------------------------------------------
 
@@ -301,19 +456,80 @@ class Searcher:
         if fused.empty:
             raise ValueError("No candidate documents available for the query.")
 
+        # -- graph expansion, after fusion and before reranking ---------------
+        # Never before fusion: BM25, semantic scoring, fusion and every filter must
+        # behave exactly as they do without a graph.
+        graph_status = str(getattr(self.store, "graph_status", "missing"))
+        graph_eligible = (
+            mode == "thorough"
+            and bool(self.provider.rerank_model)
+            and graph_status == "ok"
+        )
+        graph_provenance: Dict[str, GraphProvenance] = {}
+        graph_only_ids: List[str] = []
+        graph_report: Dict[str, object] = {}
+        if graph_eligible:
+            graph_provenance, graph_semantic, graph_report = self._graph_expand(
+                fused=fused,
+                ids=ids,
+                metadata_by_id=metadata_by_id,
+                allowed_ids=allowed_ids,
+                query_embedding=query_embedding,
+                data_granularity=data_granularity,
+            )
+            graph_only_ids = [
+                entry_id for entry_id in graph_provenance if entry_id not in fused.index
+            ]
+            if graph_only_ids:
+                # fused_score 0.0, not NaN: these never went through fusion, and the
+                # rerank-failure path fills missing reranked scores from this column.
+                addition = pd.DataFrame(
+                    0.0, index=graph_only_ids, columns=fused.columns, dtype=float
+                )
+                fused = pd.concat([fused, addition])
+                raw_addition = pd.DataFrame(index=graph_only_ids)
+                # BM25 is genuine here: it is computed over every id in the pool.
+                raw_addition["semantic_scores"] = [
+                    graph_semantic.get(entry_id, 0.0) for entry_id in graph_only_ids
+                ]
+                raw_addition["keyword_scores"] = [
+                    float(keyword_scores.get(entry_id, 0.0)) for entry_id in graph_only_ids
+                ]
+                raw_scores = pd.concat([raw_scores, raw_addition])
+
         # Rerank only in thorough mode; fast skips it even if a model is configured.
         rerank_ran = False
+        # `rerank_ran` means the call returned; `rerank_scored` means it returned a
+        # usable ranking. Graph results are gated on the latter.
+        rerank_scored = False
         fused["reranked_raw_score"] = float("nan")
         fused["reranked_score"] = fused["fused_score"]
         fused["rerank_rank"] = np.nan
         if mode == "thorough" and self.provider.rerank_model:
             rerank_pool_size = min(len(fused), params.rerank_top_k)
-            rerank_input = fused.head(rerank_pool_size)
+            pool_ids = list(fused.head(rerank_pool_size).index)
+            if graph_provenance:
+                # Reserved slots. Without them the pool is decided purely by fused
+                # score, which expanded candidates lose by construction. Note this
+                # covers every graph-reached candidate, not just ones missing from
+                # fusion: a neighbour sitting at fused rank 45 is exactly as absent
+                # from the reranker as one with no fused score at all.
+                seen = set(pool_ids)
+                reserved = [
+                    entry_id
+                    for entry_id in sorted(
+                        graph_provenance,
+                        key=lambda eid: (-graph_provenance[eid].propagated_score, eid),
+                    )
+                    if entry_id not in seen
+                ][:GRAPH_RESERVED_POOL_SLOTS]
+                pool_ids.extend(reserved)
+                graph_report["entries_in_rerank_pool"] = len(reserved)
             try:
                 reranked = self.provider.rerank(
                     query=query,
-                    documents=[document_by_id[doc_id] for doc_id in rerank_input.index],
-                    ids=list(rerank_input.index),
+                    documents=[document_by_id[doc_id] for doc_id in pool_ids],
+                    ids=pool_ids,
                 )
                 rerank_ran = True
             except OpenRouterError:
@@ -336,8 +552,34 @@ class Searcher:
                     pd.Series(rank_scores).reindex(fused.index).fillna(fused["fused_score"])
                 )
                 fused["rerank_rank"] = pd.Series(rank_positions).reindex(fused.index)
+                rerank_scored = True
 
-        fused["relevance_score"] = fused["reranked_score"]
+        # The reranker is the precision guard: graph results count only once it has
+        # judged them. If it failed, retrieval must be exactly what it is today.
+        graph_applied = bool(graph_provenance) and rerank_scored
+        if graph_provenance and not graph_applied:
+            if graph_only_ids:
+                fused = fused.drop(index=graph_only_ids)
+                raw_scores = raw_scores.drop(index=graph_only_ids)
+            graph_provenance = {}
+            graph_report["fallback_reason"] = "rerank_unavailable"
+
+        fused["graph_bonus"] = 0.0
+        if graph_applied:
+            bonus = (
+                pd.Series(
+                    {
+                        entry_id: GRAPH_WEIGHT * provenance.propagated_score
+                        for entry_id, provenance in graph_provenance.items()
+                    }
+                )
+                .reindex(fused.index)
+                .fillna(0.0)
+            )
+            # Only candidates the reranker actually scored may carry the bonus.
+            fused["graph_bonus"] = bonus.where(fused["rerank_rank"].notna(), 0.0)
+
+        fused["relevance_score"] = fused["reranked_score"] + fused["graph_bonus"]
 
         if params.recency_boost_enabled:
             recency_boost_factor = (
@@ -371,12 +613,24 @@ class Searcher:
                     continue
                 per_note[note_id] = per_note.get(note_id, 0) + 1
             rerank_rank = record.get("rerank_rank")
+            # Not named `provenance`: that is the filter parameter, still read below.
+            graph_entry = graph_provenance.get(str(doc_id))
             rows.append(
                 {
                     "id": doc_id,
                     "note_id": note_id,
                     "document": document_by_id[doc_id],
                     "metadata": metadata,
+                    "graph": (
+                        None
+                        if graph_entry is None
+                        else {
+                            "seed_note_id": graph_entry.seed_note_id,
+                            "seed_path": graph_entry.seed_path,
+                            "hop_count": graph_entry.hop_count,
+                            "propagated_score": float(graph_entry.propagated_score),
+                        }
+                    ),
                     "bm25": float(raw_scores.loc[doc_id, "keyword_scores"]),
                     "semantic": float(raw_scores.loc[doc_id, "semantic_scores"]),
                     "fused": float(record["fused_score"]),
@@ -409,6 +663,17 @@ class Searcher:
             ),
             "rerank_enabled": rerank_ran,
             "data_granularity": data_granularity,
+            "graph": {
+                "eligible": graph_eligible,
+                "status": graph_status,
+                "applied": graph_applied,
+                "seed_count": GRAPH_SEED_COUNT,
+                "neighbor_cap": GRAPH_NEIGHBOR_CAP,
+                "decay": GRAPH_DECAY,
+                "reserved_pool_slots": GRAPH_RESERVED_POOL_SLOTS,
+                "weight": GRAPH_WEIGHT,
+                **graph_report,
+            },
             "filters": {
                 key: value
                 for key, value in {

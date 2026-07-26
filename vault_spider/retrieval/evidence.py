@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from pathlib import PurePosixPath
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import numpy as np
@@ -30,10 +31,28 @@ def _zscores(values: List[float]) -> List[float]:
     return ((arr - mean) / std).tolist()
 
 
-def _why(row: Dict[str, object]) -> str:
+def _graph_block(row: Dict[str, object]) -> Optional[Dict[str, Any]]:
+    """The candidate's graph provenance, or None when expansion never reached it."""
+    graph = row.get("graph")
+    if not isinstance(graph, dict):
+        return None
+    return {
+        "seed_note_id": str(graph.get("seed_note_id", "")),
+        "seed_path": str(graph.get("seed_path", "")),
+        "hop_count": int(graph.get("hop_count", 1)),
+        "propagated_score": round(float(graph.get("propagated_score", 0.0)), 4),
+    }
+
+
+def _why(row: Dict[str, object], graph: Optional[Dict[str, Any]] = None) -> str:
     rerank_rank = row.get("rerank_rank")
     if rerank_rank is not None and int(rerank_rank) <= 3:
         return f"reranked into top {int(rerank_rank)} for this query"
+    if graph is not None:
+        # Graph provenance is the distinguishing signal here — the query did not
+        # reach this note, a link from one it did reach carried us to it.
+        seed = PurePosixPath(graph["seed_path"]).stem or graph["seed_note_id"]
+        return f"linked from {seed}"
     bm25_z = float(row.get("_bm25_z", 0.0))
     sem_z = float(row.get("_sem_z", 0.0))
     if bm25_z > sem_z:
@@ -52,6 +71,7 @@ def build_evidence(
     document = str(result_row["document"])
     reranker = result_row.get("reranker")
     path = str(metadata.get("path", ""))
+    graph = _graph_block(result_row)
     return {
         "note_id": str(metadata.get("note_id", "")),
         "path": path,
@@ -71,7 +91,8 @@ def build_evidence(
             "reranker": None if reranker is None else round(float(reranker), 4),
             "final": round(float(result_row["final"]), 4),
         },
-        "why": _why(result_row),
+        "graph": graph,
+        "why": _why(result_row, graph),
     }
 
 

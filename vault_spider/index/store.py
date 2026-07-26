@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import PurePosixPath
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import chromadb
 from nltk.stem import PorterStemmer
@@ -17,7 +17,9 @@ from rank_bm25 import BM25Okapi
 
 from vault_spider.config import BM25_CONFIG
 from vault_spider.corpus.chunker import document_text, section_text, split_sections
+from vault_spider.corpus.links import build_link_graph
 from vault_spider.corpus.loader import Note, load_notes
+from vault_spider.index import graph as graph_index
 from vault_spider.llm.openrouter import OpenRouterClient, OpenRouterError
 from vault_spider.utils import DEFAULT_STOP_WORDS, tokenize_for_bm25
 
@@ -54,6 +56,10 @@ class IndexStore:
         self.metadatas: Dict[str, List[Dict[str, object]]] = {g: [] for g in GRANULARITIES}
         self.tokenized: Dict[str, List[List[str]]] = {g: [] for g in GRANULARITIES}
         self.bm25: Dict[str, Optional[BM25Okapi]] = {g: None for g in GRANULARITIES}
+        self.graph_outgoing: Dict[str, Set[str]] = {}
+        self.graph_incoming: Dict[str, Set[str]] = {}
+        self.graph_status = "missing"
+        self.graph_schema_version: int | None = None
 
         self.collection = self._load_or_create_collection()
         self._rehydrate_from_collection()
@@ -117,21 +123,52 @@ class IndexStore:
             self.tokenized[granularity] = []
             self.bm25[granularity] = None
 
-        if self.collection.count() == 0:
-            return
+        if self.collection.count() > 0:
+            payload = self.collection.get(include=["documents", "metadatas"])
+            all_ids = payload.get("ids") or []
+            all_documents = payload.get("documents") or []
+            all_metadatas = payload.get("metadatas") or []
 
-        payload = self.collection.get(include=["documents", "metadatas"])
-        all_ids = payload.get("ids") or []
-        all_documents = payload.get("documents") or []
-        all_metadatas = payload.get("metadatas") or []
+            for entry_id, document, metadata in zip(all_ids, all_documents, all_metadatas):
+                granularity = str(metadata.get("granularity", "document"))
+                if granularity not in self.documents:
+                    granularity = "document"
+                self.ids[granularity].append(entry_id)
+                self.documents[granularity].append(document)
+                self.metadatas[granularity].append(metadata)
 
-        for entry_id, document, metadata in zip(all_ids, all_documents, all_metadatas):
-            granularity = str(metadata.get("granularity", "document"))
-            if granularity not in self.documents:
-                granularity = "document"
-            self.ids[granularity].append(entry_id)
-            self.documents[granularity].append(document)
-            self.metadatas[granularity].append(metadata)
+        self._rehydrate_graph()
+
+    def _rehydrate_graph(self) -> None:
+        snapshot = graph_index.resolve(
+            self.metadatas["document"], getattr(self.collection, "metadata", None)
+        )
+        self.graph = snapshot
+        self.graph_outgoing = snapshot.outgoing
+        self.graph_incoming = snapshot.incoming
+        self.graph_status = snapshot.status
+        self.graph_schema_version = snapshot.schema_version
+
+    def graph_neighbors(self, note_id: str) -> Set[str]:
+        """Symmetric one-hop neighbors, disabled when graph integrity is not okay."""
+        if self.graph_status != "ok":
+            return set()
+        return set(self.graph_outgoing.get(note_id, set())) | set(
+            self.graph_incoming.get(note_id, set())
+        )
+
+    def graph_degree(self, note_id: str) -> int:
+        return len(self.graph_neighbors(note_id))
+
+    def _graph_report(self) -> Dict[str, object]:
+        # Reads `self.graph_status` rather than the snapshot's, so the attribute stays
+        # the single switch that disables expansion.
+        return {
+            "graph_status": self.graph_status,
+            "graph_nodes": len(self.graph_outgoing),
+            "graph_edges": graph_index.edge_count(self.graph_outgoing),
+            "graph_schema_version": self.graph_schema_version,
+        }
 
     def _ensure_bm25(self, granularity: str) -> None:
         if self.bm25[granularity] is not None or not self.documents[granularity]:
@@ -171,12 +208,20 @@ class IndexStore:
             "source": "vault_markdown",
         }
 
-    def _entries_for_note(self, note: Note) -> List[Tuple[str, str, Dict[str, object]]]:
+    def _entries_for_note(
+        self, note: Note, graph_outgoing: Set[str]
+    ) -> List[Tuple[str, str, Dict[str, object]]]:
         entries: List[Tuple[str, str, Dict[str, object]]] = []
 
         doc_metadata = self._base_metadata(note)
         doc_metadata.update(
-            {"granularity": "document", "heading": "", "line_start": 0, "line_end": 0}
+            {
+                "granularity": "document",
+                "heading": "",
+                "line_start": 0,
+                "line_end": 0,
+                "graph_outgoing": graph_index.encode_outgoing(graph_outgoing),
+            }
         )
         doc_text = document_text(note)
         doc_metadata["entry_hash"] = hashlib.sha256(doc_text.encode("utf-8")).hexdigest()
@@ -230,12 +275,34 @@ class IndexStore:
             deduped.append(note)
         notes = deduped
 
+        # The index discards unresolved links and never reads attachment bookkeeping.
+        # Avoid walking the entire vault tree just to resolve attachment-only links.
+        path_graph = build_link_graph(notes, ())
+        note_id_by_path = {note.path: note.note_id for note in notes}
+        desired_graph_outgoing: Dict[str, Set[str]] = {
+            note.note_id: {
+                note_id_by_path[target_path]
+                for target_path in path_graph.outgoing.get(note.path, set())
+                if target_path in note_id_by_path
+            }
+            for note in notes
+        }
+        entries_by_note = {
+            note.note_id: self._entries_for_note(
+                note, desired_graph_outgoing[note.note_id]
+            )
+            for note in notes
+        }
+
         existing = self.collection.get(include=["metadatas"])
         existing_ids = existing.get("ids") or []
         existing_metas = existing.get("metadatas") or []
         existing_by_note: Dict[str, Dict[str, object]] = {}
+        existing_documents: Dict[str, Tuple[str, Dict[str, object]]] = {}
         for entry_id, metadata in zip(existing_ids, existing_metas):
             note_id = str(metadata.get("note_id", ""))
+            if metadata.get("granularity", "document") == "document":
+                existing_documents.setdefault(note_id, (entry_id, metadata))
             group = existing_by_note.setdefault(
                 note_id,
                 {
@@ -253,13 +320,15 @@ class IndexStore:
         would_delete: List[str] = []
         reusable: Dict[str, List[float]] = {}
         added_notes = updated_notes = deleted_notes = unchanged = 0
+        rewritten_note_ids: Set[str] = set()
 
         disk_note_ids = set()
         for note in notes:
             disk_note_ids.add(note.note_id)
             group = existing_by_note.get(note.note_id)
             if group is None:
-                entries_to_add.extend(self._entries_for_note(note))
+                entries_to_add.extend(entries_by_note[note.note_id])
+                rewritten_note_ids.add(note.note_id)
                 would_add.append(note.path)
                 added_notes += 1
             elif (
@@ -280,7 +349,8 @@ class IndexStore:
                     if entry_hash and embedding is not None:
                         reusable[entry_hash] = [float(value) for value in embedding]
                 ids_to_delete.extend(group["ids"])  # type: ignore[arg-type]
-                entries_to_add.extend(self._entries_for_note(note))
+                entries_to_add.extend(entries_by_note[note.note_id])
+                rewritten_note_ids.add(note.note_id)
                 would_update.append(note.path)
                 updated_notes += 1
             else:
@@ -292,6 +362,32 @@ class IndexStore:
                 would_delete.append(str(group.get("path") or note_id))
                 deleted_notes += 1
 
+        graph_update_ids: List[str] = []
+        graph_update_metas: List[Dict[str, object]] = []
+        graph_records_changed = 0
+        for note in notes:
+            desired_encoded = graph_index.encode_outgoing(
+                desired_graph_outgoing[note.note_id]
+            )
+            existing_document = existing_documents.get(note.note_id)
+            existing_encoded = (
+                existing_document[1].get("graph_outgoing")
+                if existing_document is not None
+                else None
+            )
+            if existing_encoded == desired_encoded:
+                continue
+            graph_records_changed += 1
+            if (
+                existing_document is not None
+                and note.note_id not in rewritten_note_ids
+            ):
+                entry_id, metadata = existing_document
+                complete_metadata = dict(metadata)
+                complete_metadata["graph_outgoing"] = desired_encoded
+                graph_update_ids.append(entry_id)
+                graph_update_metas.append(complete_metadata)
+
         if dry_run:
             return {
                 "added_notes": added_notes,
@@ -299,11 +395,13 @@ class IndexStore:
                 "deleted_notes": deleted_notes,
                 "unchanged": unchanged,
                 "total_entries": self.collection.count(),
+                "graph_records_changed": graph_records_changed,
                 "warnings": warnings,
                 "dry_run": True,
                 "would_add": sorted(would_add),
                 "would_update": sorted(would_update),
                 "would_delete": sorted(would_delete),
+                **self._graph_report(),
             }
 
         add_ids: List[str] = []
@@ -346,6 +444,23 @@ class IndexStore:
         if entries_to_add:
             self._add_in_batches(add_ids, add_texts, add_metas, resolved_embeddings)
 
+        if graph_update_ids:
+            self._update_metadatas_in_batches(graph_update_ids, graph_update_metas)
+
+        graph_snapshot_hash = graph_index.snapshot_hash(desired_graph_outgoing)
+        graph_edges = graph_index.edge_count(desired_graph_outgoing)
+        # Chroma replaces collection metadata wholesale. Keep the embedding model
+        # guard intact, and write the snapshot hash only after every entry write.
+        self.collection.modify(
+            metadata={
+                **self._collection_metadata(),
+                "graph_schema_version": graph_index.GRAPH_SCHEMA_VERSION,
+                "graph_snapshot_hash": graph_snapshot_hash,
+                "graph_nodes": len(desired_graph_outgoing),
+                "graph_edges": graph_edges,
+            }
+        )
+
         self._rehydrate_from_collection()
 
         return {
@@ -354,8 +469,10 @@ class IndexStore:
             "deleted_notes": deleted_notes,
             "unchanged": unchanged,
             "total_entries": self.collection.count(),
+            "graph_records_changed": graph_records_changed,
             "warnings": warnings,
             "dry_run": False,
+            **self._graph_report(),
         }
 
     def _add_in_batches(
@@ -375,12 +492,29 @@ class IndexStore:
                 embeddings=embeddings[start:end],
             )
 
+    def _update_metadatas_in_batches(
+        self,
+        ids: List[str],
+        metadatas: List[Dict[str, object]],
+        batch_size: int = 512,
+    ) -> None:
+        for start in range(0, len(ids), batch_size):
+            end = start + batch_size
+            self.collection.update(
+                ids=ids[start:end],
+                metadatas=metadatas[start:end],
+            )
+
     # -- stats ----------------------------------------------------------------
 
     def get_collection_stats(self) -> Dict[str, object]:
         document_metas = self.metadatas["document"]
         if not document_metas:
-            return {"total_documents": 0, "total_entries": self.collection.count()}
+            return {
+                "total_documents": 0,
+                "total_entries": self.collection.count(),
+                **self._graph_report(),
+            }
 
         folders = set()
         tag_values = set()
@@ -405,4 +539,5 @@ class IndexStore:
             "unique_tags": len(tag_values),
             "dated_notes": dated_notes,
             "embedding_model": self.provider.embedding_model,
+            **self._graph_report(),
         }

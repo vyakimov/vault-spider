@@ -19,7 +19,9 @@ from vault_spider.utils import validate_vault_relative_path
 
 # v2: the obsctl note-mutation commands were merged into this CLI (one schema,
 # one envelope, one error-type union).
-SCHEMA_VERSION = 2
+# v3: retrieval candidates carry a nullable `graph` block (one-hop wikilink
+# expansion), and `scores.final` may include a graph bonus.
+SCHEMA_VERSION = 3
 
 # How many findings per check `--format text` prints before truncating.
 _LINT_TEXT_LIMIT = 15
@@ -308,9 +310,21 @@ def _schema() -> Dict[str, Any]:
                         "scores": {
                             "bm25": "float",
                             "semantic": "float",
-                            "fused": "float",
+                            "fused": "float (BM25/semantic fusion; 0.0 for a candidate "
+                                     "reached only by graph expansion)",
                             "reranker": "float|null",
-                            "final": "float",
+                            "final": "float (final ranking score; includes the graph "
+                                     "bonus when one applied)",
+                        },
+                        "graph": {
+                            "_note": "null unless one-hop wikilink expansion reached "
+                                     "this candidate (thorough mode, reranker "
+                                     "configured, graph index healthy). A directly "
+                                     "retrieved candidate may also carry it.",
+                            "seed_note_id": "str",
+                            "seed_path": "str",
+                            "hop_count": "int (1)",
+                            "propagated_score": "float",
                         },
                         "why": "str",
                     }

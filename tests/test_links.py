@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
+from vault_spider.corpus.frontmatter import alias_list, frontmatter_text
 from vault_spider.corpus.links import (
     WIKILINK_TOKEN_RE,
     Resolver,
@@ -13,6 +14,17 @@ from vault_spider.corpus.links import (
     extract_wikilinks,
     parse_wikilink,
 )
+
+
+class TestFrontmatterHelpers:
+    def test_alias_list_keeps_bare_string_as_one_alias(self):
+        assert alias_list("A name with spaces") == ["A name with spaces"]
+        assert alias_list([" First ", "", "Second"]) == ["First", "Second"]
+
+    def test_frontmatter_text_returns_only_the_raw_yaml_block(self):
+        raw = "---\nparent: \"[[Home]]\"\naliases: [H]\n---\nBody [[Elsewhere]].\n"
+        assert frontmatter_text(raw) == 'parent: "[[Home]]"\naliases: [H]'
+        assert frontmatter_text("Body only.") == ""
 
 
 @dataclass

@@ -126,6 +126,18 @@ class TestEvidenceBar:
         assert decorate_candidates([candidate(scores=scores)])[0]["bar"]["reranked"] is True
         assert decorate_candidates([candidate()])[0]["bar"]["reranked"] is False
 
+    def test_graph_provenance_names_the_note_that_linked_here(self):
+        graph = {
+            "seed_note_id": "01JEV0000000000000000001",
+            "seed_path": "Projects/Atlas Sensor Hub Overview.md",
+            "hop_count": 1,
+            "propagated_score": 0.2788,
+        }
+        rows = decorate_candidates([candidate(graph=graph), candidate()])
+        assert rows[0]["linked_from"] == "Atlas Sensor Hub Overview"
+        # An ordinary candidate says nothing, rather than saying "not linked".
+        assert rows[1]["linked_from"] == ""
+
     def test_empty_candidate_list(self):
         assert decorate_candidates([]) == []
 

@@ -3,7 +3,7 @@
 Full flags for the commands the `vault` skill orchestrates. Each command prints one JSON
 envelope: `{"ok": true, "action", "result", "meta"}` or `{"ok": false, "action", "error": {...}}`.
 Check `"ok"`, not exit codes. Run `./bin/vault-spider schema` for the machine-readable version
-(`version: 2` — one schema covers query and mutation commands alike).
+(`version: 3` — one schema covers query and mutation commands alike).
 
 Error types (shared union): `invalid_arguments`, `index_empty`, `provider_error`, `not_found`,
 `internal_error`, `obsidian_not_running`, `backend_error`, `already_exists`, `ambiguous_target`,
@@ -44,9 +44,17 @@ FILTERS (retrieve & synthesize):
   `would_add`/`would_update`/`would_delete` path lists without touching the index; it cannot be
   combined with `--reset`.
 - `stats` result = `{total_documents, total_entries, section_entries, unique_folders, unique_tags,
-  dated_notes, embedding_model}`; fails with `index_empty` before the first sync.
+  dated_notes, embedding_model, graph_status, graph_nodes, graph_edges, graph_schema_version}`;
+  fails with `index_empty` before the first sync.
 - `retrieve` result = candidate list, each with `note_id`, `path`, `title`, `heading`, `scores`,
-  and a deterministic `why`. `reranker` score is `null` in `fast` mode.
+  a nullable `graph`, and a deterministic `why`. `reranker` score is `null` in `fast` mode.
+- Graph expansion: in `thorough` mode, with a reranker configured and `graph_status: "ok"`,
+  retrieval also follows wikilinks one hop from the top results. Expanded candidates obey every
+  filter and carry `graph: {seed_note_id, seed_path, hop_count, propagated_score}`; ordinary ones
+  carry `graph: null`. `scores.fused` is `0.0` for a candidate reached only this way, and
+  `scores.final` includes the graph bonus when one applied. No flags — it is automatic. An index
+  synced before this feature reports `graph_status: "missing"` and does not expand; one ordinary
+  `sync` backfills it (no `--reset`).
 - `synthesize` result = `{question, answer, confidence, abstained, citations[], notes_used[],
   warnings[], retrieval}`. `warnings[]` may include "N sentence(s) lack citations". `--save` adds
   `saved` / `saved_path`; it refuses (with a warning, `saved: false`) abstained, low-confidence,

@@ -10,7 +10,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Set
 
 from vault_spider import settings
-from vault_spider.corpus.frontmatter import coerce_datetime, normalize_tags, split_frontmatter
+from vault_spider.corpus.frontmatter import (
+    alias_list,
+    coerce_datetime,
+    frontmatter_text,
+    normalize_tags,
+    split_frontmatter,
+)
 from vault_spider.corpus.identity import resolve_note_id
 
 DATE_FILENAME_RE = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})\.md$")
@@ -44,7 +50,10 @@ EXCALIDRAW_FRONTMATTER_KEY = "excalidraw-plugin"
 class Note:
     note_id: str
     path: str            # vault-relative posix path
+    stem: str
     title: str
+    aliases: List[str]
+    frontmatter_text: str
     tags: List[str]
     created: str | None  # from frontmatter `created`, ISO string or None
     updated: str | None  # from frontmatter `updated`, ISO string or None
@@ -135,7 +144,10 @@ def load_notes(root: str) -> List[Note]:
         note = Note(
             note_id=resolve_note_id(frontmatter, relative_posix),
             path=relative_posix,
+            stem=path.stem,
             title=title,
+            aliases=alias_list(frontmatter.get("aliases")),
+            frontmatter_text=frontmatter_text(raw_text),
             tags=tags,
             created=_iso_or_none(frontmatter.get("created")),
             updated=_iso_or_none(frontmatter.get("updated")),

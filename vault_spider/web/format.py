@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from pathlib import PurePosixPath
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote, urlencode
 
@@ -127,6 +128,14 @@ def decorate_candidates(
             "lead": "keyword" if keyword > semantic else "semantic",
             "reranked": scores.get("reranker") is not None,
         }
+        # A linked note reached through graph expansion has no honest bar of its own:
+        # it is here because of an edge, not because the query matched it.
+        graph = candidate.get("graph")
+        item["linked_from"] = (
+            PurePosixPath(str(graph.get("seed_path", ""))).stem
+            if isinstance(graph, dict)
+            else ""
+        )
         item["lines"] = (
             f"L{candidate['line_start']}–{candidate['line_end']}"
             if candidate.get("line_start")

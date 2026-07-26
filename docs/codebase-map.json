@@ -18,7 +18,7 @@
       "read_path": [
         "vault .md files",
         "corpus.loader / corpus.frontmatter / corpus.identity / corpus.chunker",
-        "index.store (Chroma collection: document + section entries; BM25 corpus)",
+        "index.store (Chroma collection: document + section entries, persisted wikilink graph; BM25 corpus)",
         "retrieval.searcher (BM25 + embeddings via llm.openrouter, fused by retrieval.fusion; thorough mode reranks)",
         "retrieval.evidence (retrieval output contract)",
         "synthesis.answer (cited answer or abstention)",
@@ -38,7 +38,7 @@
     },
     "mermaid": {
       "title": "Code and data flow",
-      "source": "flowchart LR\n    subgraph surfaces[\"Surfaces\"]\n        CLI[\"bin/vault-spider<br/>JSON CLI\"]\n        MCP[\"bin/vault-spider-mcp<br/>MCP server\"]\n        UI[\"bin/vault-spider-web<br/>web app\"]\n    end\n\n    subgraph read[\"Read, index, and query\"]\n        Vault[(\"Obsidian vault<br/>Markdown notes\")]\n        Corpus[\"corpus<br/>load, normalize, identify, chunk\"]\n        Store[\"index.store<br/>sync + BM25\"]\n        Index[(\"ChromaDB<br/>document + section entries\")]\n        Search[\"retrieval.searcher<br/>hybrid search + fusion\"]\n        Evidence[\"retrieval.evidence<br/>ranked candidate contract\"]\n        Synthesis[\"synthesis.answer<br/>cited answer or abstention\"]\n        Distill[\"compounding.distill<br/>optional distilled note\"]\n        Lint[\"compounding.lint<br/>corpus health\"]\n        Enrich[\"enrich.planner<br/>proposed metadata + links\"]\n        Eval[\"evaluation<br/>validate + score\"]\n        OpenRouter[\"llm.openrouter<br/>embed, rerank, chat\"]\n    end\n\n    subgraph write[\"Mutation path\"]\n        Commands[\"cli mutation commands\"]\n        Notes[\"obsidian.notes<br/>contracts, dry-run, guarded edits\"]\n        Backend[\"obsidian.backend<br/>official CLI adapter\"]\n        Obsidian[\"Running Obsidian app<br/>link updates + plugins\"]\n    end\n\n    MCP -->|\"isolated CLI subprocess\"| CLI\n    UI --> Search\n    UI --> Synthesis\n    UI --> Corpus\n    CLI -->|\"sync\"| Corpus\n    Vault -->|\"direct reads\"| Corpus\n    Corpus --> Store\n    Store -->|\"embeddings\"| OpenRouter\n    Store --> Index\n    CLI -->|\"retrieve\"| Search\n    Index --> Search\n    Search <-->|\"query embedding / optional rerank\"| OpenRouter\n    Search --> Evidence\n    CLI -->|\"synthesize\"| Synthesis\n    Evidence --> Synthesis\n    Synthesis <-->|\"chat\"| OpenRouter\n    Synthesis --> Distill\n    Distill -->|\"create-only save\"| Vault\n    CLI -->|\"lint\"| Lint\n    Vault --> Lint\n    Lint -->|\"--fix: missing metadata only\"| Vault\n    CLI -->|\"enrich\"| Enrich\n    Vault --> Enrich\n    Index --> Enrich\n    Enrich <-->|\"chat\"| OpenRouter\n    CLI -->|\"eval\"| Eval\n    Eval --> Search\n    Eval --> Synthesis\n    CLI -->|\"create/edit/move/rename/link\"| Commands\n    Commands --> Notes --> Backend --> Obsidian\n    Obsidian -->|\"mutation-command writes\"| Vault\n"
+      "source": "flowchart LR\n    subgraph surfaces[\"Surfaces\"]\n        CLI[\"bin/vault-spider<br/>JSON CLI\"]\n        MCP[\"bin/vault-spider-mcp<br/>MCP server\"]\n        UI[\"bin/vault-spider-web<br/>web app\"]\n    end\n\n    subgraph read[\"Read, index, and query\"]\n        Vault[(\"Obsidian vault<br/>Markdown notes\")]\n        Corpus[\"corpus<br/>load, normalize, identify, chunk\"]\n        Store[\"index.store<br/>sync + graph + BM25\"]\n        Index[(\"ChromaDB<br/>document + section entries<br/>note-level link graph\")]\n        Search[\"retrieval.searcher<br/>hybrid search + fusion\"]\n        Evidence[\"retrieval.evidence<br/>ranked candidate contract\"]\n        Synthesis[\"synthesis.answer<br/>cited answer or abstention\"]\n        Distill[\"compounding.distill<br/>optional distilled note\"]\n        Lint[\"compounding.lint<br/>corpus health\"]\n        Enrich[\"enrich.planner<br/>proposed metadata + links\"]\n        Eval[\"evaluation<br/>validate + score\"]\n        OpenRouter[\"llm.openrouter<br/>embed, rerank, chat\"]\n    end\n\n    subgraph write[\"Mutation path\"]\n        Commands[\"cli mutation commands\"]\n        Notes[\"obsidian.notes<br/>contracts, dry-run, guarded edits\"]\n        Backend[\"obsidian.backend<br/>official CLI adapter\"]\n        Obsidian[\"Running Obsidian app<br/>link updates + plugins\"]\n    end\n\n    MCP -->|\"isolated CLI subprocess\"| CLI\n    UI --> Search\n    UI --> Synthesis\n    UI --> Corpus\n    CLI -->|\"sync\"| Corpus\n    Vault -->|\"direct reads\"| Corpus\n    Corpus --> Store\n    Store -->|\"embeddings\"| OpenRouter\n    Store --> Index\n    CLI -->|\"retrieve\"| Search\n    Index --> Search\n    Search <-->|\"query embedding / optional rerank\"| OpenRouter\n    Search --> Evidence\n    CLI -->|\"synthesize\"| Synthesis\n    Evidence --> Synthesis\n    Synthesis <-->|\"chat\"| OpenRouter\n    Synthesis --> Distill\n    Distill -->|\"create-only save\"| Vault\n    CLI -->|\"lint\"| Lint\n    Vault --> Lint\n    Lint -->|\"--fix: missing metadata only\"| Vault\n    CLI -->|\"enrich\"| Enrich\n    Vault --> Enrich\n    Index --> Enrich\n    Enrich <-->|\"chat\"| OpenRouter\n    CLI -->|\"eval\"| Eval\n    Eval --> Search\n    Eval --> Synthesis\n    CLI -->|\"create/edit/move/rename/link\"| Commands\n    Commands --> Notes --> Backend --> Obsidian\n    Obsidian -->|\"mutation-command writes\"| Vault\n"
     },
     "invariants": [
       "Every CLI command prints exactly one JSON envelope: {ok: true, action, result, meta} or {ok: false, action, error}; check `ok`, not just the exit code.",
@@ -46,8 +46,10 @@
       "One note indexes as one document-granularity entry plus N section entries in a single Chroma collection (granularity metadata field). Section splitting is deterministic and heading-based.",
       "`provenance` frontmatter (human | reference | llm | distilled) is set at note creation, immutable once set, never proposed by enrichment, and orthogonal to `type`.",
       "`id`, `created`, and `provenance` are immutable once set; `lint --fix` writes only missing values, never edits existing ones.",
-      "Sync is failure-safe: old index entries are deleted only after all new embeddings are computed and validated.",
+      "Sync is failure-safe: old index entries are deleted only after all new embeddings are computed and validated; graph entry metadata is written before the collection snapshot hash so partial graph writes rehydrate as stale.",
       "Every mutating command accepts --dry-run and returns exactly what would change with meta.dry_run: true, making no backend calls.",
+      "Graph expansion never bypasses a retrieval filter: expanded candidates must be in the same allowed-id set as direct ones. It applies only when the reranker returns a usable ranking; on rerank failure graph candidates and boosts are discarded and retrieval falls back to fused ranking unchanged.",
+      "A stale or missing graph snapshot disables expansion; it never fails a command.",
       "Eval runs go against a dedicated --chroma-path, never the live-vault index.",
       "Distilled notes are regenerable pointers to their sources; raw notes always win on conflict."
     ]
@@ -55,7 +57,7 @@
   "commands": [
     {
       "command": "schema",
-      "summary": "Print the machine-readable command + contract schema (version 2)."
+      "summary": "Print the machine-readable command + contract schema (version 3)."
     },
     {
       "command": "sync [--root DIR] [--reset]",
@@ -96,7 +98,7 @@
       "modules": [
         {
           "path": "vault_spider/cli.py",
-          "loc": 1262,
+          "loc": 1276,
           "summary": "JSON-only CLI for the vault: retrieval/synthesis plus safe note mutations.",
           "internal_deps": [
             "vault_spider",
@@ -123,14 +125,14 @@
                 "argparse.ArgumentParser"
               ],
               "doc": "Convert argparse failures into the CLI's stable JSON error contract.",
-              "line": 28,
+              "line": 30,
               "fields": [],
               "methods": [
                 {
                   "name": "error",
                   "signature": "(self, message: str) -> NoReturn",
                   "doc": null,
-                  "line": 31
+                  "line": 33
                 }
               ]
             }
@@ -140,79 +142,79 @@
               "name": "get_provider",
               "signature": "() -> OpenRouterClient",
               "doc": null,
-              "line": 35
+              "line": 37
             },
             {
               "name": "get_store",
               "signature": "(chroma_path: str, collection: str, provider: Optional[OpenRouterClient]=None)",
               "doc": null,
-              "line": 44
+              "line": 46
             },
             {
               "name": "resolve_root",
               "signature": "(explicit: Optional[str]) -> str",
               "doc": null,
-              "line": 55
+              "line": 57
             },
             {
               "name": "cmd_schema",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 424
+              "line": 438
             },
             {
               "name": "cmd_sync",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 428
+              "line": 442
             },
             {
               "name": "cmd_stats",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 446
+              "line": 460
             },
             {
               "name": "cmd_retrieve",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 499
+              "line": 513
             },
             {
               "name": "cmd_synthesize",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 558
+              "line": 572
             },
             {
               "name": "cmd_enrich",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 680
+              "line": 694
             },
             {
               "name": "cmd_lint",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 812
+              "line": 826
             },
             {
               "name": "cmd_eval",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 849
+              "line": 863
             },
             {
               "name": "build_parser",
               "signature": "() -> argparse.ArgumentParser",
               "doc": null,
-              "line": 979
+              "line": 993
             },
             {
               "name": "main",
               "signature": "(argv: Optional[list]=None) -> int",
               "doc": null,
-              "line": 1224
+              "line": 1238
             }
           ],
           "constants": [
@@ -603,7 +605,7 @@
       ]
     },
     "vault_spider.corpus": {
-      "role": "Reads the vault: loads Markdown notes, parses frontmatter, resolves note identity (ULID or path hash), and splits notes into deterministic heading-based sections.",
+      "role": "Reads the vault: loads Markdown notes, parses frontmatter, resolves note identity (ULID or path hash) and wikilinks, and splits notes into deterministic heading-based sections.",
       "modules": [
         {
           "path": "vault_spider/corpus/chunker.py",
@@ -656,28 +658,40 @@
         },
         {
           "path": "vault_spider/corpus/frontmatter.py",
-          "loc": 66,
+          "loc": 87,
           "summary": "Frontmatter parsing and normalization helpers.",
           "internal_deps": [],
           "classes": [],
           "functions": [
             {
+              "name": "frontmatter_text",
+              "signature": "(raw: str) -> str",
+              "doc": "The YAML block between the opening and closing fences, or ``\"\"``.",
+              "line": 11
+            },
+            {
+              "name": "alias_list",
+              "signature": "(value: Any) -> List[str]",
+              "doc": "Frontmatter ``aliases`` as a list; a bare string is one alias.",
+              "line": 22
+            },
+            {
               "name": "split_frontmatter",
               "signature": "(raw_text: str) -> Tuple[Dict[str, Any], str]",
               "doc": null,
-              "line": 11
+              "line": 32
             },
             {
               "name": "normalize_tags",
               "signature": "(value: Any) -> List[str]",
               "doc": null,
-              "line": 30
+              "line": 51
             },
             {
               "name": "coerce_datetime",
               "signature": "(value: Any) -> dt.datetime | None",
               "doc": null,
-              "line": 42
+              "line": 63
             }
           ]
         },
@@ -864,7 +878,7 @@
         },
         {
           "path": "vault_spider/corpus/loader.py",
-          "loc": 150,
+          "loc": 162,
           "summary": "Load Markdown notes from the vault into ``Note`` objects.",
           "internal_deps": [
             "vault_spider",
@@ -876,11 +890,14 @@
               "name": "Note",
               "bases": [],
               "doc": null,
-              "line": 44,
+              "line": 50,
               "fields": [
                 "note_id",
                 "path",
+                "stem",
                 "title",
+                "aliases",
+                "frontmatter_text",
                 "tags",
                 "created",
                 "updated",
@@ -899,49 +916,49 @@
               "name": "ignore_tags",
               "signature": "() -> List[str]",
               "doc": "Tags that mean \"never index this note\". Configurable: `vault.ignore_tags`.",
-              "line": 18
+              "line": 24
             },
             {
               "name": "skip_dirs",
               "signature": "() -> Set[str]",
               "doc": "Vault-relative directory names that are never indexed.",
-              "line": 29
+              "line": 35
             },
             {
               "name": "has_ignore_tag",
               "signature": "(body: str) -> bool",
               "doc": null,
-              "line": 59
+              "line": 68
             },
             {
               "name": "has_ignore_frontmatter_tag",
               "signature": "(tags: List[str]) -> bool",
               "doc": "True when a frontmatter tag is `ignore`/`secret` (with or without `#`).",
-              "line": 63
+              "line": 72
             },
             {
               "name": "resolve_note_date",
               "signature": "(path: Path, frontmatter: Dict[str, Any]) -> str",
               "doc": null,
-              "line": 69
+              "line": 78
             },
             {
               "name": "is_skipped_path",
               "signature": "(relative_path: Path) -> bool",
               "doc": "True when any parent directory is skipped or hidden.",
-              "line": 91
+              "line": 100
             },
             {
               "name": "is_excalidraw",
               "signature": "(relative_path: Path, frontmatter: Dict[str, Any]) -> bool",
               "doc": null,
-              "line": 104
+              "line": 113
             },
             {
               "name": "load_notes",
               "signature": "(root: str) -> List[Note]",
               "doc": null,
-              "line": 111
+              "line": 120
             }
           ],
           "constants": [
@@ -952,7 +969,7 @@
         },
         {
           "path": "vault_spider/corpus/vault.py",
-          "loc": 176,
+          "loc": 161,
           "summary": "Reading the vault as files: one note, or every note.",
           "internal_deps": [
             "vault_spider.corpus.frontmatter",
@@ -964,7 +981,7 @@
               "name": "VaultNote",
               "bases": [],
               "doc": "A note read from disk, with everything link resolution and rendering need.",
-              "line": 33,
+              "line": 39,
               "fields": [
                 "path",
                 "stem",
@@ -982,91 +999,81 @@
                   "name": "tags",
                   "signature": "(self) -> List[str]",
                   "doc": null,
-                  "line": 48
+                  "line": 54
                 }
               ]
             }
           ],
           "functions": [
             {
-              "name": "frontmatter_text",
-              "signature": "(raw: str) -> str",
-              "doc": "The YAML block between the opening and closing fences, or ''.",
-              "line": 52
-            },
-            {
-              "name": "alias_list",
-              "signature": "(value: Any) -> List[str]",
-              "doc": "Frontmatter `aliases`, as a list. A bare string is one alias, not many words.",
-              "line": 63
-            },
-            {
               "name": "note_recency",
               "signature": "(frontmatter: Dict[str, Any]) -> Optional[datetime]",
               "doc": null,
-              "line": 73
+              "line": 58
             },
             {
               "name": "iter_note_files",
               "signature": "(root: Path) -> Iterator[Tuple[Path, str]]",
               "doc": null,
-              "line": 81
+              "line": 66
             },
             {
               "name": "iter_attachment_files",
               "signature": "(root: Path) -> Iterable[str]",
               "doc": "Vault-relative paths of every linkable file that is not an indexed note.",
-              "line": 89
+              "line": 74
             },
             {
               "name": "build_note",
               "signature": "(relative_posix: str, raw: str) -> Optional[VaultNote]",
               "doc": "Parse one note's text, or return ``None`` when vault policy skips it.",
-              "line": 107
+              "line": 92
             },
             {
               "name": "load_vault_notes",
               "signature": "(root: str) -> Tuple[List[VaultNote], int]",
               "doc": "Every readable note in the vault, plus how many were skipped by policy.",
-              "line": 131
+              "line": 116
             },
             {
               "name": "read_note",
               "signature": "(root: str, relative_path: str) -> Optional[VaultNote]",
               "doc": "Read a single note by vault-relative path.",
-              "line": 151
+              "line": 136
             }
           ]
         }
       ]
     },
     "vault_spider.index": {
-      "role": "Builds and maintains the ChromaDB collection (one document entry + N section entries per note, distinguished by the `granularity` metadata field) with failure-safe incremental sync; plus a read-only reader for stats without BM25.",
+      "role": "Builds and maintains the ChromaDB collection (one document entry + N section entries per note, distinguished by the `granularity` metadata field) with failure-safe incremental sync and a persisted note-level wikilink graph; plus a read-only reader for stats without BM25.",
       "modules": [
         {
           "path": "vault_spider/index/reader.py",
-          "loc": 61,
+          "loc": 69,
           "summary": "Read-only Chroma access for Vault Spider.",
-          "internal_deps": [],
+          "internal_deps": [
+            "vault_spider.index"
+          ],
           "classes": [
             {
               "name": "DatabaseReader",
               "bases": [],
               "doc": null,
-              "line": 10,
+              "line": 12,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
                   "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes')",
                   "doc": null,
-                  "line": 11
+                  "line": 13
                 },
                 {
                   "name": "get_collection_stats",
                   "signature": "(self) -> Dict[str, object]",
                   "doc": null,
-                  "line": 24
+                  "line": 26
                 }
               ]
             }
@@ -1075,12 +1082,14 @@
         },
         {
           "path": "vault_spider/index/store.py",
-          "loc": 408,
+          "loc": 543,
           "summary": "Build and maintain a Chroma collection for Markdown notes.",
           "internal_deps": [
             "vault_spider.config",
             "vault_spider.corpus.chunker",
+            "vault_spider.corpus.links",
             "vault_spider.corpus.loader",
+            "vault_spider.index",
             "vault_spider.llm.openrouter",
             "vault_spider.utils"
           ],
@@ -1089,32 +1098,44 @@
               "name": "IndexStore",
               "bases": [],
               "doc": "Maintain the persistent vector store and in-memory BM25 indexes.",
-              "line": 27,
+              "line": 29,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
                   "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes', bm25_k1: Optional[float]=None, bm25_b: Optional[float]=None, provider: Optional[OpenRouterClient]=None, allow_model_mismatch: bool=False)",
                   "doc": null,
-                  "line": 30
+                  "line": 32
+                },
+                {
+                  "name": "graph_neighbors",
+                  "signature": "(self, note_id: str) -> Set[str]",
+                  "doc": "Symmetric one-hop neighbors, disabled when graph integrity is not okay.",
+                  "line": 152
+                },
+                {
+                  "name": "graph_degree",
+                  "signature": "(self, note_id: str) -> int",
+                  "doc": null,
+                  "line": 160
                 },
                 {
                   "name": "granularity_data",
                   "signature": "(self, granularity: str) -> Tuple[List[str], List[str], List[Dict[str, object]], Optional[BM25Okapi]]",
                   "doc": null,
-                  "line": 144
+                  "line": 181
                 },
                 {
                   "name": "sync",
                   "signature": "(self, root: str, reset: bool=False, dry_run: bool=False) -> Dict[str, object]",
                   "doc": null,
-                  "line": 204
+                  "line": 249
                 },
                 {
                   "name": "get_collection_stats",
                   "signature": "(self) -> Dict[str, object]",
                   "doc": null,
-                  "line": 380
+                  "line": 510
                 }
               ]
             }
@@ -1127,11 +1148,11 @@
       ]
     },
     "vault_spider.retrieval": {
-      "role": "Hybrid search: BM25 + embeddings fused by pure scoring functions, optional rerank (thorough mode), an on-disk query-embedding cache, and assembly of the retrieval output contract (evidence/citations).",
+      "role": "Hybrid search: BM25 + embeddings fused by pure scoring functions, optional rerank (thorough mode), one-hop expansion over the persisted wikilink graph, an on-disk query-embedding cache, and assembly of the retrieval output contract (evidence/citations).",
       "modules": [
         {
           "path": "vault_spider/retrieval/evidence.py",
-          "loc": 97,
+          "loc": 118,
           "summary": "Assemble the retrieval output contract (the citation/evidence JSON).",
           "internal_deps": [],
           "classes": [],
@@ -1140,19 +1161,19 @@
               "name": "obsidian_url",
               "signature": "(vault_name: str, path: str) -> str",
               "doc": "Deep link that opens a vault-relative note path in Obsidian.",
-              "line": 13
+              "line": 14
             },
             {
               "name": "build_evidence",
               "signature": "(result_row: Dict[str, object], vault_name: Optional[str]=None) -> Dict[str, object]",
               "doc": null,
-              "line": 46
+              "line": 65
             },
             {
               "name": "build_retrieval_output",
               "signature": "(query: str, mode: str, granularity: str, rows: List[Dict[str, object]], vault_name: Optional[str]=None) -> Dict[str, object]",
               "doc": null,
-              "line": 78
+              "line": 99
             }
           ],
           "constants": [
@@ -1224,7 +1245,7 @@
         },
         {
           "path": "vault_spider/retrieval/searcher.py",
-          "loc": 446,
+          "loc": 711,
           "summary": "Hybrid retrieval over the IndexStore (BM25 + embeddings + optional rerank).",
           "internal_deps": [
             "vault_spider.config",
@@ -1235,10 +1256,23 @@
           ],
           "classes": [
             {
+              "name": "GraphProvenance",
+              "bases": [],
+              "doc": "Why an expanded candidate is here: which seed reached it, and how strongly.",
+              "line": 46,
+              "fields": [
+                "seed_note_id",
+                "seed_path",
+                "propagated_score",
+                "hop_count"
+              ],
+              "methods": []
+            },
+            {
               "name": "RetrievalResult",
               "bases": [],
               "doc": null,
-              "line": 27,
+              "line": 56,
               "fields": [
                 "query",
                 "mode",
@@ -1253,37 +1287,45 @@
               "name": "Searcher",
               "bases": [],
               "doc": null,
-              "line": 36,
+              "line": 65,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
                   "signature": "(self, store, granularity: str='document', provider: Optional[OpenRouterClient]=None)",
                   "doc": null,
-                  "line": 37
+                  "line": 66
                 },
                 {
                   "name": "calculate_keyword_scores",
                   "signature": "(self, query: str, ids: List[str], documents: List[str], bm25) -> pd.Series",
                   "doc": null,
-                  "line": 51
+                  "line": 80
                 },
                 {
                   "name": "calculate_recency_scores",
                   "signature": "(self, doc_ids: List[str], metadata_by_id: Dict[str, Dict[str, object]], decay_days: float=365.0) -> pd.Series",
                   "doc": null,
-                  "line": 81
+                  "line": 110
                 },
                 {
                   "name": "hybrid_search",
                   "signature": "(self, query: str, *, mode: str='fast', granularity: Optional[str]=None, n_results: Optional[int]=None, semantic_weight: Optional[float]=None, must_include_terms: Optional[List[str]]=None, top_k: Optional[int]=None, combine_strategy: Optional[str]=None, rrf_k: Optional[int]=None, zsigmoid_temperature: Optional[float]=None, recency_boost_enabled: Optional[bool]=None, recency_weight: Optional[float]=None, recency_decay_days: Optional[float]=None, folder: Optional[str]=None, tags: Optional[List[str]]=None, note_type: Optional[str]=None, provenance: Optional[str]=None, since: Optional[str]=None, until: Optional[str]=None) -> RetrievalResult",
                   "doc": null,
-                  "line": 130
+                  "line": 285
                 }
               ]
             }
           ],
-          "functions": []
+          "functions": [],
+          "constants": [
+            "GRAPH_SEED_COUNT",
+            "GRAPH_NEIGHBOR_CAP",
+            "GRAPH_DECAY",
+            "GRAPH_SECTIONS_PER_NOTE",
+            "GRAPH_RESERVED_POOL_SLOTS",
+            "GRAPH_WEIGHT"
+          ]
         }
       ]
     },
@@ -2141,7 +2183,7 @@
         },
         {
           "path": "vault_spider/web/format.py",
-          "loc": 236,
+          "loc": 245,
           "summary": "Turning retrieval contracts into things a reader can look at.",
           "internal_deps": [],
           "classes": [],
@@ -2150,61 +2192,61 @@
               "name": "clean_excerpt",
               "signature": "(text: str) -> str",
               "doc": "The excerpt without the indexer's synthesized header.",
-              "line": 25
+              "line": 26
             },
             {
               "name": "preview",
               "signature": "(text: str, title: str='') -> str",
               "doc": "A result excerpt as plain prose, with the Markdown taken out.",
-              "line": 50
+              "line": 51
             },
             {
               "name": "candidate_url",
               "signature": "(candidate: Dict[str, Any], query: str='') -> str",
               "doc": "The reading-view URL for a result, carrying its matched range and the query.",
-              "line": 79
+              "line": 80
             },
             {
               "name": "decorate_candidates",
               "signature": "(candidates: List[Dict[str, Any]], query: str='') -> List[Dict[str, Any]]",
               "doc": "Add the display fields the results list needs.",
-              "line": 100
+              "line": 101
             },
             {
               "name": "short_date",
               "signature": "(value: Any) -> str",
               "doc": "A date a person can read, or '' when there isn't one.",
-              "line": 139
+              "line": 148
             },
             {
               "name": "note_masthead",
               "signature": "(note) -> Dict[str, Any]",
               "doc": "The facts shown under a note's title: provenance, type, date, tags.",
-              "line": 151
+              "line": 160
             },
             {
               "name": "humanize_error",
               "signature": "(error_type: str, message: str) -> Dict[str, str]",
               "doc": "Turn a contract error type into something worth reading on screen.",
-              "line": 171
+              "line": 180
             },
             {
               "name": "citation_index",
               "signature": "(citations: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]",
               "doc": "Citations keyed by their `S0`-style marker, for rewriting them into links.",
-              "line": 193
+              "line": 202
             },
             {
               "name": "link_citations",
               "signature": "(answer: str, citations: Sequence[Dict[str, Any]]) -> str",
               "doc": "Rewrite `[S0, S1]` markers into Markdown links to the notes they name.",
-              "line": 201
+              "line": 210
             },
             {
               "name": "first_heading_of",
               "signature": "(note, line_start: Optional[int]) -> str",
               "doc": "The heading a matched line range sits under, for the back-link label.",
-              "line": 225
+              "line": 234
             }
           ],
           "constants": [
@@ -2766,7 +2808,7 @@
         },
         {
           "path": "tools/build_codebase_map.py",
-          "loc": 1035,
+          "loc": 1044,
           "summary": "Generate docs/codebase-map.json and docs/codebase-map.html.",
           "internal_deps": [],
           "classes": [],
@@ -2781,19 +2823,19 @@
               "name": "build_json",
               "signature": "(code_modules: list[dict], test_modules: list[dict]) -> dict",
               "doc": null,
-              "line": 397
+              "line": 406
             },
             {
               "name": "build_html",
               "signature": "(codebase_map: dict) -> str",
               "doc": null,
-              "line": 802
+              "line": 811
             },
             {
               "name": "main",
               "signature": "() -> None",
               "doc": null,
-              "line": 1018
+              "line": 1027
             }
           ],
           "constants": [
@@ -2831,7 +2873,7 @@
       },
       {
         "path": "tests/test_chunker.py",
-        "loc": 136,
+        "loc": 139,
         "test_count": 9,
         "summary": "Tests for vault_spider.corpus.chunker.split_sections.",
         "covers": [
@@ -2942,10 +2984,11 @@
       },
       {
         "path": "tests/test_links.py",
-        "loc": 166,
-        "test_count": 20,
+        "loc": 178,
+        "test_count": 22,
         "summary": "Tests for vault_spider.corpus.links.",
         "covers": [
+          "vault_spider.corpus.frontmatter",
           "vault_spider.corpus.links"
         ]
       },
@@ -2963,11 +3006,12 @@
       },
       {
         "path": "tests/test_loader.py",
-        "loc": 161,
-        "test_count": 21,
+        "loc": 204,
+        "test_count": 22,
         "summary": "Tests for vault_spider.corpus.loader (Note loading, date resolution, doc text).",
         "covers": [
           "vault_spider.corpus.chunker",
+          "vault_spider.corpus.links",
           "vault_spider.corpus.loader"
         ]
       },
@@ -3054,11 +3098,14 @@
       },
       {
         "path": "tests/test_searcher_unit.py",
-        "loc": 32,
-        "test_count": 2,
+        "loc": 258,
+        "test_count": 10,
         "summary": null,
         "covers": [
+          "vault_spider.config",
           "vault_spider.index.store",
+          "vault_spider.llm.openrouter",
+          "vault_spider.retrieval",
           "vault_spider.retrieval.searcher",
           "vault_spider.utils"
         ]
@@ -3089,10 +3136,12 @@
       },
       {
         "path": "tests/test_store_sync.py",
-        "loc": 249,
-        "test_count": 12,
+        "loc": 487,
+        "test_count": 20,
         "summary": "Tests for vault_spider.index.store.IndexStore.sync against a real Chroma db.",
         "covers": [
+          "vault_spider.corpus.loader",
+          "vault_spider.index.reader",
           "vault_spider.index.store",
           "vault_spider.llm.openrouter"
         ]
@@ -3117,8 +3166,8 @@
       },
       {
         "path": "tests/test_web_format.py",
-        "loc": 177,
-        "test_count": 31,
+        "loc": 189,
+        "test_count": 32,
         "summary": "Tests for vault_spider.web.format \u2014 retrieval contracts turned into readable things.",
         "covers": [
           "vault_spider.web.format",
@@ -3137,7 +3186,7 @@
       },
       {
         "path": "tests/test_web_routes.py",
-        "loc": 384,
+        "loc": 386,
         "test_count": 40,
         "summary": "Tests for the web routes.",
         "covers": [

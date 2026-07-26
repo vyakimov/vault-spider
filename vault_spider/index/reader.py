@@ -6,6 +6,8 @@ from typing import Dict
 
 import chromadb
 
+from vault_spider.index import graph as graph_index
+
 
 class DatabaseReader:
     def __init__(
@@ -58,4 +60,10 @@ class DatabaseReader:
             "embedding_model": (self.collection.metadata or {}).get(
                 "embedding_model", "unknown"
             ),
+            # `stats` is how anyone checks whether graph expansion is live, and it is
+            # served from here rather than from IndexStore — so the judgement has to
+            # be made here too, by the same rules.
+            **graph_index.resolve(
+                document_metas, self.collection.metadata
+            ).report(),
         }

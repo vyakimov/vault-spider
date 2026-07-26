@@ -35,6 +35,11 @@
             <a class="result__obsidian" href="{{ candidate.obsidian_url }}"
                title="Open this note in Obsidian">Obsidian ↗</a>
           {% endif %}
+          {# Reached over a wikilink rather than by matching the query. #}
+          {% if candidate.linked_from %}
+            <span class="result__linked"
+                  title="Reached by a link from {{ candidate.linked_from }}">↗ linked</span>
+          {% endif %}
         </div>
 
         <div class="evidence" title="{{ candidate.why }}">

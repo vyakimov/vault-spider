@@ -221,8 +221,10 @@ class TestJsonApi:
         candidate = payload["result"]["candidates"][0]
         assert set(candidate) == {
             "note_id", "path", "obsidian_url", "title", "type", "provenance", "heading",
-            "chunk_id", "line_start", "line_end", "excerpt", "scores", "why",
+            "chunk_id", "line_start", "line_end", "excerpt", "scores", "graph", "why",
         }
+        # Nullable and additive: an ordinary candidate carries the key set to null.
+        assert candidate["graph"] is None
         assert set(candidate["scores"]) == {"bm25", "semantic", "fused", "reranker", "final"}
 
     def test_excerpt_is_the_untouched_contract_value(self, client):

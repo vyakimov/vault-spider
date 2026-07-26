@@ -39,7 +39,7 @@ imported ones and treats `distilled` notes as pointers; retrieval filters on it
 - `./bin/vault-spider` is the stable executable wrapper for the CLI. It locates this project and
   delegates to `uv run vault-spider`, so its absolute path can be called from outside the repository.
 - `./bin/vault-spider schema`
-  - Prints the machine-readable command + contract schema (`version: 2`).
+  - Prints the machine-readable command + contract schema (`version: 3`).
 - `./bin/vault-spider sync [--root <dir>] [--reset]`  (`--root` defaults to `vault.root` in
   `config.yaml`, then the active Obsidian vault)
   - Incremental sync: adds new notes, re-embeds changed or moved notes, deletes removed notes.
@@ -53,6 +53,17 @@ imported ones and treats `distilled` notes as pointers; retrieval filters on it
   - Returns the retrieval output contract (candidates with score breakdown). Defaults: `fast`, `document`.
     `mixed` searches the section pool with a 3-sections-per-note cap (it does not mix in document entries).
   - `fast` skips reranking; `thorough` reranks the top candidates.
+  - **Graph expansion** runs automatically in `thorough` mode when a reranker is configured *and*
+    the index's wikilink graph is healthy (`stats.graph_status == "ok"`). After fusion it takes the
+    top 10 notes as seeds, walks one hop over outgoing links and backlinks, and damps each
+    neighbour by the log-scaled degree of both ends so hubs cannot flood the pool. Expanded
+    candidates are still gated by every filter, get reserved slots in the rerank pool (they lose
+    on fused score by construction), and receive a small bonus *after* reranking — without that
+    the feature would only change which documents were judged, never the order returned. If
+    reranking fails, graph results are discarded and retrieval falls back to fused ranking
+    unchanged. Candidates carry a nullable `graph` block naming the seed note. There are no flags:
+    the constants are internal. An index synced before this feature reports `graph_status:
+    "missing"` and simply does not expand — one ordinary `sync` backfills it, no `--reset` needed.
 - `./bin/vault-spider synthesize --query "..." [--mode thorough] [--granularity mixed] [--retrieval file.json] [--n-context 8] [--save --root <dir> [--save-dir Distilled]]`
   - Retrieves (defaults `thorough`/`mixed`) then synthesizes a cited answer. `--retrieval` reuses a
     prior `retrieve` envelope/contract and skips retrieval. Abstains when the notes lack the answer.
@@ -152,8 +163,9 @@ This holds for *every* failure: argparse errors (bad flags, missing/unknown comm
 converted to `invalid_arguments` envelopes rather than printing usage text.
 Error types: `invalid_arguments`, `index_empty`, `provider_error`, `not_found`, `internal_error`,
 `obsidian_not_running`, `backend_error`, `already_exists`, `ambiguous_target`,
-`config_mismatch`, `contract_violation`. The schema (`vault-spider schema`) is `version: 2` — the version where the
-mutation commands were merged in. In the schema, `mutates_state` is always a boolean ("can this
+`config_mismatch`, `contract_violation`. The schema (`vault-spider schema`) is `version: 3` — the version that
+added the retrieval candidates' nullable `graph` block (v2 was where the mutation commands were
+merged in). In the schema, `mutates_state` is always a boolean ("can this
 command write?"); the optional `mutates` string qualifies what and when.
 
 ## Environment

@@ -19,7 +19,7 @@ class TestSchema:
         assert code == 0
         assert envelope["ok"] is True
         assert envelope["action"] == "schema"
-        assert envelope["result"]["version"] == 2
+        assert envelope["result"]["version"] == 3
         assert "retrieval_output" in envelope["result"]["contracts"]
         assert "synthesis_output" in envelope["result"]["contracts"]
         assert "create-note" in envelope["result"]["commands"]
