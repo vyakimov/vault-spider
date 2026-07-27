@@ -4,6 +4,15 @@
 Net negative on both golden evals. 576 tests green; the code is complete and correct — the
 hypothesis is what failed.
 
+**Update 2026-07-27 — retested and the verdict hardened.** The leading explanation for the null
+result (section d.2: corpora smaller than the candidate pool, so reach never bound) was tested
+by expanding both corpora ~7× and writing 27 new labelled queries, including purpose-built
+reach cases. **That explanation was wrong.** With reach genuinely binding, expansion performs
+worse, not better: it loses completeness on both corpora, improves 0 of 38 realistic queries,
+never once supplies a missing evidence group, and evicts groups plain fusion had already found.
+Read d.2 before anything else. Recommendation: do not pursue the hyperparameters in (e); go to
+the alternatives.
+
 ---
 
 ## a) Why a graph layer should have helped
@@ -232,7 +241,50 @@ expansion is structurally incapable of addressing that.
 This also means **no hyperparameter setting could have rescued q023.** Seeds, neighbour cap,
 decay and weight all change *which notes* enter the pool. q023 never needed a different note.
 
-### 2. The corpora are too small for reach to be the bottleneck
+### 2. ~~The corpora are too small for reach to be the bottleneck~~ — tested and falsified
+
+**This explanation was wrong. It was retested on 2026-07-27 and does not hold.** It is kept
+here because the correction is the most useful thing in this document.
+
+The corpora were expanded specifically to remove this excuse: `eval/public_vault` went 36 → 240
+notes (138 → 1138 section entries) and `eval-realistic` 57 → 649 notes (114 → 961), both now
+3× the ~300-entry candidate pool. Fourteen new public queries and thirteen new realistic ones
+were written for the failure modes below, including several purpose-built note-level reach
+cases. Reach now genuinely binds.
+
+Graph expansion got **worse**, not better:
+
+| | public off | public on | realistic off | realistic on |
+|---|---|---|---|---|
+| complete@5 | **0.7632** | 0.7105 | **0.9474** | 0.9211 |
+| mean nDCG@5 | **0.6794** | 0.6253 | **0.8788** | 0.8128 |
+| MRR | **0.6823** | 0.6281 | **0.8816** | 0.7982 |
+| per-query nDCG | — | 1 up / 12 down | — | **0 up / 10 down** |
+
+On the small corpus expansion was neutral-with-a-precision-cost. On a corpus where reach binds
+it loses completeness too, and on eval-realistic **not one query out of 38 improved.**
+
+Three specifics settle it:
+
+- **It never supplies a missing group.** Public q036 was written as the deepest reach case in
+  the corpus — its second required group sits at BM25 rank 197, in a note directly linked from
+  the note that ranks first. Output is byte-identical with expansion on and off. It does not
+  find it. `Atlas Vendor Contact List` has degree 8, so the damping term suppresses exactly the
+  hub-shaped note that link-following was supposed to reach (see d.6).
+- **It evicts groups fusion had already found.** Public q037 retrieved both required groups with
+  expansion off; with it on, `Seasonal Access Calendar#South Meadow Access` is pushed out of the
+  top 5. Same for q009's `Verification` section. Both completeness losses are evictions, not
+  failures to find.
+- **The one previous success was a small-corpus artifact.** Realistic q031 went 0.8772 → 1.0 on
+  the 57-note corpus and was cited as proof the mechanism worked. On 649 notes the same query
+  goes 0.613 → 0.307.
+
+The mechanism is subtractive on this workload: it cannot deliver the evidence it targets, and
+the machinery that lets it try — reserved pool slots plus a bonus that outranks the reranker —
+displaces evidence plain fusion already had. That is a design-level objection, not a tuning
+one. The hyperparameters in (e) are not worth spending on; the alternatives are.
+
+### 2b. Original (superseded) reasoning
 
 `top_k = 150` against a 36-note (public) or 57-note (realistic) corpus means fusion sweeps
 **the entire corpus** into the candidate frame. Every note is already a candidate. Recall of
