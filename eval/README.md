@@ -6,7 +6,10 @@ addresses, and no personal or employer information.
 
 ## Layout
 
-- `public_vault/` — 36 Markdown notes with stable frontmatter IDs.
+- `public_vault/` — 240 Markdown notes with stable frontmatter IDs. The corpus is deliberately
+  larger than the retrieval candidate pool (`top_k = 150` per channel, so ~300 entries at most)
+  against 1138 section entries. Below that ratio every section is a candidate on every query and
+  the benchmark cannot measure retrieval *reach* at all — only reordering.
 - `golden_queries.jsonl` — one labelled query per line.
 - `dataset.yaml` — the manifest `vault-spider eval` consumes (schema version, file locations,
   expected counts).
@@ -47,6 +50,28 @@ VAULT_SPIDER_CONFIG=eval/eval-config.yaml \
 Set `VAULT_SPIDER_CONFIG` for validate and run too: it keeps the corpus walk (skip dirs, ignore
 tags) identical to what `sync` indexed. `eval run` refuses (`config_mismatch`) to score an index
 whose paths do not exactly match the corpus.
+
+## Recorded baseline
+
+Measured 2026-07-27 on the 240-note corpus, retrieval stage, `--mode thorough --granularity
+mixed --k 5`, 38 answerable queries scored:
+
+| metric | eval (public) | eval-realistic |
+|---|---|---|
+| complete@5 | 0.7632 | 0.9474 |
+| mean group recall@5 | 0.8640 | 0.9737 |
+| mean nDCG@5 | 0.6794 | 0.8788 |
+| MRR | 0.6823 | 0.8816 |
+
+These supersede every earlier figure. The pre-expansion corpora scored ~0.88 nDCG@5, which
+looked better only because every section fit inside the candidate pool — the benchmark was
+near ceiling and could not register a retrieval change either way.
+
+**Public is the discriminating corpus; eval-realistic is not.** Realistic sits near ceiling
+(0.95 complete@5) because its notes are short and lexically distinctive, so BM25 alone
+separates them. Size was necessary but not sufficient: a corpus can be large and still
+uninformative if its notes are too easy to tell apart. Judge retrieval changes on `eval/`
+and use `eval-realistic/` to check you have not broken the messy-vault cases.
 
 The default run scores retrieval only: nDCG@k, per-group evidence recall@k, complete@k (all
 required groups covered), and MRR of the first grade-3 hit, aggregated overall and per
