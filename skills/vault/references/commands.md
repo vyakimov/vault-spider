@@ -18,6 +18,10 @@ tell the user to fix config.
 ```
 ./bin/vault-spider schema
 ./bin/vault-spider sync [--root <dir>] [--reset | --dry-run]
+                         [--contextualize] [--refresh-context]
+./bin/vault-spider context prepare [--root <dir>] [--out <jobs-dir>] [--store <summaries-dir>]
+./bin/vault-spider context import [--from <jobs-dir>] [--store <summaries-dir>]
+./bin/vault-spider context status [--root <dir>] [--store <summaries-dir>]
 ./bin/vault-spider stats                              # index statistics; no API key needed
 ./bin/vault-spider retrieve --query "..." [--mode fast|thorough] [--granularity document|section|mixed] [-n 10] [FILTERS]
 ./bin/vault-spider synthesize --query "..." [--mode thorough] [--granularity mixed] [--retrieval file.json]
@@ -32,7 +36,7 @@ FILTERS (retrieve & synthesize):
 ```
 
 - `retrieve` defaults: `fast` / `document`. `synthesize` defaults: `thorough` / `mixed`. `mixed`
-  searches the section pool with a 3-sections-per-note cap; it does not mix in document entries.
+  searches sections, returns only exact source sections, and applies a 3-sections-per-note cap.
 - Filter semantics: `--folder` matches the folder or any subfolder; `--tag` is repeatable and
   every given tag must be present (case-insensitive); `--type` matches frontmatter `type` exactly;
   `--provenance` matches frontmatter `provenance` exactly (human|reference|llm|distilled);
@@ -42,10 +46,16 @@ FILTERS (retrieve & synthesize):
   `invalid_arguments`.
 - `sync` is incremental (only changed content is re-embedded). `--dry-run` returns
   `would_add`/`would_update`/`would_delete` path lists without touching the index; it cannot be
-  combined with `--reset`.
-- `stats` result = `{total_documents, total_entries, section_entries, unique_folders, unique_tags,
-  dated_notes, embedding_model, graph_status, graph_nodes, graph_edges, graph_schema_version}`;
-  fails with `index_empty` before the first sync.
+  combined with `--reset`. With the default manual context source, ready summaries are
+  consumed automatically and missing/stale summaries remain indexable. `--contextualize` and
+  `--refresh-context` apply to the optional OpenRouter context source.
+- `context prepare` exports self-contained jobs only for missing/stale summaries. Fill each
+  `summary` while preserving the other fields, then `context import` validates/promotes the
+  complete batch. `context status` reports ready/missing/stale/orphaned coverage. These commands
+  never write the vault or call an LLM API.
+- `stats` includes document/section counts, folders/tags/dates, embedding/chunk schema details,
+  context source/coverage/missing/stale counts, and `graph_status`/`graph_nodes`/`graph_edges`/
+  `graph_schema_version`; it fails with `index_empty` before the first sync.
 - `retrieve` result = candidate list, each with `note_id`, `path`, `title`, `heading`, `scores`,
   a nullable `graph`, and a deterministic `why`. `reranker` score is `null` in `fast` mode.
 - Graph expansion: in `thorough` mode, with a reranker configured and `graph_status: "ok"`,

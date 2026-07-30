@@ -24,12 +24,16 @@ Golden-dataset benchmark for retrieval/synthesis quality. Two datasets ship in t
 # labels still valid? (run after any corpus/query change; drift fails contract_violation)
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml ./bin/vault-spider eval validate --dataset eval
 
-# index the corpus into a DEDICATED chroma dir (never the live-vault index), then score
+# The eval config uses its persistent dedicated index under eval/context-data/.
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml ./bin/vault-spider sync \
-    --root eval/public_vault --reset --chroma-path /tmp/vs-eval
+    --reset
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml ./bin/vault-spider eval run \
-    --dataset eval --chroma-path /tmp/vs-eval --out results.json
+    --dataset eval --out results.json
 ```
+
+`eval/eval-contextual-config.yaml` uses a second persistent Chroma directory and canonical
+summaries under `eval/context-data/`. Run `context prepare`, have Codex/Claude Code complete the
+jobs, run `context import`, then sync and evaluate with that config.
 
 - Default `run` scores retrieval only (deterministic): nDCG@k, per-group evidence recall@k,
   complete@k, MRR — overall and per category/slice. Unanswerable queries are skipped.
@@ -38,6 +42,6 @@ VAULT_SPIDER_CONFIG=eval/eval-config.yaml ./bin/vault-spider eval run \
 - Useful knobs: `--mode`, `--granularity`, `-n`, `--k`, `--only <query-id>` (debug one query),
   `--out <file>`.
 - `run` refuses (`config_mismatch`) an index that doesn't exactly match the corpus — rebuild
-  with `sync --reset` against the dedicated chroma path.
+  with `sync --reset` using the same dataset config.
 - Set `VAULT_SPIDER_CONFIG` to the dataset's own config so skip/ignore rules match what was
   indexed.

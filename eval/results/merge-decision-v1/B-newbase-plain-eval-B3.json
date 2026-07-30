@@ -1,0 +1,1691 @@
+{
+  "aggregates": {
+    "retrieval": {
+      "complete_rate_at_k": 0.7368,
+      "mean_group_recall_at_k": 0.8509,
+      "mean_ndcg_at_k": 0.7847,
+      "mrr": 0.8421,
+      "queries_scored": 38
+    }
+  },
+  "by_category": {
+    "alias": {
+      "complete_rate_at_k": 0.5,
+      "mean_group_recall_at_k": 0.75,
+      "mean_ndcg_at_k": 0.8519,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "ambiguous_entity": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.8155,
+      "mrr": 0.75,
+      "queries_scored": 2
+    },
+    "decision_lookup": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "incident": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9073,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "known_item": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9923,
+      "mrr": 1.0,
+      "queries_scored": 8
+    },
+    "metadata_filter": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "multi_note": {
+      "complete_rate_at_k": 0.4444,
+      "mean_group_recall_at_k": 0.6667,
+      "mean_ndcg_at_k": 0.6099,
+      "mrr": 0.6944,
+      "queries_scored": 9
+    },
+    "section_lookup": {
+      "complete_rate_at_k": 0.8,
+      "mean_group_recall_at_k": 0.9,
+      "mean_ndcg_at_k": 0.7931,
+      "mrr": 0.8,
+      "queries_scored": 5
+    },
+    "semantic_paraphrase": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.5943,
+      "mrr": 0.625,
+      "queries_scored": 2
+    },
+    "single_note_factual": {
+      "complete_rate_at_k": 0.6667,
+      "mean_group_recall_at_k": 0.7778,
+      "mean_ndcg_at_k": 0.8364,
+      "mrr": 1.0,
+      "queries_scored": 3
+    },
+    "temporal": {
+      "complete_rate_at_k": 0.5,
+      "mean_group_recall_at_k": 0.75,
+      "mean_ndcg_at_k": 0.6214,
+      "mrr": 0.75,
+      "queries_scored": 4
+    }
+  },
+  "by_slice": {
+    "alias": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9386,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "architecture": {
+      "complete_rate_at_k": 0.0,
+      "mean_group_recall_at_k": 0.5,
+      "mean_ndcg_at_k": 0.7039,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "astronomy": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "causal": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9073,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "comparison": {
+      "complete_rate_at_k": 0.0,
+      "mean_group_recall_at_k": 0.3333,
+      "mean_ndcg_at_k": 0.5091,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "complete_answer": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "complete_evidence": {
+      "complete_rate_at_k": 0.375,
+      "mean_group_recall_at_k": 0.625,
+      "mean_ndcg_at_k": 0.5689,
+      "mrr": 0.6562,
+      "queries_scored": 8
+    },
+    "conflict": {
+      "complete_rate_at_k": 0.3333,
+      "mean_group_recall_at_k": 0.6667,
+      "mean_ndcg_at_k": 0.5445,
+      "mrr": 0.6667,
+      "queries_scored": 3
+    },
+    "current_configuration": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9386,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "deep_tail": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9473,
+      "mrr": 0.9286,
+      "queries_scored": 7
+    },
+    "distractor_domain": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.7039,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "dns": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9386,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "exercise": {
+      "complete_rate_at_k": 0.0,
+      "mean_group_recall_at_k": 0.3333,
+      "mean_ndcg_at_k": 0.5091,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "fieldwork": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "graph_direct": {
+      "complete_rate_at_k": 0.6,
+      "mean_group_recall_at_k": 0.7,
+      "mean_ndcg_at_k": 0.6613,
+      "mrr": 0.7,
+      "queries_scored": 5
+    },
+    "graph_shared_hub": {
+      "complete_rate_at_k": 0.0,
+      "mean_group_recall_at_k": 0.5,
+      "mean_ndcg_at_k": 0.7039,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "graph_unlinked_control": {
+      "complete_rate_at_k": 0.0,
+      "mean_group_recall_at_k": 0.3333,
+      "mean_ndcg_at_k": 0.5091,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "historical": {
+      "complete_rate_at_k": 0.0,
+      "mean_group_recall_at_k": 0.5,
+      "mean_ndcg_at_k": 0.351,
+      "mrr": 0.5,
+      "queries_scored": 1
+    },
+    "incident": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "known_item": {
+      "complete_rate_at_k": 0.875,
+      "mean_group_recall_at_k": 0.9375,
+      "mean_ndcg_at_k": 0.963,
+      "mrr": 1.0,
+      "queries_scored": 8
+    },
+    "multi_section": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.8522,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "networking": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "numeric_reasoning": {
+      "complete_rate_at_k": 0.6667,
+      "mean_group_recall_at_k": 0.8333,
+      "mean_ndcg_at_k": 0.871,
+      "mrr": 1.0,
+      "queries_scored": 3
+    },
+    "old_new_comparison": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.8522,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "operations": {
+      "complete_rate_at_k": 0.6667,
+      "mean_group_recall_at_k": 0.75,
+      "mean_ndcg_at_k": 0.6587,
+      "mrr": 0.6667,
+      "queries_scored": 6
+    },
+    "outage": {
+      "complete_rate_at_k": 0.5,
+      "mean_group_recall_at_k": 0.75,
+      "mean_ndcg_at_k": 0.5943,
+      "mrr": 0.625,
+      "queries_scored": 2
+    },
+    "policy": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.8231,
+      "mrr": 0.75,
+      "queries_scored": 2
+    },
+    "prefer_latest": {
+      "complete_rate_at_k": 0.5,
+      "mean_group_recall_at_k": 0.75,
+      "mean_ndcg_at_k": 0.6412,
+      "mrr": 0.75,
+      "queries_scored": 2
+    },
+    "privacy": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "project": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.6309,
+      "mrr": 0.5,
+      "queries_scored": 1
+    },
+    "protocol": {
+      "complete_rate_at_k": 0.0,
+      "mean_group_recall_at_k": 0.5,
+      "mean_ndcg_at_k": 0.7039,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "recipe": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "retention": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 3
+    },
+    "roles": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.6309,
+      "mrr": 0.5,
+      "queries_scored": 1
+    },
+    "schedule": {
+      "complete_rate_at_k": 0.6667,
+      "mean_group_recall_at_k": 0.8333,
+      "mean_ndcg_at_k": 0.6376,
+      "mrr": 0.5833,
+      "queries_scored": 3
+    },
+    "section_precision": {
+      "complete_rate_at_k": 0.8,
+      "mean_group_recall_at_k": 0.9,
+      "mean_ndcg_at_k": 0.867,
+      "mrr": 0.9,
+      "queries_scored": 5
+    },
+    "security": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.877,
+      "mrr": 0.8333,
+      "queries_scored": 3
+    },
+    "semantic_paraphrase": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "single_note": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9331,
+      "mrr": 0.925,
+      "queries_scored": 10
+    },
+    "table": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "troubleshooting": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.7039,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "type_filter": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "validation": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.6309,
+      "mrr": 0.5,
+      "queries_scored": 1
+    }
+  },
+  "dataset": {
+    "corpus_root": "eval/public_vault",
+    "eval_schema_version": 1,
+    "name": "vault-spider-public-eval",
+    "notes": 240,
+    "path": "eval/dataset.yaml",
+    "queries": 44
+  },
+  "queries": [
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q001",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Cedar",
+            "path": "Projects/Atlas Project Glossary.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Data path",
+            "path": "Projects/Atlas Sensor Hub Architecture.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.9386,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "alias",
+        "single_note"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "semantic_paraphrase",
+      "id": "q002",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 4,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Failure boundaries",
+            "path": "Projects/Atlas Sensor Hub Architecture.md",
+            "rank": 4
+          },
+          {
+            "grade": 2,
+            "heading": "System outline",
+            "path": "Projects/Atlas Sensor Hub Overview.md",
+            "rank": 5
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.4847,
+        "reciprocal_rank": 0.25,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "single_note",
+        "outage"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q003",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Data path",
+            "path": "Projects/Atlas Sensor Hub Architecture.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "Current production shape",
+            "path": "Projects/Atlas Sensor Hub Deployment.md"
+          }
+        ],
+        "ndcg_at_k": 0.7039,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000003#Current production shape"
+          ]
+        ]
+      },
+      "slices": [
+        "complete_evidence",
+        "architecture",
+        "graph_shared_hub"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q004",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Service Port Registry",
+            "path": "Operations/Service Port Registry.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Current production shape",
+            "path": "Projects/Atlas Sensor Hub Deployment.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "table",
+        "networking"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "temporal",
+      "id": "q005",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Addressing",
+            "path": "Infrastructure/WireGuard Network - Current.md",
+            "rank": 1
+          },
+          {
+            "grade": 1,
+            "heading": "Former addressing",
+            "path": "Infrastructure/WireGuard Network - Archived 2023.md",
+            "rank": 4
+          }
+        ],
+        "missed": [
+          {
+            "grade": 3,
+            "heading": "Routing",
+            "path": "Infrastructure/WireGuard Network - Current.md"
+          }
+        ],
+        "ndcg_at_k": 0.6362,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000012#Routing"
+          ]
+        ]
+      },
+      "slices": [
+        "prefer_latest",
+        "conflict"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "temporal",
+      "id": "q006",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Former addressing",
+            "path": "Infrastructure/WireGuard Network - Archived 2023.md",
+            "rank": 2
+          }
+        ],
+        "missed": [
+          {
+            "grade": 3,
+            "heading": "Former routing",
+            "path": "Infrastructure/WireGuard Network - Archived 2023.md"
+          }
+        ],
+        "ndcg_at_k": 0.351,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000013#Former routing"
+          ]
+        ]
+      },
+      "slices": [
+        "historical",
+        "conflict"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "temporal",
+      "id": "q007",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Former routing",
+            "path": "Infrastructure/WireGuard Network - Archived 2023.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Routing",
+            "path": "Infrastructure/WireGuard Network - Current.md",
+            "rank": 4
+          },
+          {
+            "grade": 3,
+            "heading": "Retirement",
+            "path": "Infrastructure/WireGuard Network - Archived 2023.md",
+            "rank": 5
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.8522,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "old_new_comparison",
+        "multi_section"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "incident",
+      "id": "q008",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Root cause",
+            "path": "Projects/Atlas Incident 2025-02-14.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "Recovery",
+            "path": "Projects/Atlas Incident 2025-02-14.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.9073,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "causal",
+        "single_note"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "single_note_factual",
+      "id": "q009",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Schedule and retention",
+            "path": "Operations/Atlas Backup Policy.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "Verification",
+            "path": "Operations/Atlas Backup Policy.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "policy",
+        "complete_answer"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "single_note_factual",
+      "id": "q010",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 0.3333,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Result",
+            "path": "Operations/Atlas Recovery Drill 2025-01.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "Recovery objectives",
+            "path": "Operations/Atlas Backup Policy.md"
+          },
+          {
+            "grade": 3,
+            "heading": "Finding",
+            "path": "Operations/Atlas Recovery Drill 2025-01.md"
+          }
+        ],
+        "ndcg_at_k": 0.5091,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000010#Finding"
+          ],
+          [
+            "01JEV000000000000000000009#Recovery objectives"
+          ]
+        ]
+      },
+      "slices": [
+        "exercise",
+        "comparison",
+        "graph_unlinked_control"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q011",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Humidity check",
+            "path": "Research/Weather Station Calibration.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "Schedule",
+            "path": "Research/Weather Station Calibration.md"
+          }
+        ],
+        "ndcg_at_k": 0.7039,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000015#Schedule"
+          ]
+        ]
+      },
+      "slices": [
+        "protocol",
+        "section_precision"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q012",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 4,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Sampling design",
+            "path": "Research/Soil Moisture Study.md",
+            "rank": 4
+          }
+        ],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "Field Sampling Schedule",
+            "path": "Research/Field Sampling Schedule.md"
+          },
+          {
+            "grade": 3,
+            "heading": "Timing",
+            "path": "Research/Soil Moisture Study.md"
+          }
+        ],
+        "ndcg_at_k": 0.2193,
+        "reciprocal_rank": 0.25,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000016#Timing"
+          ]
+        ]
+      },
+      "slices": [
+        "schedule",
+        "complete_evidence"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q013",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Privacy and disturbance",
+            "path": "Research/Bird Survey Protocol.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "privacy",
+        "single_note"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "alias",
+      "id": "q014",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Objectives",
+            "path": "Projects/Atlas Sensor Hub Overview.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "Data path",
+            "path": "Projects/Atlas Sensor Hub Architecture.md"
+          }
+        ],
+        "ndcg_at_k": 0.7039,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000002#Data path"
+          ]
+        ]
+      },
+      "slices": [
+        "known_item",
+        "outage"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "ambiguous_entity",
+      "id": "q015",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Validation",
+            "path": "Projects/Mercury Data Migration.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.6309,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "project",
+        "validation"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "ambiguous_entity",
+      "id": "q016",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "April 2025 session",
+            "path": "Research/Mercury Observation Notes.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "astronomy",
+        "semantic_paraphrase"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "semantic_paraphrase",
+      "id": "q017",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Pile is cold",
+            "path": "Garden/Compost Troubleshooting.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "Basic mix",
+            "path": "Garden/Community Compost Guide.md"
+          }
+        ],
+        "ndcg_at_k": 0.7039,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "troubleshooting",
+        "distractor_domain"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "alias",
+      "id": "q018",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Baseline recipe",
+            "path": "Kitchen/Pour-over Coffee Reference.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "recipe",
+        "known_item"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q019",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Triage order",
+            "path": "Operations/Atlas Telemetry Runbook.md",
+            "rank": 2
+          }
+        ],
+        "missed": [
+          {
+            "grade": 3,
+            "heading": "Successful recovery",
+            "path": "Operations/Atlas Telemetry Runbook.md"
+          },
+          {
+            "grade": 2,
+            "heading": "Failure boundaries",
+            "path": "Projects/Atlas Sensor Hub Architecture.md"
+          }
+        ],
+        "ndcg_at_k": 0.3212,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000007#Successful recovery"
+          ]
+        ]
+      },
+      "slices": [
+        "operations",
+        "complete_evidence"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "decision_lookup",
+      "id": "q020",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "2025-02-20 \u2014 Retention policy",
+            "path": "Projects/Atlas Decision Log.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "retention",
+        "single_note"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q021",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Principles",
+            "path": "Operations/Atlas Access Review.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.6309,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "security",
+        "roles"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "metadata_filter",
+      "id": "q022",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Alert thresholds",
+            "path": "Operations/Atlas Telemetry Runbook.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "type_filter",
+        "section_precision"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q023",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Data path",
+            "path": "Projects/Atlas Sensor Hub Architecture.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 3,
+            "heading": "Objectives",
+            "path": "Projects/Atlas Sensor Hub Overview.md"
+          }
+        ],
+        "ndcg_at_k": 0.6131,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000001#Objectives"
+          ]
+        ]
+      },
+      "slices": [
+        "numeric_reasoning",
+        "complete_evidence",
+        "graph_direct"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q024",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Internal names",
+            "path": "Infrastructure/DNS and Hostnames.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Addressing",
+            "path": "Infrastructure/WireGuard Network - Current.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.9386,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "dns",
+        "current_configuration"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q025",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "security",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q026",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "personal_information",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q027",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "plausible_assumption",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q028",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "contradicted_premise",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q029",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "missing_detail",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "ambiguous",
+      "id": "q030",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "entity_collision",
+        "clarification_or_abstention"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q031",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Certificate Details",
+            "path": "Operations/Atlas SSL Certificate Renewal.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "deep_tail",
+        "security"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q032",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Gate Code Rotation Schedule",
+            "path": "Field Guides/Trailhead Access Notes.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "deep_tail",
+        "schedule"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q033",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Altitude Ceiling",
+            "path": "Field Guides/Drone Flight Restrictions.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "deep_tail",
+        "numeric_reasoning"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q034",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "API Service Accounts",
+            "path": "Operations/Atlas Password Rotation Schedule.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "deep_tail",
+        "security"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q035",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Primary Hardware Suppliers",
+            "path": "Operations/Atlas Vendor Contact List.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "deep_tail",
+        "operations"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q036",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": null,
+        "group_recall_at_k": 0.0,
+        "matched": [],
+        "missed": [
+          {
+            "grade": 3,
+            "heading": "Post-Rollback Validation",
+            "path": "Operations/Atlas Firmware Rollback Procedure.md"
+          },
+          {
+            "grade": 3,
+            "heading": "Technical Support Escalation",
+            "path": "Operations/Atlas Vendor Contact List.md"
+          }
+        ],
+        "ndcg_at_k": 0.0,
+        "reciprocal_rank": 0.0,
+        "unsatisfied_groups": [
+          [
+            "01JEV000000000000000000130#Post-Rollback Validation"
+          ],
+          [
+            "01JEV000000000000000000127#Technical Support Escalation"
+          ]
+        ]
+      },
+      "slices": [
+        "complete_evidence",
+        "graph_direct",
+        "operations"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q037",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Creek Crossing Seasonal Timing",
+            "path": "Field Guides/Water Crossing Safety Notes.md",
+            "rank": 2
+          },
+          {
+            "grade": 3,
+            "heading": "South Meadow Access",
+            "path": "Field Guides/Seasonal Access Calendar.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.6934,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "complete_evidence",
+        "graph_direct",
+        "schedule"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q038",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Original Proposal",
+            "path": "Operations/Atlas Backup Policy Draft 2023.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "Retention Periods",
+            "path": "Operations/Atlas Log Retention Policy.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "complete_evidence",
+        "graph_direct",
+        "retention"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q039",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Detour Route",
+            "path": "Field Guides/Water Crossing Safety Notes.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "South Meadow: Seasonal Route Changes",
+            "path": "Field Guides/Trailhead Access Notes.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "complete_evidence",
+        "graph_direct",
+        "fieldwork"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q040",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "January\u2013March 2024",
+            "path": "Operations/Atlas Sensor Calibration Log 2024.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.6309,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "section_precision",
+        "deep_tail",
+        "operations"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "single_note_factual",
+      "id": "q041",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Severity 2: High",
+            "path": "Operations/Atlas Incident Severity Levels.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "section_precision",
+        "incident",
+        "operations"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q042",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Retention Periods",
+            "path": "Operations/Atlas Log Retention Policy.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "section_precision",
+        "retention",
+        "numeric_reasoning"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "temporal",
+      "id": "q043",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Recovery objectives",
+            "path": "Operations/Atlas Backup Policy.md",
+            "rank": 2
+          },
+          {
+            "grade": 2,
+            "heading": "Feedback and Reasons for Revision",
+            "path": "Operations/Atlas Backup Policy Draft 2023.md",
+            "rank": 4
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.6462,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "prefer_latest",
+        "conflict",
+        "policy"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q044",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "July\u2013December 2024",
+            "path": "Operations/Atlas Sensor Calibration Log 2024.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "deep_tail",
+        "known_item",
+        "operations"
+      ]
+    }
+  ],
+  "results_schema_version": 1,
+  "run": {
+    "embedding_model": "qwen/qwen3-embedding-8b",
+    "granularity": "mixed",
+    "k": 5,
+    "mode": "thorough",
+    "n": 10,
+    "recency_boost_enabled": true,
+    "recency_rank_budget": 3,
+    "recency_strategy": "score_geometry",
+    "rerank_model": "cohere/rerank-4-pro",
+    "rerank_top_k": 30,
+    "stage": "retrieval",
+    "timestamp": "2026-07-30T13:35:37+00:00"
+  }
+}

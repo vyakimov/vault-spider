@@ -270,14 +270,45 @@ Safety rules, enforced by the code:
 
 ## How search and answers work
 
-Vault Spider indexes each note twice: once as a whole note (`document` granularity), and once per
-section, split at each heading (`section` granularity). A search runs BM25 and embedding search
-over the chosen pool, combines the two rankings (Reciprocal Rank Fusion by default), optionally
-reranks the top results with a cross-encoder model, and applies a boost for recent notes.
+Vault Spider indexes each note twice: once as a whole note (`document` granularity), and once as
+deterministic Markdown-aware chunks (`section` granularity). Chunks preserve heading ancestry,
+lists, tables, code, callouts, and exact source ranges while targeting 300–600 tokens. A search
+runs BM25 and embedding search, combines rankings, optionally reranks the top results with a
+cross-encoder model, and applies a boost for recent notes.
 
 - `--mode fast` skips the rerank step. `--mode thorough` reranks.
-- `--granularity document` searches whole notes. `section` searches sections. `mixed` searches
-  sections only, with a limit of 3 sections per note.
+- `--granularity document` searches whole notes. `section` searches chunks. `mixed` fuses
+  whole-note and chunk signals, then returns the best source-addressable chunks with a limit of
+  3 per note.
+
+Optional contextual retrieval adds one concise note-level summary to dense search and reranking
+without exposing generated prose as evidence. All summaries have one canonical home under
+`index.context_path` (default `context-data/summaries`). In the default `manual` mode, Vault
+Spider prepares self-contained jobs, Codex or Claude Code fills their `summary` fields, and an
+import step validates them before sync uses them.
+
+```bash
+# Export jobs only for notes whose summary is missing or stale.
+./bin/vault-spider context prepare --root /path/to/vault
+
+# Ask Codex/Claude Code to process every JSON file in context-data/jobs.
+./bin/vault-spider context import
+./bin/vault-spider context status --root /path/to/vault
+
+# Copy ready summaries into derived dense text and re-embed affected notes.
+./bin/vault-spider sync --root /path/to/vault
+```
+
+Sync composes a ready summary into the note and each chunk before embedding. Chroma therefore
+contains a disposable derived copy of the enriched text and its embeddings, not a second
+authoritative summary store. BM25, exact-match filters, excerpts, citations, and synthesis use
+source text; `index.contextual_bm25` is the explicit opt-in exception.
+
+Missing or stale summaries never block indexing. In `manual` mode they never cause an API call;
+run `context prepare` to create the coding-agent work queue. In `openrouter` mode sync
+automatically makes one call per missing/stale note and atomically writes the successful result
+to the same canonical directory. There is no per-chunk context generation or separate context
+cache. See `docs/note-context-summaries.md` for the complete lifecycle.
 
 In `thorough` mode — with a reranker configured and a healthy link graph — search also follows
 your wikilinks one hop. Hybrid search finds the note your words hit; it misses the complementary
@@ -357,11 +388,11 @@ that reads like a real, messy one, with the same kind of notes and typos).
 # check that the labels still match the corpus
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml ./bin/vault-spider eval validate --dataset eval
 
-# index the corpus into its own Chroma path — never the live-vault index — then score it
+# The eval config persists its isolated index under eval/context-data/.
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml ./bin/vault-spider sync \
-    --root eval/public_vault --reset --chroma-path /tmp/vs-eval
+    --reset
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml ./bin/vault-spider eval run \
-    --dataset eval --chroma-path /tmp/vs-eval --out results.json
+    --dataset eval --out results.json
 ```
 
 `eval run` scores search quality by default: ranking accuracy at different cutoffs, and how many
@@ -369,12 +400,17 @@ required facts are found. Add `--stage synthesis` to also score abstention and f
 using a second model as judge. See [eval/README.md](eval/README.md) and
 [eval-realistic/README.md](eval-realistic/README.md) for full detail on each corpus.
 
+Each corpus also ships an `eval-contextual-config.yaml`. It persists a separate contextual Chroma
+index and canonical manually generated summaries under that corpus's gitignored `context-data/`,
+so contextual and baseline runs survive `/tmp` cleanup without touching live-vault data.
+
 ## Configuration
 
 `config.yaml` holds every setting specific to your install (Git ignores this file — see
 `config.yaml.example`): the vault root, skipped folders, tags that are never indexed, the
-distilled-note folder, the Chroma index path, the timestamp format, and the Obsidian connection
-settings (`obsidian.binary`, `obsidian.vault`, `obsidian.manage_updated`).
+distilled-note folder, the Chroma index path and contextual-retrieval policy, the timestamp
+format, and the Obsidian connection settings (`obsidian.binary`, `obsidian.vault`,
+`obsidian.manage_updated`).
 
 The file is optional. Vault Spider picks the vault root from an explicit `--root`, then
 `vault.root`, then Obsidian's active vault. It picks the mutation target the same way, using

@@ -1,0 +1,1558 @@
+{
+  "aggregates": {
+    "retrieval": {
+      "complete_rate_at_k": 0.9474,
+      "mean_group_recall_at_k": 0.9605,
+      "mean_ndcg_at_k": 0.8584,
+      "mrr": 0.8605,
+      "queries_scored": 38
+    }
+  },
+  "by_category": {
+    "alias": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9386,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "ambiguous_entity": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "decision_lookup": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "incident": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.805,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "known_item": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.8947,
+      "mrr": 0.859,
+      "queries_scored": 13
+    },
+    "metadata_filter": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "multi_note": {
+      "complete_rate_at_k": 0.75,
+      "mean_group_recall_at_k": 0.8125,
+      "mean_ndcg_at_k": 0.7407,
+      "mrr": 0.775,
+      "queries_scored": 8
+    },
+    "section_lookup": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.7877,
+      "mrr": 0.7619,
+      "queries_scored": 7
+    },
+    "semantic_paraphrase": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "temporal": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    }
+  },
+  "by_slice": {
+    "book_notes": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9795,
+      "mrr": 1.0,
+      "queries_scored": 3
+    },
+    "causal": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9128,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "code_snippet": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "comparison": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.8519,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "complete_evidence": {
+      "complete_rate_at_k": 0.8571,
+      "mean_group_recall_at_k": 0.9286,
+      "mean_ndcg_at_k": 0.8553,
+      "mrr": 0.8857,
+      "queries_scored": 7
+    },
+    "config": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "conflict": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "deep_tail": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.733,
+      "mrr": 0.6428,
+      "queries_scored": 7
+    },
+    "distractor_domain": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "dns": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9386,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "entity_collision": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "folder_filter": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "git": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "glossary": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9386,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "graph_direct": {
+      "complete_rate_at_k": 0.75,
+      "mean_group_recall_at_k": 0.875,
+      "mean_ndcg_at_k": 0.8257,
+      "mrr": 1.0,
+      "queries_scored": 4
+    },
+    "graph_shared_hub": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9197,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "headingless": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.8987,
+      "mrr": 0.9167,
+      "queries_scored": 8
+    },
+    "homelab": {
+      "complete_rate_at_k": 0.9167,
+      "mean_group_recall_at_k": 0.9583,
+      "mean_ndcg_at_k": 0.7872,
+      "mrr": 0.7528,
+      "queries_scored": 12
+    },
+    "known_item": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.75,
+      "mrr": 0.6666,
+      "queries_scored": 4
+    },
+    "linux": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "llm": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.7039,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "macos": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.906,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "multi_section": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "networking": {
+      "complete_rate_at_k": 0.5,
+      "mean_group_recall_at_k": 0.5,
+      "mean_ndcg_at_k": 0.5,
+      "mrr": 0.5,
+      "queries_scored": 2
+    },
+    "numeric": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "papertrail": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.9197,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "photos": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.877,
+      "mrr": 0.8333,
+      "queries_scored": 3
+    },
+    "project": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 2
+    },
+    "recipe": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "runbook": {
+      "complete_rate_at_k": 0.5,
+      "mean_group_recall_at_k": 0.5,
+      "mean_ndcg_at_k": 0.3519,
+      "mrr": 0.5,
+      "queries_scored": 2
+    },
+    "section_precision": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.7619,
+      "mrr": 0.6667,
+      "queries_scored": 5
+    },
+    "security": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 1.0,
+      "mrr": 1.0,
+      "queries_scored": 1
+    },
+    "single_note": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.8479,
+      "mrr": 0.7963,
+      "queries_scored": 9
+    },
+    "symptom": {
+      "complete_rate_at_k": 1.0,
+      "mean_group_recall_at_k": 1.0,
+      "mean_ndcg_at_k": 0.7039,
+      "mrr": 1.0,
+      "queries_scored": 1
+    }
+  },
+  "dataset": {
+    "corpus_root": "eval-realistic/corpus",
+    "eval_schema_version": 1,
+    "name": "vault-spider-realistic-eval",
+    "notes": 649,
+    "path": "eval-realistic/dataset.yaml",
+    "queries": 44
+  },
+  "queries": [
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q001",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/jq snippets.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "single_note",
+        "headingless"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "semantic_paraphrase",
+      "id": "q002",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/ffmpeg snippets.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "single_note",
+        "headingless"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q003",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Array with a throttle",
+            "path": "200 Tech/SLURM array jobs.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "single_note",
+        "code_snippet"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "alias",
+      "id": "q004",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Dmitri Fyodorovich Karamazov / Mitya / Mitenka",
+            "path": "300 Personal/Brothers Karamazov \u2014 Name Glossary.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Book 1, Chapter 2",
+            "path": "300 Personal/Brothers Karamazov \u2014 Summary.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.9386,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "book_notes",
+        "glossary"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "ambiguous_entity",
+      "id": "q005",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Liza Khokhlakova / Lise",
+            "path": "300 Personal/Brothers Karamazov \u2014 Name Glossary.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Book 2, Chapter 4",
+            "path": "300 Personal/Brothers Karamazov \u2014 Summary.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "book_notes",
+        "entity_collision"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "ambiguous_entity",
+      "id": "q006",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Smerdyakov / Pavel Fyodorovich Smerdyakov",
+            "path": "300 Personal/Brothers Karamazov \u2014 Name Glossary.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "Lizaveta Smerdyashchaya",
+            "path": "300 Personal/Brothers Karamazov \u2014 Name Glossary.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "book_notes",
+        "entity_collision"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "incident",
+      "id": "q007",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/Marionette/Photo Sync Fuckery.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "",
+            "path": "200 Tech/PuddleJumper.md",
+            "rank": 4
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.906,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "causal",
+        "macos"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q008",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Step 2 --- Front it with nginx",
+            "path": "200 Tech/LAN-only larder.foxglove.example.md",
+            "rank": 2
+          },
+          {
+            "grade": 2,
+            "heading": "Final architecture",
+            "path": "200 Tech/LAN-only larder.foxglove.example.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.6788,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "homelab",
+        "section_precision"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q009",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 5,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 2,
+            "heading": "",
+            "path": "200 Tech/LAN-only larder.foxglove.example.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Larder",
+            "path": "200 Tech/Larder/Larder.md",
+            "rank": 4
+          },
+          {
+            "grade": 3,
+            "heading": "Step 3 --- Verify it is tailnet-only",
+            "path": "200 Tech/LAN-only larder.foxglove.example.md",
+            "rank": 5
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.7644,
+        "reciprocal_rank": 0.2,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "homelab",
+        "complete_evidence"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "temporal",
+      "id": "q010",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Former setup",
+            "path": "200 Tech/Flat Network - Archived 2024.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/Tailscale.md",
+            "rank": 2
+          },
+          {
+            "grade": 2,
+            "heading": "Retirement",
+            "path": "200 Tech/Flat Network - Archived 2024.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "conflict",
+        "networking"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q011",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "**PaddleOCR**",
+            "path": "200 Tech/papertrail/Tesseract vs PaddleOCR.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "numeric"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "decision_lookup",
+      "id": "q012",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Plan \u2014 Flask HTMX",
+            "path": "200 Tech/Larder/Plan \u2014 Flask HTMX.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Plans",
+            "path": "200 Tech/Larder/Larder.md",
+            "rank": 2
+          },
+          {
+            "grade": 2,
+            "heading": "Plan \u2014 Datasette and SQLite",
+            "path": "200 Tech/Larder/Plan \u2014 Datasette and SQLite.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "project",
+        "comparison"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q013",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "**When wake events make sense:**",
+            "path": "200 Tech/Marionette/Cron vs Wake Events.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "**Wake events**",
+            "path": "200 Tech/Marionette/Cron vs Wake Events.md"
+          }
+        ],
+        "ndcg_at_k": 0.7039,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "llm",
+        "comparison"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q014",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/Marionette/Marionette Permissions.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "config",
+        "security"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q015",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": null,
+        "group_recall_at_k": 0.0,
+        "matched": [],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "Prereqs",
+            "path": "200 Tech/Marionette/Marionette Remote Shell Runbook.md"
+          },
+          {
+            "grade": 3,
+            "heading": "Token exchange",
+            "path": "200 Tech/Marionette/Marionette Remote Shell Runbook.md"
+          },
+          {
+            "grade": 2,
+            "heading": "",
+            "path": "200 Tech/Tailscale.md"
+          }
+        ],
+        "ndcg_at_k": 0.0,
+        "reciprocal_rank": 0.0,
+        "unsatisfied_groups": [
+          [
+            "01M6A000000000000000000002#Token exchange"
+          ],
+          [
+            "01M6A000000000000000000002#Prereqs",
+            "01M6B000000000000000000003#"
+          ]
+        ]
+      },
+      "slices": [
+        "runbook",
+        "networking"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "incident",
+      "id": "q016",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Gotchas",
+            "path": "200 Tech/Marionette/Marionette Remote Shell Runbook.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 2,
+            "heading": "Prereqs",
+            "path": "200 Tech/Marionette/Marionette Remote Shell Runbook.md"
+          }
+        ],
+        "ndcg_at_k": 0.7039,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "runbook",
+        "symptom"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q017",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/papertrail/papertrail CUDA OOM.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/papertrail/Deskewing Scans.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.9197,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "complete_evidence",
+        "papertrail",
+        "graph_shared_hub"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q018",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Why bother over cron",
+            "path": "200 Tech/systemd timers.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "linux",
+        "section_precision"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q019",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/NAS Snapshot Replication.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "homelab",
+        "headingless"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "decision_lookup",
+      "id": "q020",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Plan \u2014 Datasette and SQLite",
+            "path": "200 Tech/Larder/Plan \u2014 Datasette and SQLite.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "project"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "metadata_filter",
+      "id": "q021",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "A list of all tools",
+            "path": "200 Tech/Marionette/Marionette Tools.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Operations",
+            "path": "200 Tech/Marionette/Marionette.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "folder_filter"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q022",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/Tailscale.md",
+            "rank": 1
+          },
+          {
+            "grade": 2,
+            "heading": "Step 1 --- Point the name at the tailnet address",
+            "path": "200 Tech/LAN-only larder.foxglove.example.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.9386,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "homelab",
+        "dns"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q023",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/git worktree.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "git",
+        "headingless"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q024",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "300 Personal/Ginger Carrot Soup.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "recipe",
+        "distractor_domain"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q025",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "security",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q026",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "security",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q027",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "plausible_assumption",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q028",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "empty_note",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "unanswerable",
+      "id": "q029",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "missing_detail",
+        "abstention"
+      ]
+    },
+    {
+      "answerable": false,
+      "category": "ambiguous",
+      "id": "q030",
+      "skipped": "unanswerable; abstention is scored with --stage synthesis",
+      "slices": [
+        "entity_collision",
+        "clarification_or_abstention"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q031",
+      "retrieval": {
+        "complete_at_k": false,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 0.5,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Plan \u2014 Flask HTMX",
+            "path": "200 Tech/Larder/Plan \u2014 Flask HTMX.md",
+            "rank": 1
+          }
+        ],
+        "missed": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/NAS Snapshot Replication.md"
+          }
+        ],
+        "ndcg_at_k": 0.6131,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": [
+          [
+            "01M6B000000000000000000006#"
+          ]
+        ]
+      },
+      "slices": [
+        "complete_evidence",
+        "graph_direct",
+        "homelab"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q032",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 3,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/Greenhouse/Home Assistant Backup.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.5,
+        "reciprocal_rank": 0.3333,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "headingless",
+        "deep_tail",
+        "homelab"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q033",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "On Trip",
+            "path": "200 Tech/Fernweh/Fernweh Offline Maps.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "deep_tail"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q034",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 3,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Implementation",
+            "path": "200 Tech/Millwright/Millwright Full Text Search.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.5,
+        "reciprocal_rank": 0.3333,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "deep_tail"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q035",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Syntax",
+            "path": "200 Tech/Fernweh/Fernweh Itinerary Format.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "known_item",
+        "single_note",
+        "deep_tail",
+        "code_snippet"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q036",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/NAS Snapshot Replication.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/Greenhouse/Home Assistant Backup.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.9197,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "complete_evidence",
+        "graph_direct",
+        "headingless",
+        "homelab"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q037",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/Greenhouse/Leak Sensor False Alarm.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "Active Automations",
+            "path": "200 Tech/Greenhouse/Greenhouse Automations.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.9197,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "complete_evidence",
+        "graph_direct",
+        "headingless",
+        "causal",
+        "homelab"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "multi_note",
+      "id": "q038",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Related",
+            "path": "200 Tech/LordByron.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "",
+            "path": "200 Tech/NAS Snapshot Replication.md",
+            "rank": 5
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.8503,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "complete_evidence",
+        "graph_direct",
+        "headingless",
+        "homelab"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q039",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Cluster Quality by Era",
+            "path": "200 Tech/Cassowary/Cassowary Face Grouping.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.6309,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "section_precision",
+        "photos",
+        "homelab"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q040",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 3,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Quality",
+            "path": "200 Tech/Millwright/Millwright Full Text Search.md",
+            "rank": 3
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.5,
+        "reciprocal_rank": 0.3333,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "section_precision",
+        "deep_tail"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q041",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Volume Mapping",
+            "path": "200 Tech/Cassowary/Cassowary Storage Layout.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "section_precision",
+        "photos",
+        "homelab"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "section_lookup",
+      "id": "q042",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Face Merge Backlog",
+            "path": "200 Tech/Cassowary/Cassowary Face Grouping.md",
+            "rank": 1
+          },
+          {
+            "grade": 3,
+            "heading": "Cluster Quality by Era",
+            "path": "200 Tech/Cassowary/Cassowary Face Grouping.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "complete_evidence",
+        "multi_section",
+        "photos"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q043",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 1,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Workflow",
+            "path": "200 Tech/Fernweh/Fernweh Offline Maps.md",
+            "rank": 1
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "deep_tail",
+        "single_note"
+      ]
+    },
+    {
+      "answerable": true,
+      "category": "known_item",
+      "id": "q044",
+      "retrieval": {
+        "complete_at_k": true,
+        "first_grade3_rank": 2,
+        "group_recall_at_k": 1.0,
+        "matched": [
+          {
+            "grade": 3,
+            "heading": "Active Automations",
+            "path": "200 Tech/Greenhouse/Greenhouse Automations.md",
+            "rank": 2
+          }
+        ],
+        "missed": [],
+        "ndcg_at_k": 0.6309,
+        "reciprocal_rank": 0.5,
+        "unsatisfied_groups": []
+      },
+      "slices": [
+        "deep_tail",
+        "single_note",
+        "homelab"
+      ]
+    }
+  ],
+  "results_schema_version": 1,
+  "run": {
+    "embedding_model": "qwen/qwen3-embedding-8b",
+    "granularity": "mixed",
+    "k": 5,
+    "mode": "thorough",
+    "n": 10,
+    "recency_boost_enabled": true,
+    "rerank_model": "cohere/rerank-4-pro",
+    "rerank_top_k": 30,
+    "stage": "retrieval",
+    "timestamp": "2026-07-30T13:06:08+00:00"
+  }
+}

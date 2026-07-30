@@ -25,6 +25,7 @@ class OpenRouterClient:
         embedding_model: str,
         chat_model: str,
         rerank_model: Optional[str] = None,
+        context_model: Optional[str] = None,
         base_url: str = "https://openrouter.ai/api/v1",
         http_referer: Optional[str] = None,
         app_title: Optional[str] = None,
@@ -36,6 +37,7 @@ class OpenRouterClient:
         self.embedding_model = embedding_model
         self.chat_model = chat_model
         self.rerank_model = rerank_model
+        self.context_model = context_model or chat_model
         self.base_url = base_url.rstrip("/")
         self.http_referer = http_referer
         self.app_title = app_title
@@ -50,6 +52,7 @@ class OpenRouterClient:
             ),
             chat_model=os.environ.get("OPENROUTER_CHAT_MODEL", "openai/gpt-4o-mini"),
             rerank_model=os.environ.get("OPENROUTER_RERANK_MODEL") or None,
+            context_model=os.environ.get("OPENROUTER_CONTEXT_MODEL") or None,
             base_url=os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
             http_referer=os.environ.get("OPENROUTER_HTTP_REFERER"),
             app_title=os.environ.get("OPENROUTER_APP_TITLE", "Vault Spider"),

@@ -1,6 +1,7 @@
 """Generate docs/codebase-map.json and docs/codebase-map.html.
 
-Walks the git-tracked Python source with ``ast`` to extract modules, classes,
+Walks version-controlled Python source (including pending untracked additions)
+with ``ast`` to extract modules, classes,
 functions, signatures, and internal imports, then renders two snapshots of the
 codebase: a machine-readable JSON map for agents and a self-contained HTML
 overview page for humans. Structure comes from the source; the prose (package
@@ -64,7 +65,15 @@ def _first_line(doc: str | None) -> str | None:
 
 def extract_modules() -> list[dict]:
     tracked = subprocess.run(
-        ["git", "-C", str(ROOT), "ls-files"],
+        [
+            "git",
+            "-C",
+            str(ROOT),
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ],
         capture_output=True, text=True, check=True,
     ).stdout.splitlines()
     py_files = [
@@ -152,21 +161,23 @@ PACKAGES = {
         "match": lambda p: p.startswith("vault_spider/corpus/"),
         "role": "Reads the vault: loads Markdown notes, parses frontmatter, resolves note "
                 "identity (ULID or path hash) and wikilinks, and splits notes into "
-                "deterministic heading-based sections.",
+                "deterministic, Markdown-aware chunks with heading ancestry and exact "
+                "source ranges.",
     },
     "vault_spider.index": {
         "match": lambda p: p.startswith("vault_spider/index/"),
         "role": "Builds and maintains the ChromaDB collection (one document entry + N section "
                 "entries per note, distinguished by the `granularity` metadata field) with "
-                "failure-safe incremental sync and a persisted note-level wikilink graph; plus "
-                "a read-only reader for stats without BM25.",
+                "failure-safe incremental sync, a persisted note-level wikilink graph, one "
+                "canonical note-summary store shared by manual and OpenRouter generation, "
+                "and separate dense/lexical/source views; plus a read-only stats reader.",
     },
     "vault_spider.retrieval": {
         "match": lambda p: p.startswith("vault_spider/retrieval/"),
         "role": "Hybrid search: BM25 + embeddings fused by pure scoring functions, optional "
                 "rerank (thorough mode), one-hop expansion over the persisted wikilink graph, "
-                "an on-disk query-embedding cache, and assembly of the retrieval output "
-                "contract (evidence/citations).",
+                "score-geometry recency, an on-disk query-embedding cache, and source-safe "
+                "evidence/citation assembly.",
     },
     "vault_spider.synthesis": {
         "match": lambda p: p.startswith("vault_spider/synthesis/"),
@@ -316,8 +327,8 @@ INVARIANTS = [
     "Read path (sync, retrieve, lint) works on vault files directly; the write path goes only "
     "through the Obsidian CLI. Never write vault files directly from mutation code.",
     "One note indexes as one document-granularity entry plus N section entries in a single "
-    "Chroma collection (granularity metadata field). Section splitting is deterministic and "
-    "heading-based.",
+    "Chroma collection (granularity metadata field). Chunking is deterministic and "
+    "Markdown-aware; generated context never becomes cited source evidence.",
     "`provenance` frontmatter (human | reference | llm | distilled) is set at note creation, "
     "immutable once set, never proposed by enrichment, and orthogonal to `type`.",
     "`id`, `created`, and `provenance` are immutable once set; `lint --fix` writes only "
@@ -340,13 +351,18 @@ INVARIANTS = [
 COMMANDS = [
     {"command": "schema",
      "summary": "Print the machine-readable command + contract schema (version 3)."},
-    {"command": "sync [--root DIR] [--reset]",
-     "summary": "Incremental index sync: add new, re-embed changed/moved, delete removed notes."},
+    {"command": "sync [--root DIR] [--reset] [--contextualize] [--refresh-context]",
+     "summary": "Incremental index sync; consumes canonical note summaries and optionally "
+                "generates missing/stale summaries through OpenRouter."},
+    {"command": "context prepare|import|status",
+     "summary": "Export coding-agent summary jobs, validate/promote canonical records, or report "
+                "ready/missing/stale/orphaned coverage."},
     {"command": "stats", "summary": "Index statistics (no API key needed)."},
     {"command": "retrieve --query Q [--mode fast|thorough] "
                 "[--granularity document|section|mixed] [filters]",
-     "summary": "Hybrid retrieval returning the scored-candidate contract. Filters: --folder "
-                "--tag --type --provenance --since --until."},
+     "summary": "Hybrid retrieval returning the scored-candidate contract; mixed fuses "
+                "document/section signals and returns exact chunks. Filters: --folder --tag "
+                "--type --provenance --since --until."},
     {"command": "synthesize --query Q [--mode thorough] [--retrieval FILE] [--save]",
      "summary": "Retrieve then synthesize a cited answer; abstains when unsupported; --save "
                 "persists a distilled note."},
@@ -379,8 +395,8 @@ OTHER_FILES = [
      "role": "app.css (hand-written, phone-first, light+dark) and a vendored htmx.min.js. "
              "No build step and no external requests: the app works offline."},
     {"path": "config.yaml.example",
-     "role": "Template for installation settings (vault root, folders, tag rules, timestamps "
-             "policy). Real config.yaml is gitignored."},
+     "role": "Template for installation settings (vault root, folders, tag rules, context "
+             "summaries, timestamps). Real config.yaml is gitignored."},
     {"path": ".env.example", "role": "Template for secrets: OpenRouter key and model names."},
     {"path": "pyproject.toml", "role": "Package metadata and dependencies (uv-managed)."},
     {"path": ".github/workflows/ci.yml", "role": "CI workflow."},
@@ -388,14 +404,19 @@ OTHER_FILES = [
      "role": "LaunchAgents: periodic-sync (interval, logs, status, uninstall) and the "
              "web-app supervisor behind a reverse proxy."},
     {"path": "docs/obsidian-setup.md", "role": "Obsidian-side setup for the mutation backend."},
+    {"path": "docs/note-context-summaries.md",
+     "role": "Canonical summary storage, manual Codex/Claude and automatic OpenRouter workflows, "
+             "embedding, and staleness behavior."},
     {"path": "skills/vault/SKILL.md",
      "role": "Agent skill for operating the vault (plus references/ for capture, commands, "
              "eval/server)."},
     {"path": "eval/",
      "role": "Committed golden dataset #1: public_vault corpus, golden_queries.jsonl, "
-             "dataset.yaml, eval-config.yaml."},
+             "dataset.yaml, and persistent baseline/contextual configs whose local artifacts "
+             "stay under gitignored context-data/."},
     {"path": "eval-realistic/",
-     "role": "Committed golden dataset #2: larger realistic corpus with the same layout."},
+     "role": "Committed golden dataset #2: larger realistic corpus with the same persistent, "
+             "isolated baseline/contextual layout."},
     {"path": "tests/fixtures/notes/", "role": "Small fixture vault used by the pytest suite."},
     {"path": "chroma_db/ (gitignored)", "role": "Local Chroma index of the live vault."},
 ]
@@ -458,7 +479,7 @@ def build_json(code_modules: list[dict], test_modules: list[dict]) -> dict:
         },
         "generated": date.today().isoformat(),
         "generator_note": "Regenerate with `uv run python tools/build_codebase_map.py`. "
-                          "Structure extracted from the git-tracked source via Python ast; "
+                          "Structure extracted from version-controlled source via Python ast; "
                           "line numbers refer to the commit current on the generation date.",
         "architecture": {
             "data_flow": DATA_FLOW,
@@ -1015,7 +1036,7 @@ file's <code>vault_spider</code> imports.</p>
 </table></div>
 </section>
 
-<footer>Generated {today} by <code>tools/build_codebase_map.py</code> from the git-tracked
+<footer>Generated {today} by <code>tools/build_codebase_map.py</code> from version-controlled
 source via Python <code>ast</code>. Companion machine-readable file:
 <code>docs/codebase-map.json</code>.</footer>
 </main>

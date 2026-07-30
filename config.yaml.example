@@ -39,6 +39,24 @@ index:
   # ChromaDB persistence directory, relative to this config file (or an absolute path).
   chroma_path: chroma_db
 
+  # Opt in to contextual dense retrieval. Notes use summaries from the canonical
+  # context-data store. Chroma receives only derived enriched text and embeddings.
+  contextual: false
+
+  # `manual` reads summaries produced with `context prepare`/`import` and never
+  # calls a context-generation API. `openrouter` automatically generates missing
+  # or stale note summaries and writes them to the same canonical directory.
+  context_source: manual
+
+  # Canonical source of truth for all note summaries, whether produced manually
+  # or through OpenRouter. Keep it outside the vault and disposable Chroma storage.
+  context_path: context-data/summaries
+
+  # Include generated context in BM25 as well as embeddings/reranking. Disabled by
+  # default so generated prose cannot alter lexical ranking until evaluated.
+  # Requires contextual: true.
+  contextual_bm25: false
+
 timestamps:
   # How `--fix`/`--fix-timestamps`/distilled notes write `created`/`updated`:
   #   offset_local  — 2026-07-13T14:30:00+02:00 (local wall-clock + offset)

@@ -221,17 +221,25 @@ class TestJsonApi:
         candidate = payload["result"]["candidates"][0]
         assert set(candidate) == {
             "note_id", "path", "obsidian_url", "title", "type", "provenance", "heading",
-            "chunk_id", "line_start", "line_end", "excerpt", "scores", "graph", "why",
+            "chunk_id", "line_start", "line_end",
+            "excerpt", "scores", "graph", "why",
         }
         # Nullable and additive: an ordinary candidate carries the key set to null.
         assert candidate["graph"] is None
-        assert set(candidate["scores"]) == {"bm25", "semantic", "fused", "reranker", "final"}
+        assert set(candidate["scores"]) == {
+            "bm25",
+            "semantic",
+            "fused",
+            "reranker",
+            "final",
+        }
 
-    def test_excerpt_is_the_untouched_contract_value(self, client):
-        """The JSON route serves `build_retrieval_output` verbatim, header and all."""
+    def test_excerpt_is_source_text_without_synthetic_headers(self, client):
+        """The JSON route serves source evidence, never retrieval-only prefixes."""
         payload = client.get("/api/retrieve", params={"q": "wireguard"}).json()
         excerpts = [c["excerpt"] for c in payload["result"]["candidates"]]
-        assert any(text.startswith("# ") and "\nPath: " in text for text in excerpts)
+        assert excerpts
+        assert all("\nPath: " not in text and "\nContext: " not in text for text in excerpts)
 
     def test_missing_query_is_a_400_envelope(self, client):
         response = client.get("/api/retrieve")

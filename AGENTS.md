@@ -40,7 +40,8 @@ imported ones and treats `distilled` notes as pointers; retrieval filters on it
   delegates to `uv run vault-spider`, so its absolute path can be called from outside the repository.
 - `./bin/vault-spider schema`
   - Prints the machine-readable command + contract schema (`version: 3`).
-- `./bin/vault-spider sync [--root <dir>] [--reset]`  (`--root` defaults to `vault.root` in
+- `./bin/vault-spider sync [--root <dir>] [--reset] [--contextualize] [--refresh-context]`
+  (`--root` defaults to `vault.root` in
   `config.yaml`, then the active Obsidian vault)
   - Incremental sync: adds new notes, re-embeds changed or moved notes, deletes removed notes.
     Notes sharing a duplicate frontmatter `id` are skipped after the first and reported in
@@ -48,10 +49,23 @@ imported ones and treats `distilled` notes as pointers; retrieval filters on it
   - Failure-safe ordering: old entries are deleted only after all new embeddings have been
     computed and validated, so a provider failure mid-sync leaves the existing index usable.
   - `--reset` rebuilds the collection from scratch (needed once after an entry-shape change).
+  - With `index.contextual: true`, note-level summaries are canonically stored under
+    `index.context_path` (default `context-data/summaries`). `manual` consumes summaries imported
+    from coding-agent jobs and never calls a context API. `openrouter` automatically generates
+    missing/stale note summaries into the same store, one call per note. Both strategies enrich
+    dense retrieval/reranking; no separate cache or per-chunk summaries exist. Context never
+    becomes cited source text; `index.contextual_bm25` is separately opt-in.
+- `./bin/vault-spider context prepare|import|status`
+  - `prepare` exports self-contained JSON jobs for missing/stale note summaries without writing
+    the vault. A coding agent fills each job's `summary`. `import` validates the complete batch
+    and promotes it into the canonical summary store. `status` reports
+    ready/missing/stale/orphaned coverage. Fingerprints include title/body but exclude path and
+    timestamps, so moves reuse context.
 - `./bin/vault-spider stats` — index statistics (no API key needed).
 - `./bin/vault-spider retrieve --query "..." [--mode fast|thorough] [--granularity document|section|mixed] [-n 10] [--folder ...] [--tag ...] [--type ...] [--provenance human|reference|llm|distilled] [--since ...] [--until ...]`
   - Returns the retrieval output contract (candidates with score breakdown). Defaults: `fast`, `document`.
-    `mixed` searches the section pool with a 3-sections-per-note cap (it does not mix in document entries).
+    `mixed` searches sections and returns source-addressable sections with a
+    3-sections-per-note cap.
   - `fast` skips reranking; `thorough` reranks the top candidates.
   - **Graph expansion** runs automatically in `thorough` mode when a reranker is configured *and*
     the index's wikilink graph is healthy (`stats.graph_status == "ok"`). After fusion it takes the
@@ -179,6 +193,8 @@ Required environment variables (loaded from `.env` via `python-dotenv`):
 Optional:
 
 - `OPENROUTER_RERANK_MODEL` (enables reranking in `thorough` mode)
+- `OPENROUTER_CONTEXT_MODEL` (OpenRouter context mode only; defaults to
+  `OPENROUTER_CHAT_MODEL`)
 - `OPENROUTER_BASE_URL`
 - `OPENROUTER_HTTP_REFERER`
 - `OPENROUTER_APP_TITLE`
@@ -197,17 +213,27 @@ The `vault_spider` package is layered:
      hidden directory — Obsidian never indexes dot-folders like `.git` — and
      Excalidraw drawings — `*.excalidraw.md` / `excalidraw-plugin` frontmatter — whose bodies are
      compressed drawing data rather than prose).
-   - `chunker.py` — deterministic `split_sections` plus `document_text` / `section_text`.
+   - `chunker.py` — deterministic Markdown-aware 300–600-token chunking with H1–H6 paths,
+     structural boundaries, parent section ids, and source-safe text composition.
 
 2. `vault_spider/index/`
-   - `store.py` — `IndexStore` with `sync(root, reset)`; maintains the Chroma collection and two
-     in-memory BM25 indexes (document + section), diffing by `note_id` + `content_hash`.
+   - `store.py` — `IndexStore` with incremental, schema-aware sync; maintains the Chroma
+     collection plus dense, lexical, and source views and two BM25 indexes.
+   - `context_summaries.py` — canonical note-summary records plus manual jobs, validation,
+     import, fingerprinting, and coverage status.
+   - `context_generator.py` — optional one-call-per-note OpenRouter generation into the same
+     canonical store; generated text is used for retrieval, never evidence.
    - `reader.py` — read-only Chroma access for the Notes UI.
 
 3. `vault_spider/retrieval/`
-   - `fusion.py` — pure RRF / z-score-sigmoid / min-max fusion.
+   - `fusion.py` — pure two-list RRF / z-score-sigmoid / min-max fusion.
    - `searcher.py` — `Searcher.hybrid_search` (embeddings + BM25 + fusion + optional rerank +
      recency); `fast`/`thorough` modes, `document`/`section`/`mixed` granularity.
+     Recency preserves the reranker's score geometry: freshness gets a query-specific
+     budget `lambda_q = s_(k) - s_(k+B)` taken from the score gaps straddling the cutoff,
+     and ranks on `s_i + lambda_q * f_i`. `B` (`recency_rank_budget`) is the promotion
+     allowance in rank positions, so recency strength does not depend on the rerank pool
+     size. Set `recency_strategy: multiplicative` for the pre-2026-07 behaviour.
    - `evidence.py` — builds the retrieval output contract (candidate objects + deterministic `why`).
 
 4. `vault_spider/synthesis/`
@@ -265,6 +291,13 @@ from `config.yaml` (`timestamps.policy`: `offset_local`, `utc_z`, or `obsidian_l
 All of these are configurable in `config.yaml`; the values below are the defaults.
 
 - ChromaDB directory: `./chroma_db/` (`index.chroma_path`)
+- Durable manual context summaries: `./context-data/summaries/` (`index.context_path`);
+  prepared jobs default to the sibling `./context-data/jobs/`
+- Eval artifacts are persistent but isolated: each committed eval config resolves its
+  `context-data/` paths beside the corpus config. Baseline embeddings use
+  `context-data/chroma-baseline`, contextual embeddings use `context-data/chroma-contextual`,
+  and canonical summaries use `context-data/summaries`. These directories are gitignored and
+  never shared with the live index.
 - Note source: `--root`, then `vault.root`, then the active vault from Obsidian's registry
 - Skipped folders: `.trash`, `.obsidian`, `Templates` (`vault.skip_dirs`), all hidden
   directories, plus Excalidraw drawings
@@ -282,13 +315,14 @@ All of these are configurable in `config.yaml`; the values below are the default
 - `vault_spider/utils.py::validate_vault_relative_path` is the single gate for user-supplied vault
   paths (mutation `--path`/`--to`, `--save-dir`, `enrich --note`) — route any new path argument
   through it rather than validating ad hoc.
-- Metadata stored per entry: `note_id`, `granularity`, `title`, `path`, `folder`, `tags`, `date`,
-  `created`, `updated`, `note_type`, `content_hash`, `heading`, `line_start`, `line_end`, `source`.
+- Metadata stored per entry includes `note_id`, `granularity`, `title`, `path`, `folder`, `tags`,
+  dates/type/provenance, hashes, `heading`, `heading_path`, `parent_section_id`, line ranges,
+  `source_offset`, chunk/context schema fields, context provenance/status, and `source`.
 - Retrieval/synthesis JSON contracts are stable; downstream tooling depends on them (see
   `vault-spider schema`).
 - The LLM relevance judge was removed; abstention now lives in synthesis.
 - `tools/build_codebase_map.py` generates `docs/codebase-map.{html,json}`; CI regenerates them
   and fails when the committed maps are stale, so rerun it and commit the outputs after
-  structural changes. Its hand-maintained prose (package roles, data flows, invariants, command
-  table) is not extracted from code — update it in the script when the architecture or CLI
-  changes.
+  structural changes. Pending untracked Python additions are included so maps can be correct
+  before staging. Its hand-maintained prose (package roles, data flows, invariants, command table)
+  is not extracted from code — update it in the script when the architecture or CLI changes.

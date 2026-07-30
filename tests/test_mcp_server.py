@@ -157,11 +157,15 @@ def test_generated_tools_expose_safety_annotations_and_bounded_schemas() -> None
         "open_note",
     }
     search_annotations = tools["search_vault"].annotations
+    sync_schema = tools["sync_index"].inputSchema
     create_annotations = tools["create_note"].annotations
     assert search_annotations is not None
     assert create_annotations is not None
     assert search_annotations.readOnlyHint is True
     assert search_annotations.openWorldHint is True
+    assert {"contextualize", "refresh_context"}.issubset(
+        sync_schema["properties"]
+    )
     assert create_annotations.readOnlyHint is False
     assert create_annotations.destructiveHint is True
     assert tools["create_note"].inputSchema["properties"]["dry_run"]["default"] is True

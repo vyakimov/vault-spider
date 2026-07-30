@@ -220,7 +220,13 @@ def test_the_bonus_reaches_the_final_score(
     without_bonus = _leaf_row(_search(searcher))
 
     assert with_bonus is not None and without_bonus is not None
-    expected = without_bonus["final"] + GRAPH_WEIGHT * with_bonus["graph"][
+    # GRAPH_WEIGHT is denominated in rank-derived relevance, which spans [0.5, 1.0].
+    # score_geometry recency ranks on the reranker's raw scores instead, so the bonus
+    # is rescaled into whatever spread this query actually produced. Reconstructing
+    # that factor keeps the assertion exact rather than approximate.
+    spread = with_bonus["_relevance_spread"]
+    scale = (spread / 0.5) if spread else 1.0
+    expected = without_bonus["final"] + GRAPH_WEIGHT * scale * with_bonus["graph"][
         "propagated_score"
     ]
     assert with_bonus["final"] == pytest.approx(expected)
