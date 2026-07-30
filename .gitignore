@@ -9,6 +9,7 @@ config.yaml
 CLAUDE.md
 chroma_db/
 chroma_db_lowmem/
+context-data/
 search_results/
 input/
 models/

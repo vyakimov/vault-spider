@@ -147,6 +147,8 @@ def sync_index(
     root: Optional[str] = None,
     reset: bool = False,
     dry_run: bool = True,
+    contextualize: bool = False,
+    refresh_context: bool = False,
 ) -> dict[str, Any]:
     """Plan or run an incremental vault index sync. Defaults to a non-writing dry run."""
     arguments = ["sync"]
@@ -155,6 +157,10 @@ def sync_index(
         arguments.append("--reset")
     if dry_run:
         arguments.append("--dry-run")
+    if contextualize:
+        arguments.append("--contextualize")
+    if refresh_context:
+        arguments.append("--refresh-context")
     return _run_cli(arguments)
 
 

@@ -23,6 +23,12 @@ class TestDefaults:
         assert settings.ignore_tags() == ["ignore", "secret"]
         assert settings.distilled_dir() == "Distilled"
         assert settings.chroma_path() == str(settings.config_path().parent / "chroma_db")
+        assert settings.contextual_enabled() is False
+        assert settings.context_source() == "manual"
+        assert settings.context_path() == str(
+            settings.config_path().parent / "context-data" / "summaries"
+        )
+        assert settings.contextual_bm25_enabled() is False
         assert settings.timestamp_policy() == "offset_local"
 
     def test_defaults_carry_no_personal_paths(self):
@@ -98,6 +104,20 @@ class TestOverrides:
         write_config(isolated_config, "timestamps:\n  policy: obsidian_local\n")
         assert settings.timestamp_policy() == "obsidian_local"
 
+    def test_contextual_index_settings(self, isolated_config):
+        write_config(
+            isolated_config,
+            "index:\n"
+            "  contextual: true\n"
+            "  context_source: openrouter\n"
+            "  context_path: summaries\n"
+            "  contextual_bm25: true\n",
+        )
+        assert settings.contextual_enabled() is True
+        assert settings.context_source() == "openrouter"
+        assert settings.context_path() == str(isolated_config / "summaries")
+        assert settings.contextual_bm25_enabled() is True
+
 
 class TestErrors:
     def test_unknown_section_rejected(self, isolated_config):
@@ -114,6 +134,16 @@ class TestErrors:
         write_config(isolated_config, "timestamps:\n  policy: whenever\n")
         with pytest.raises(settings.ConfigError, match="offset_local"):
             settings.timestamp_policy()
+
+    def test_contextual_bm25_requires_contextual(self, isolated_config):
+        write_config(isolated_config, "index:\n  contextual_bm25: true\n")
+        with pytest.raises(settings.ConfigError, match="requires"):
+            settings.contextual_bm25_enabled()
+
+    def test_unknown_context_source_is_rejected(self, isolated_config):
+        write_config(isolated_config, "index:\n  context_source: magic\n")
+        with pytest.raises(settings.ConfigError, match="manual.*openrouter"):
+            settings.context_source()
 
     def test_malformed_yaml_still_prints_one_json_envelope(self, isolated_config, capsys):
         """A broken config must not break the JSON-only stdout contract."""

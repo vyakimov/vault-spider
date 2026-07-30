@@ -6,7 +6,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -28,7 +28,7 @@ class RetrievalResult:
     query: str
     mode: str
     granularity: str
-    rows: List[Dict[str, object]]
+    rows: List[Dict[str, Any]]
     debug_info: Dict[str, object] = field(default_factory=dict)
     timing_ms: float = 0.0
 
@@ -106,6 +106,68 @@ class Searcher:
 
         return pd.Series(recency_scores, name="boost_factor", dtype=float)
 
+    def calculate_freshness(
+        self,
+        doc_ids: List[str],
+        metadata_by_id: Dict[str, Dict[str, object]],
+        decay_days: float = 365.0,
+    ) -> pd.Series:
+        """Freshness in [0, 1]: 1.0 for today, exponentially decaying with age.
+
+        Distinct from calculate_recency_scores, which returns the legacy [1, 2]
+        multiplier. Undated notes get 0.0 rather than a middling value, so a
+        missing date is never treated as evidence of freshness.
+        """
+        if not doc_ids:
+            return pd.Series(dtype=float)
+
+        freshness: Dict[str, float] = {}
+        current_date = datetime.now(timezone.utc)
+        for doc_id in doc_ids:
+            metadata = metadata_by_id.get(doc_id, {})
+            raw_date = str(metadata.get("updated") or "") or str(
+                metadata.get("date") or ""
+            )
+            if not raw_date:
+                freshness[doc_id] = 0.0
+                continue
+            try:
+                doc_date = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                if doc_date.tzinfo is None:
+                    doc_date = doc_date.replace(tzinfo=timezone.utc)
+                age_days = max(0, (current_date - doc_date).days)
+                freshness[doc_id] = float(np.exp(-age_days / decay_days))
+            except ValueError:
+                freshness[doc_id] = 0.0
+
+        return pd.Series(freshness, name="freshness", dtype=float)
+
+    @staticmethod
+    def recency_budget(
+        relevance: pd.Series,
+        *,
+        cutoff: int,
+        rank_budget: int,
+    ) -> float:
+        """Semantic score a maximally fresh document may spend: s_(k) - s_(k+B).
+
+        Measured in the reranker's own currency from the gaps that straddle the
+        cutoff, because that is the only region where reordering changes what the
+        caller sees. Pool-size invariant by construction: widening the pool adds
+        candidates below k+B and leaves the budget untouched.
+        """
+        ordered = relevance.sort_values(ascending=False, kind="stable")
+        count = len(ordered)
+        if count < 2 or cutoff < 1 or rank_budget < 1:
+            return 0.0
+        # 1-based ranks k and k+B, clamped to the candidates actually available.
+        high = min(cutoff, count) - 1
+        low = min(cutoff + rank_budget, count) - 1
+        if low <= high:
+            return 0.0
+        budget = float(ordered.iloc[high]) - float(ordered.iloc[low])
+        return max(0.0, budget)
+
     # -- main pipeline --------------------------------------------------------
 
     def _embed_query(self, query: str) -> List[float]:
@@ -137,10 +199,13 @@ class Searcher:
         semantic_weight: Optional[float] = None,
         must_include_terms: Optional[List[str]] = None,
         top_k: Optional[int] = None,
+        rerank_top_k: Optional[int] = None,
         combine_strategy: Optional[str] = None,
         rrf_k: Optional[int] = None,
         zsigmoid_temperature: Optional[float] = None,
         recency_boost_enabled: Optional[bool] = None,
+        recency_strategy: Optional[str] = None,
+        recency_rank_budget: Optional[int] = None,
         recency_weight: Optional[float] = None,
         recency_decay_days: Optional[float] = None,
         folder: Optional[str] = None,
@@ -160,11 +225,14 @@ class Searcher:
         params = DEFAULT_SEARCH_PARAMS.with_overrides(
             semantic_weight=semantic_weight,
             top_k=top_k,
+            rerank_top_k=rerank_top_k,
             n_results=n_results,
             combine_strategy=combine_strategy,
             rrf_k=rrf_k,
             zsigmoid_temperature=zsigmoid_temperature,
             recency_boost_enabled=recency_boost_enabled,
+            recency_strategy=recency_strategy,
+            recency_rank_budget=recency_rank_budget,
             recency_weight=recency_weight,
             recency_decay_days=recency_decay_days,
         )
@@ -172,11 +240,13 @@ class Searcher:
 
         data_granularity = "section" if granularity == "mixed" else granularity
         documents, ids, metadatas, bm25 = self.store.granularity_data(data_granularity)
+        source_documents = self.store.source_documents[data_granularity]
         if not ids or bm25 is None:
             raise ValueError("Index is empty for the requested granularity.")
 
         metadata_by_id = dict(zip(ids, metadatas))
         document_by_id = dict(zip(ids, documents))
+        source_by_id = dict(zip(ids, source_documents))
 
         allowed_ids = set(ids)
         if must_include_terms:
@@ -187,7 +257,7 @@ class Searcher:
             ]
             allowed_ids = {
                 doc_id
-                for doc_id, document in zip(ids, documents)
+                for doc_id, document in zip(ids, source_documents)
                 if all(
                     re.search(rf"(?<!\w){re.escape(term)}(?!\w)", normalize_no_punct(document))
                     for term in normalized_terms
@@ -198,7 +268,7 @@ class Searcher:
         if any(value is not None for value in (folder, tags, note_type, provenance, since, until)):
             requested_tags = {tag.lower() for tag in tags or []}
 
-            def matches(metadata: Dict[str, object]) -> bool:
+            def matches(metadata: Dict[str, Any]) -> bool:
                 metadata_folder = str(metadata.get("folder", ""))
                 if folder and not (
                     metadata_folder == folder
@@ -256,7 +326,9 @@ class Searcher:
             name="semantic_scores",
         )
 
-        keyword_scores = self.calculate_keyword_scores(query, ids, documents, bm25)
+        keyword_scores = self.calculate_keyword_scores(
+            query, ids, source_documents, bm25
+        )
         top_keyword_scores = keyword_scores.nlargest(
             min(len(keyword_scores), params.top_k)
         )
@@ -268,9 +340,14 @@ class Searcher:
         if not candidate_ids:
             raise ValueError("No candidate documents available for the query.")
 
+        fused = pd.DataFrame(dtype=float)
         raw_scores = pd.DataFrame(index=candidate_ids)
-        raw_scores["semantic_scores"] = semantic_scores.reindex(candidate_ids).fillna(0.0)
-        raw_scores["keyword_scores"] = keyword_scores.reindex(candidate_ids).fillna(0.0)
+        raw_scores["semantic_scores"] = semantic_scores.reindex(
+            candidate_ids
+        ).fillna(0.0)
+        raw_scores["keyword_scores"] = keyword_scores.reindex(
+            candidate_ids
+        ).fillna(0.0)
 
         if strategy == "rrf":
             fused = reciprocal_rank_fusion(
@@ -288,7 +365,7 @@ class Searcher:
                 temperature=params.zsigmoid_temperature,
                 weight=params.semantic_weight,
             )
-        else:
+        elif strategy == "minmax":
             fused = pd.DataFrame(index=candidate_ids)
             fused["semantic_score"] = min_max_scale(raw_scores["semantic_scores"])
             fused["keyword_score"] = min_max_scale(raw_scores["keyword_scores"])
@@ -301,6 +378,18 @@ class Searcher:
         if fused.empty:
             raise ValueError("No candidate documents available for the query.")
 
+        if granularity == "mixed":
+            diverse_ids: List[str] = []
+            per_note_pool: Dict[str, int] = {}
+            for doc_id in fused.index:
+                doc_id_str = str(doc_id)
+                note_id = str(metadata_by_id[doc_id_str].get("note_id", ""))
+                if per_note_pool.get(note_id, 0) >= 3:
+                    continue
+                per_note_pool[note_id] = per_note_pool.get(note_id, 0) + 1
+                diverse_ids.append(doc_id_str)
+            fused = fused.loc[diverse_ids]
+
         # Rerank only in thorough mode; fast skips it even if a model is configured.
         rerank_ran = False
         fused["reranked_raw_score"] = float("nan")
@@ -312,8 +401,10 @@ class Searcher:
             try:
                 reranked = self.provider.rerank(
                     query=query,
-                    documents=[document_by_id[doc_id] for doc_id in rerank_input.index],
-                    ids=list(rerank_input.index),
+                    documents=[
+                        document_by_id[str(doc_id)] for doc_id in rerank_input.index
+                    ],
+                    ids=[str(doc_id) for doc_id in rerank_input.index],
                 )
                 rerank_ran = True
             except OpenRouterError:
@@ -331,40 +422,78 @@ class Searcher:
                     if use_ranks:
                         rank_scores[doc_id] = 1.0 - (position / denom) * 0.5
                     else:
-                        rank_scores[doc_id] = float(reranked.loc[doc_id, "score"])
+                        rank_scores[doc_id] = float(
+                            str(reranked.at[doc_id, "score"])
+                        )
                 fused["reranked_score"] = (
                     pd.Series(rank_scores).reindex(fused.index).fillna(fused["fused_score"])
                 )
                 fused["rerank_rank"] = pd.Series(rank_positions).reindex(fused.index)
 
-        fused["relevance_score"] = fused["reranked_score"]
+        use_geometry = params.recency_strategy == "score_geometry"
+        # Score geometry ranks on the reranker's raw scores. The rank-flattened
+        # variant spaces every adjacent pair equally, which is what made the old
+        # recency blend scale with pool size.
+        if use_geometry and rerank_ran:
+            fused["relevance_score"] = (
+                fused["reranked_raw_score"].fillna(fused["fused_score"])
+            )
+        else:
+            fused["relevance_score"] = fused["reranked_score"]
 
-        if params.recency_boost_enabled:
+        fused["recency_boost_factor"] = 1.0
+        fused["recency_budget"] = 0.0
+        fused["freshness"] = 0.0
+        if not params.recency_boost_enabled:
+            fused["boosted_score"] = fused["relevance_score"]
+        elif use_geometry:
+            freshness = (
+                self.calculate_freshness(
+                    [str(doc_id) for doc_id in fused.index],
+                    metadata_by_id,
+                    params.recency_decay_days,
+                )
+                .reindex(fused.index)
+                .fillna(0.0)
+            )
+            budget = self.recency_budget(
+                fused["relevance_score"],
+                cutoff=params.n_results,
+                rank_budget=params.recency_rank_budget,
+            )
+            fused["freshness"] = freshness
+            fused["recency_budget"] = budget
+            # A_i = s_i + lambda_q * f_i
+            fused["boosted_score"] = fused["relevance_score"] + budget * freshness
+        else:
             recency_boost_factor = (
                 self.calculate_recency_scores(
-                    list(fused.index), metadata_by_id, params.recency_decay_days
+                    [str(doc_id) for doc_id in fused.index],
+                    metadata_by_id,
+                    params.recency_decay_days,
                 )
                 .reindex(fused.index)
                 .fillna(1.0)
             )
             fused["recency_boost_factor"] = recency_boost_factor
+            # Report the same [0,1] freshness the geometry path does, so the field
+            # is comparable across strategies rather than silently zero here.
+            fused["freshness"] = (recency_boost_factor - 1.0).clip(lower=0.0)
             fused["boosted_score"] = (
                 fused["relevance_score"] * (1.0 - params.recency_weight)
                 + fused["relevance_score"]
                 * fused["recency_boost_factor"]
                 * params.recency_weight
             )
-        else:
-            fused["recency_boost_factor"] = 1.0
-            fused["boosted_score"] = fused["relevance_score"]
 
         ordered = fused.sort_values("boosted_score", ascending=False, kind="stable")
 
         # Assemble output rows, applying the mixed 3-sections-per-note cap.
-        rows: List[Dict[str, object]] = []
+        rows: List[Dict[str, Any]] = []
         per_note: Dict[str, int] = {}
         for doc_id, record in ordered.iterrows():
-            metadata = metadata_by_id[doc_id]
+            doc_id_str = str(doc_id)
+            metadata = metadata_by_id[doc_id_str]
             note_id = str(metadata.get("note_id", ""))
             if granularity == "mixed":
                 if per_note.get(note_id, 0) >= 3:
@@ -373,19 +502,25 @@ class Searcher:
             rerank_rank = record.get("rerank_rank")
             rows.append(
                 {
-                    "id": doc_id,
+                    "id": doc_id_str,
                     "note_id": note_id,
-                    "document": document_by_id[doc_id],
+                    "document": document_by_id[doc_id_str],
+                    "source_document": source_by_id[doc_id_str],
                     "metadata": metadata,
-                    "bm25": float(raw_scores.loc[doc_id, "keyword_scores"]),
-                    "semantic": float(raw_scores.loc[doc_id, "semantic_scores"]),
-                    "fused": float(record["fused_score"]),
+                    "bm25": float(
+                        str(raw_scores.at[doc_id_str, "keyword_scores"])
+                    ),
+                    "semantic": float(
+                        str(raw_scores.at[doc_id_str, "semantic_scores"])
+                    ),
+                    "fused": float(str(record["fused_score"])),
                     "reranker": (
                         None
                         if not rerank_ran or pd.isna(record.get("reranked_raw_score"))
-                        else float(record["reranked_raw_score"])
+                        else float(str(record["reranked_raw_score"]))
                     ),
-                    "final": float(record["boosted_score"]),
+                    "freshness": float(str(record["freshness"])),
+                    "final": float(str(record["boosted_score"])),
                     "rerank_rank": (
                         None if rerank_rank is None or pd.isna(rerank_rank) else int(rerank_rank)
                     ),
@@ -423,6 +558,16 @@ class Searcher:
                 if value is not None
             },
             "query_cache": self._query_cache_status,
+            "recency": {
+                "enabled": params.recency_boost_enabled,
+                "strategy": params.recency_strategy,
+                "rank_budget": params.recency_rank_budget,
+                "budget": (
+                    float(fused["recency_budget"].iloc[0])
+                    if params.recency_boost_enabled and use_geometry and len(fused)
+                    else None
+                ),
+            },
         }
         return RetrievalResult(
             query=query,

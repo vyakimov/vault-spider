@@ -140,8 +140,8 @@ class TestValidate:
         dataset = load_dataset(str(REPO_ROOT / "eval"))
         report = validate(dataset)
         assert report.errors == []
-        assert report.stats["notes"] == 36
-        assert report.stats["queries"] == 30
+        assert report.stats["notes"] == 240
+        assert report.stats["queries"] == 44
 
     def test_realistic_dataset_is_valid(self):
         dataset_dir = REPO_ROOT / "eval-realistic"
@@ -149,8 +149,8 @@ class TestValidate:
             pytest.skip("eval-realistic corpus not present")
         report = validate(load_dataset(str(dataset_dir)))
         assert report.errors == []
-        assert report.stats["notes"] == 57
-        assert report.stats["queries"] == 30
+        assert report.stats["notes"] == 649
+        assert report.stats["queries"] == 44
 
     def test_valid_dataset_passes(self, tmp_path):
         report = validate(load_dataset(str(write_dataset(tmp_path))))

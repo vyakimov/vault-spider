@@ -64,9 +64,11 @@ class FakeProvider:
     def __init__(self, rerank_model: str | None = "fake-rerank"):
         self.embedding_model = "fake-embed"
         self.chat_model = "fake-chat"
+        self.context_model = "fake-context"
         self.rerank_model = rerank_model
         # Records the texts passed to each embed_texts call.
         self.embed_calls: List[List[str]] = []
+        self.chat_calls: List[dict] = []
         # Canned chat reply (JSON string); tests override as needed.
         self.chat_response = json.dumps(
             {"answer": "Canned.", "citations": ["S0"], "confidence": "High", "abstained": False}
@@ -94,6 +96,15 @@ class FakeProvider:
 
     def chat(self, system_prompt: str, user_prompt: str, temperature: float = 0.2,
              max_tokens: int = 1024, model: str | None = None) -> str:
+        self.chat_calls.append(
+            {
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "model": model,
+            }
+        )
         return self.chat_response
 
 

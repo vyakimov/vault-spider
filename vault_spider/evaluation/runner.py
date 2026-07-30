@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from math import log2
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 
+from vault_spider.config import DEFAULT_SEARCH_PARAMS
 from vault_spider.corpus.loader import load_notes
 from vault_spider.envelope import CliError
 from vault_spider.evaluation.dataset import EvalDataset
@@ -300,6 +301,10 @@ def run_eval(
     k: int = 5,
     n_context: int = 8,
     only: Optional[List[str]] = None,
+    recency_boost_enabled: bool = False,
+    recency_strategy: Optional[str] = None,
+    recency_rank_budget: Optional[int] = None,
+    rerank_top_k: Optional[int] = None,
 ) -> Dict[str, Any]:
     from vault_spider.retrieval.searcher import Searcher
 
@@ -364,6 +369,10 @@ def run_eval(
                 note_type=filters.get("type"),
                 since=filters.get("since"),
                 until=filters.get("until"),
+                recency_boost_enabled=recency_boost_enabled,
+                recency_strategy=recency_strategy,
+                recency_rank_budget=recency_rank_budget,
+                rerank_top_k=rerank_top_k,
             )
             output = build_retrieval_output(row["query"], mode, granularity, result.rows)
         except ValueError as exc:
@@ -379,7 +388,10 @@ def run_eval(
 
         if row["answerable"]:
             entry["retrieval"] = score_retrieval(
-                row, output["candidates"], k, note_level=note_level
+                row,
+                cast(List[Dict[str, Any]], output["candidates"]),
+                k,
+                note_level=note_level,
             )
         if stage == "synthesis":
             synth = synthesize(
@@ -403,6 +415,25 @@ def run_eval(
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "embedding_model": getattr(provider, "embedding_model", None),
         "rerank_model": getattr(provider, "rerank_model", None),
+        # Recorded because both materially change the ranking. Recency is off by
+        # default for evals: it is a post-hoc reweighting whose value depends on
+        # the corpus date distribution, so it does not generalise across datasets.
+        "recency_boost_enabled": recency_boost_enabled,
+        "recency_strategy": (
+            recency_strategy
+            if recency_strategy is not None
+            else DEFAULT_SEARCH_PARAMS.recency_strategy
+        ),
+        "recency_rank_budget": (
+            recency_rank_budget
+            if recency_rank_budget is not None
+            else DEFAULT_SEARCH_PARAMS.recency_rank_budget
+        ),
+        "rerank_top_k": (
+            rerank_top_k
+            if rerank_top_k is not None
+            else DEFAULT_SEARCH_PARAMS.rerank_top_k
+        ),
     }
     if stage == "synthesis":
         run_info["n_context"] = n_context

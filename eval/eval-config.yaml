@@ -8,6 +8,11 @@ vault:
     - ignore
     - secret
 
+index:
+  # Benchmark index, gitignored and disposable. Kept beside this config so it
+  # survives /tmp cleanup between runs.
+  chroma_path: context-data/chroma-eval
+  contextual: false
+
 timestamps:
   policy: utc_z
-

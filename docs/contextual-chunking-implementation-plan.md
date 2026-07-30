@@ -1,5 +1,19 @@
 # Contextual Chunking and Multi-Resolution Retrieval
 
+## Final Implementation Amendment: One Canonical Note-Summary Store
+
+The generation/storage design below is superseded by the implemented note-level design.
+`index.contextual` remains opt-in. Both `manual` and `openrouter` use the same canonical records
+under `index.context_path` (default `context-data/summaries`). Manual mode imports summaries from
+Codex/Claude Code jobs and makes no context API calls. OpenRouter mode automatically generates
+missing/stale summaries with one call per note and writes those records to the same directory.
+There is no per-chunk generation or separate context cache.
+
+Sync copies each ready note summary into derived document/chunk text before embedding; Chroma is
+disposable and never authoritative. Missing/stale summaries do not block raw-note indexing.
+See `docs/note-context-summaries.md` for the authoritative workflow and storage contract. The
+remainder of this file records the original staged plan and is retained as design history.
+
 ## Summary
 
 Replace the current H1–H3/character-window splitter with deterministic Markdown-aware chunks,

@@ -41,15 +41,25 @@ def get_provider() -> OpenRouterClient:
         raise OpenRouterError(str(exc)) from exc
 
 
-def get_store(chroma_path: str, collection: str, provider: Optional[OpenRouterClient] = None):
+def get_store(
+    chroma_path: str,
+    collection: str,
+    provider: Optional[OpenRouterClient] = None,
+    *,
+    allow_model_mismatch: bool = False,
+):
     # Imported lazily so `vault-spider schema` works without chromadb/model setup.
-    from vault_spider.index.store import IndexStore
+    from vault_spider.index.store import IndexConfigError, IndexStore
 
-    return IndexStore(
-        chroma_db_path=chroma_path,
-        collection_name=collection,
-        provider=provider,
-    )
+    try:
+        return IndexStore(
+            chroma_db_path=chroma_path,
+            collection_name=collection,
+            provider=provider,
+            allow_model_mismatch=allow_model_mismatch,
+        )
+    except IndexConfigError as exc:
+        raise CliError("config_mismatch", str(exc)) from exc
 
 
 def resolve_root(explicit: Optional[str]) -> str:
@@ -81,6 +91,8 @@ def _schema() -> Dict[str, Any]:
                     "--root": "vault directory (default: config.yaml vault.root, else the active Obsidian vault)",
                     "--reset": "flag",
                     "--dry-run": "flag",
+                    "--contextualize": "flag: ensure OpenRouter summaries exist (normally automatic during sync)",
+                    "--refresh-context": "flag: regenerate all OpenRouter note summaries",
                 },
                 "result": {
                     "added_notes": "int",
@@ -91,7 +103,33 @@ def _schema() -> Dict[str, Any]:
                     "warnings": ["str"],
                     "dry_run": "bool",
                     "would_add/would_update/would_delete": ["str (dry-run only)"],
+                    "would_rechunk/would_contextualize/would_refresh_context": [
+                        "str (dry-run only)"
+                    ],
+                    "context": {
+                        "eligible_notes": "int",
+                        "eligible_sections": "int",
+                        "ready_sections": "int",
+                        "stale_sections": "int",
+                        "generated": "int",
+                        "summary_hits": "int",
+                        "source": "off|manual|openrouter",
+                        "missing_notes": "int",
+                        "stale_notes": "int",
+                        "failed_notes": ["str"],
+                        "coverage": "float",
+                    },
                 },
+            },
+            "context": {
+                "mutates_state": True,
+                "mutates": "manual job files and canonical summaries; never the vault",
+                "args": {
+                    "prepare": "--root <vault> [--out <jobs-dir>] [--store <summaries-dir>]",
+                    "import": "[--from <jobs-dir>] [--store <summaries-dir>]",
+                    "status": "--root <vault> [--store <summaries-dir>]",
+                },
+                "result": "context job preparation, import, or coverage status",
             },
             "stats": {
                 "mutates_state": False,
@@ -104,6 +142,16 @@ def _schema() -> Dict[str, Any]:
                     "unique_tags": "int",
                     "dated_notes": "int",
                     "embedding_model": "str",
+                    "chunk_schema_version": "str",
+                    "context_prompt_version": "str",
+                    "context_model": "str",
+                    "context_source": "off|manual|openrouter",
+                    "context_eligible_sections": "int",
+                    "context_ready_sections": "int",
+                    "context_stale_sections": "int",
+                    "context_coverage": "float",
+                    "context_missing_notes": "int",
+                    "context_stale_notes": "int",
                 },
             },
             "retrieve": {
@@ -111,7 +159,7 @@ def _schema() -> Dict[str, Any]:
                 "args": {
                     "--query": "str (required)",
                     "--mode": "fast|thorough (default fast)",
-                    "--granularity": "document|section|mixed (mixed = section pool, max 3 sections per note; documents are not searched)",
+                    "--granularity": "document|section|mixed (mixed fuses document + section signals and returns sections, max 3 per note)",
                     "-n": "int (default 10)",
                     "--folder/--tag/--type/--provenance/--since/--until/--must-include": "metadata and required-term filters (--provenance: human|reference|llm|distilled)",
                 },
@@ -123,7 +171,7 @@ def _schema() -> Dict[str, Any]:
                 "args": {
                     "--query": "str",
                     "--mode": "fast|thorough (default thorough)",
-                    "--granularity": "document|section|mixed (mixed = section pool, max 3 sections per note; documents are not searched)",
+                    "--granularity": "document|section|mixed (mixed fuses document + section signals and returns sections, max 3 per note)",
                     "--retrieval": "path to a prior retrieve envelope/contract",
                     "--n-context": "int (default 8)",
                     "--save": "flag: persist a good answer as a distilled note (root defaults to config.yaml vault.root, else the active Obsidian vault; live query only)",
@@ -434,12 +482,75 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
             "sync", "invalid_arguments", "--reset cannot be combined with --dry-run"
         )
     provider = get_provider()
-    store = get_store(args.chroma_path, args.collection, provider)
-    result = store.sync(root, reset=args.reset, dry_run=args.dry_run)
+    store = get_store(
+        args.chroma_path,
+        args.collection,
+        provider,
+        allow_model_mismatch=args.reset,
+    )
+    try:
+        result = store.sync(
+            root,
+            reset=args.reset,
+            dry_run=args.dry_run,
+            contextualize=args.contextualize,
+            refresh_context=args.refresh_context,
+        )
+    except ValueError as exc:
+        raise CliError("invalid_arguments", str(exc)) from exc
     return success(
         "sync",
         result=result,
-        meta={"root": root, "reset": args.reset, "dry_run": args.dry_run},
+        meta={
+            "root": root,
+            "reset": args.reset,
+            "dry_run": args.dry_run,
+            "contextualize": args.contextualize or args.refresh_context,
+            "refresh_context": args.refresh_context,
+        },
+    )
+
+
+def cmd_context(args: argparse.Namespace) -> Dict[str, Any]:
+    from vault_spider.corpus.loader import load_notes
+    from vault_spider.index.context_summaries import (
+        ContextSummaryError,
+        SummaryStore,
+        import_jobs,
+        prepare_jobs,
+        summary_status,
+    )
+
+    if not args.context_command:
+        raise CliError("invalid_arguments", "a context subcommand is required")
+    store = SummaryStore(args.store)
+    jobs_path = str(Path(args.store).parent / "jobs")
+    try:
+        if args.context_command == "import":
+            result = import_jobs(args.source_path or jobs_path, store)
+        else:
+            root = resolve_root(args.root)
+            if not os.path.isdir(root):
+                raise ContextSummaryError(f"root directory not found: {root}")
+            notes = load_notes(root)
+            if args.context_command == "prepare":
+                result = prepare_jobs(
+                    notes,
+                    args.output_path or jobs_path,
+                    store,
+                )
+            elif args.context_command == "status":
+                result = summary_status(notes, store)
+            else:
+                raise ContextSummaryError(
+                    f"unknown context subcommand: {args.context_command}"
+                )
+    except ContextSummaryError as exc:
+        raise CliError("contract_violation", str(exc)) from exc
+    return success(
+        "context",
+        result=result,
+        meta={"subcommand": args.context_command},
     )
 
 
@@ -916,6 +1027,10 @@ def cmd_eval(args: argparse.Namespace) -> Dict[str, Any]:
         k=args.k,
         n_context=args.n_context,
         only=args.only,
+        recency_boost_enabled=args.recency_boost_enabled,
+        recency_strategy=args.recency_strategy,
+        recency_rank_budget=args.recency_rank_budget,
+        rerank_top_k=args.rerank_top_k,
     )
     meta: Dict[str, Any] = {"subcommand": "run"}
     if report.warnings:
@@ -1008,6 +1123,58 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_sync.add_argument("--reset", action="store_true", help="Rebuild from scratch")
     p_sync.add_argument("--dry-run", dest="dry_run", action="store_true")
+    p_sync.add_argument(
+        "--contextualize",
+        action="store_true",
+        help="Ensure OpenRouter note summaries exist (normally automatic during sync)",
+    )
+    p_sync.add_argument(
+        "--refresh-context",
+        action="store_true",
+        help="Regenerate every canonical note summary through OpenRouter",
+    )
+
+    p_context = sub.add_parser(
+        "context",
+        parents=[common],
+        help="Prepare, import, or inspect manual retrieval-context summaries",
+    )
+    context_sub = p_context.add_subparsers(dest="context_command")
+    context_common = JsonArgumentParser(add_help=False)
+    context_common.add_argument(
+        "--store",
+        default=settings.context_path(),
+        help="Durable summary directory (config: index.context_path)",
+    )
+    p_context_prepare = context_sub.add_parser(
+        "prepare",
+        parents=[common, context_common],
+        help="Export missing/stale note-summary jobs for a coding agent",
+    )
+    p_context_prepare.add_argument("--root", default=None)
+    p_context_prepare.add_argument(
+        "--out",
+        dest="output_path",
+        default=None,
+        help="Job directory (default: jobs/ beside --store)",
+    )
+    p_context_import = context_sub.add_parser(
+        "import",
+        parents=[common, context_common],
+        help="Validate completed jobs and atomically promote their summaries",
+    )
+    p_context_import.add_argument(
+        "--from",
+        dest="source_path",
+        default=None,
+        help="Completed job directory (default: jobs/ beside --store)",
+    )
+    p_context_status = context_sub.add_parser(
+        "status",
+        parents=[common, context_common],
+        help="Report ready, missing, stale, and orphaned summaries",
+    )
+    p_context_status.add_argument("--root", default=None)
 
     sub.add_parser("stats", parents=[common], help="Index statistics")
 
@@ -1094,6 +1261,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval_run.add_argument("-n", type=int, default=10)
     p_eval_run.add_argument("--k", type=int, default=5, help="Rank cutoff for @k metrics")
     p_eval_run.add_argument("--n-context", dest="n_context", type=int, default=8)
+    p_eval_run.add_argument(
+        "--rerank-top-k",
+        dest="rerank_top_k",
+        type=int,
+        default=None,
+        help="Rerank pool size (default: the configured SearchParams value)",
+    )
+    p_eval_run.add_argument(
+        "--recency-strategy",
+        dest="recency_strategy",
+        choices=["score_geometry", "multiplicative"],
+        default=None,
+        help="How recency combines with relevance (default: configured value)",
+    )
+    p_eval_run.add_argument(
+        "--recency-rank-budget",
+        dest="recency_rank_budget",
+        type=int,
+        default=None,
+        help="B: rank positions a maximally fresh note may climb (score_geometry)",
+    )
+    p_eval_run.add_argument(
+        "--recency-boost",
+        dest="recency_boost_enabled",
+        action="store_true",
+        default=False,
+        help=(
+            "Apply the recency boost. Off by default for evals: it reweights on "
+            "note dates, so its effect is a property of the corpus, not of retrieval."
+        ),
+    )
     p_eval_run.add_argument(
         "--only", action="append", default=None, help="Query id to run (repeatable)"
     )
@@ -1195,6 +1393,7 @@ def build_parser() -> argparse.ArgumentParser:
 _HANDLERS = {
     "schema": cmd_schema,
     "sync": cmd_sync,
+    "context": cmd_context,
     "stats": cmd_stats,
     "retrieve": cmd_retrieve,
     "synthesize": cmd_synthesize,

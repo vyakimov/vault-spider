@@ -1,0 +1,23 @@
+vault:
+  root: corpus
+  skip_dirs:
+    - .trash
+    - .obsidian
+    - Templates
+  ignore_tags:
+    - ignore
+    - secret
+
+index:
+  # Benchmark index, gitignored and disposable. Kept beside this config so it
+  # survives /tmp cleanup between runs.
+  chroma_path: context-data/chroma-realistic-contextual
+  contextual: true
+  context_source: manual
+  context_path: context-data/summaries
+  # Summaries stay out of BM25, so evals measure their effect on dense
+  # retrieval and reranking only.
+  contextual_bm25: false
+
+timestamps:
+  policy: obsidian_local

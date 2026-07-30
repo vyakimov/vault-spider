@@ -30,18 +30,43 @@ via the `""` preamble convention, and empty daily templates as distractors.
 
 ## Usage
 
+The baseline config stores embeddings persistently under
+`eval-realistic/context-data/chroma-baseline`; no `/tmp` override is needed:
+
 ```bash
 VAULT_SPIDER_CONFIG=eval-realistic/eval-config.yaml \
 ./bin/vault-spider eval validate --dataset eval-realistic
 
 VAULT_SPIDER_CONFIG=eval-realistic/eval-config.yaml \
-./bin/vault-spider sync --root eval-realistic/corpus --reset \
-  --chroma-path /tmp/vault-spider-realistic-eval
+./bin/vault-spider sync --reset
 
 VAULT_SPIDER_CONFIG=eval-realistic/eval-config.yaml \
 ./bin/vault-spider eval run --dataset eval-realistic \
-  --chroma-path /tmp/vault-spider-realistic-eval --out results.json
+  --out results.json
 ```
+
+For contextual evaluation, use `eval-realistic/eval-contextual-config.yaml`. It keeps canonical
+summaries in `eval-realistic/context-data/summaries` and contextual embeddings in
+`eval-realistic/context-data/chroma-contextual`:
+
+```bash
+VAULT_SPIDER_CONFIG=eval-realistic/eval-contextual-config.yaml \
+./bin/vault-spider context prepare
+
+# Have Codex/Claude Code fill every job under eval-realistic/context-data/jobs.
+VAULT_SPIDER_CONFIG=eval-realistic/eval-contextual-config.yaml \
+./bin/vault-spider context import
+
+VAULT_SPIDER_CONFIG=eval-realistic/eval-contextual-config.yaml \
+./bin/vault-spider sync --reset
+
+VAULT_SPIDER_CONFIG=eval-realistic/eval-contextual-config.yaml \
+./bin/vault-spider eval run --dataset eval-realistic \
+  --out contextual-results.json
+```
+
+All `context-data/` artifacts are persistent locally, gitignored, and separate from the public
+eval and live-vault stores.
 
 57 notes, 30 golden queries (24 answerable, 6 abstention/ambiguity). Labels follow the same
 conventions as `eval/README.md`; paths and headings are stable evaluation identifiers.

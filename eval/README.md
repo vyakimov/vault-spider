@@ -13,7 +13,11 @@ addresses, and no personal or employer information.
 - `golden_queries.jsonl` — one labelled query per line.
 - `dataset.yaml` — the manifest `vault-spider eval` consumes (schema version, file locations,
   expected counts).
-- `eval-config.yaml` — portable UTC timestamp policy for this corpus.
+- `eval-config.yaml` — context-free baseline configuration with persistent local Chroma storage.
+- `eval-contextual-config.yaml` — manual contextual-retrieval configuration using a separate
+  persistent Chroma index and canonical note summaries.
+- `context-data/` — gitignored local jobs, summaries, and Chroma indexes created by the commands
+  below. Nothing here overlaps with the live-vault index.
 
 The corpus is designed to exercise known-item lookup, semantic paraphrase, multi-note synthesis,
 section selection, aliases, temporal preference, conflicting old/current notes, metadata filters,
@@ -28,28 +32,66 @@ after any change to `public_vault/` or `golden_queries.jsonl`. `vault-spider eva
 executes the queries against the index, and emits a versioned results contract
 (`results_schema_version: 1`).
 
-Use an isolated Chroma directory so the benchmark never touches the live-vault index:
+The baseline config stores embeddings persistently in
+`eval/context-data/chroma-baseline`. Because paths are resolved beside the selected config, no
+`--chroma-path` override is needed and the benchmark cannot touch the live-vault index:
 
 ```bash
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml \
 ./bin/vault-spider eval validate --dataset eval
 
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml \
-./bin/vault-spider sync \
-  --root eval/public_vault \
-  --reset \
-  --chroma-path /tmp/vault-spider-public-eval
+./bin/vault-spider sync --reset
 
 VAULT_SPIDER_CONFIG=eval/eval-config.yaml \
 ./bin/vault-spider eval run \
   --dataset eval \
-  --chroma-path /tmp/vault-spider-public-eval \
   --out eval-results.json
 ```
 
 Set `VAULT_SPIDER_CONFIG` for validate and run too: it keeps the corpus walk (skip dirs, ignore
 tags) identical to what `sync` indexed. `eval run` refuses (`config_mismatch`) to score an index
 whose paths do not exactly match the corpus.
+
+## Persistent contextual evaluation
+
+The contextual config stores canonical summaries in `eval/context-data/summaries` and contextual
+embeddings in `eval/context-data/chroma-contextual`. Both survive shell sessions and `/tmp`
+cleanup, but remain gitignored.
+
+Prepare manual summary jobs:
+
+```bash
+VAULT_SPIDER_CONFIG=eval/eval-contextual-config.yaml \
+./bin/vault-spider context prepare
+```
+
+Have Codex or Claude Code fill the `summary` field in every JSON file under
+`eval/context-data/jobs`, then import and verify the canonical records:
+
+```bash
+VAULT_SPIDER_CONFIG=eval/eval-contextual-config.yaml \
+./bin/vault-spider context import
+
+VAULT_SPIDER_CONFIG=eval/eval-contextual-config.yaml \
+./bin/vault-spider context status
+```
+
+Build and evaluate the separate contextual index:
+
+```bash
+VAULT_SPIDER_CONFIG=eval/eval-contextual-config.yaml \
+./bin/vault-spider sync --reset
+
+VAULT_SPIDER_CONFIG=eval/eval-contextual-config.yaml \
+./bin/vault-spider eval run \
+  --dataset eval \
+  --out eval-contextual-results.json
+```
+
+The baseline and contextual configurations share the corpus and retrieval settings, but never
+their Chroma directories. `contextual_bm25` remains false so the first comparison isolates dense
+retrieval and reranking effects.
 
 ## Recorded baseline
 

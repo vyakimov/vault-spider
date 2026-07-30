@@ -35,6 +35,10 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     },
     "index": {
         "chroma_path": "chroma_db",
+        "contextual": False,
+        "context_source": "manual",
+        "context_path": "context-data/summaries",
+        "contextual_bm25": False,
     },
     "timestamps": {
         "policy": "offset_local",  # or "utc_z" / "obsidian_local"
@@ -99,6 +103,23 @@ def load(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
                     )
                 merged[section].update(values)
 
+    for key in ("contextual", "contextual_bm25"):
+        value = merged["index"][key]
+        if not isinstance(value, bool):
+            raise ConfigError(f"{path}: index.{key} must be true or false")
+    if merged["index"]["contextual_bm25"] and not merged["index"]["contextual"]:
+        raise ConfigError(
+            f"{path}: index.contextual_bm25 requires index.contextual: true"
+        )
+    source = merged["index"]["context_source"]
+    if source not in {"manual", "openrouter"}:
+        raise ConfigError(
+            f"{path}: index.context_source must be 'manual' or 'openrouter'"
+        )
+    context_path_value = merged["index"]["context_path"]
+    if not isinstance(context_path_value, str) or not context_path_value.strip():
+        raise ConfigError(f"{path}: index.context_path must be a non-empty path")
+
     _cache = merged
     return merged
 
@@ -135,6 +156,22 @@ def distilled_dir() -> str:
 
 def chroma_path() -> str:
     return _config_local_path(_get("index", "chroma_path"))
+
+
+def contextual_enabled() -> bool:
+    return bool(_get("index", "contextual"))
+
+
+def context_source() -> str:
+    return str(_get("index", "context_source"))
+
+
+def context_path() -> str:
+    return _config_local_path(_get("index", "context_path"))
+
+
+def contextual_bm25_enabled() -> bool:
+    return bool(_get("index", "contextual_bm25"))
 
 
 def obsidian_binary() -> Optional[str]:

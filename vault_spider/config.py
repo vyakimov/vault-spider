@@ -15,6 +15,11 @@ class SearchParams:
     rerank_top_k: int = 30
     rerank_use_ranks: bool = True
     recency_boost_enabled: bool = True
+    recency_strategy: str = "score_geometry"
+    # Rank positions a maximally fresh document may climb. The recency budget is
+    # derived from the reranker's own score gaps around the cutoff, so this stays
+    # pool-size invariant.
+    recency_rank_budget: int = 1
     recency_weight: float = 0.2
     recency_decay_days: float = 365.0
 
@@ -33,6 +38,12 @@ class SearchParams:
             raise ValueError("zsigmoid_temperature must be greater than 0")
         if self.rerank_top_k < 1:
             raise ValueError("rerank_top_k must be at least 1")
+        if self.recency_strategy not in {"score_geometry", "multiplicative"}:
+            raise ValueError(
+                "recency_strategy must be score_geometry or multiplicative"
+            )
+        if self.recency_rank_budget < 1:
+            raise ValueError("recency_rank_budget must be at least 1")
         if not 0.0 <= self.recency_weight <= 1.0:
             raise ValueError("recency_weight must be between 0 and 1")
         if not math.isfinite(self.recency_decay_days) or self.recency_decay_days <= 0:
@@ -59,11 +70,20 @@ SEARCH_CONFIG = {
     "rrf_k": 60,
     "zsigmoid_temperature": 1.0,
     "rerank_top_k": 30,
-    # (c) Treat Cohere rerank scores as ranks, not meaningful probabilities,
-    # before combining with recency. Keeps ordering, discards the uncalibrated
-    # magnitude so recency can't amplify score gaps that don't mean much.
+    # (c) Treat Cohere rerank scores as ranks, not meaningful probabilities.
+    # Superseded for recency by recency_strategy="score_geometry", which reads the
+    # raw scores: flattening every adjacent gap to 0.5/(pool-1) is exactly what
+    # made recency's strength scale with pool size. Still applies when the
+    # legacy "multiplicative" strategy is selected.
     "rerank_use_ranks": True,
     "recency_boost_enabled": True,
+    # (d) Preserve the reranker's score geometry and give freshness a budget
+    # measured in that same currency: lambda_q = s_(k) - s_(k+B). The old
+    # multiplicative blend rode on rank-flattened scores, so its strength scaled
+    # with 1/(pool-1) and freshness could move a document twice as far at pool 60
+    # as at pool 30. Kept selectable as "multiplicative" for A/B only.
+    "recency_strategy": "score_geometry",
+    "recency_rank_budget": 1,
     "recency_weight": 0.2,
     "recency_decay_days": 365.0,
 }

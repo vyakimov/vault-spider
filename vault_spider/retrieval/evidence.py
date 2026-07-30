@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import numpy as np
@@ -30,7 +30,7 @@ def _zscores(values: List[float]) -> List[float]:
     return ((arr - mean) / std).tolist()
 
 
-def _why(row: Dict[str, object]) -> str:
+def _why(row: Dict[str, Any]) -> str:
     rerank_rank = row.get("rerank_rank")
     if rerank_rank is not None and int(rerank_rank) <= 3:
         return f"reranked into top {int(rerank_rank)} for this query"
@@ -44,12 +44,12 @@ def _why(row: Dict[str, object]) -> str:
 
 
 def build_evidence(
-    result_row: Dict[str, object], vault_name: Optional[str] = None
+    result_row: Dict[str, Any], vault_name: Optional[str] = None
 ) -> Dict[str, object]:
-    metadata: Dict[str, object] = result_row["metadata"]  # type: ignore[assignment]
+    metadata: Dict[str, Any] = result_row["metadata"]
     is_document = str(metadata.get("granularity", "document")) == "document"
     heading = "" if is_document else str(metadata.get("heading", ""))
-    document = str(result_row["document"])
+    document = str(result_row.get("source_document", result_row["document"]))
     reranker = result_row.get("reranker")
     path = str(metadata.get("path", ""))
     return {
@@ -79,7 +79,7 @@ def build_retrieval_output(
     query: str,
     mode: str,
     granularity: str,
-    rows: List[Dict[str, object]],
+    rows: List[Dict[str, Any]],
     vault_name: Optional[str] = None,
 ) -> Dict[str, object]:
     bm25_z = _zscores([float(row["bm25"]) for row in rows])

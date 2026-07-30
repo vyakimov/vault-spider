@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 class QueryEmbeddingCache:
@@ -15,7 +15,7 @@ class QueryEmbeddingCache:
         self.model = model
         self.max_entries = max_entries
         self._loaded = False
-        self._entries: Dict[str, Dict[str, object]] = {}
+        self._entries: Dict[str, Dict[str, Any]] = {}
 
     @staticmethod
     def _key(query: str) -> str:
@@ -42,7 +42,8 @@ class QueryEmbeddingCache:
             entry = self._entries.get(self._key(query))
             if not isinstance(entry, dict) or not isinstance(entry.get("embedding"), list):
                 return None
-            return [float(value) for value in entry["embedding"]]
+            raw_embedding = entry["embedding"]
+            return [float(value) for value in raw_embedding]
         except (OSError, ValueError, TypeError):
             return None
 
@@ -56,7 +57,9 @@ class QueryEmbeddingCache:
             if len(self._entries) > self.max_entries:
                 oldest = sorted(
                     self._entries,
-                    key=lambda key: float(self._entries[key].get("ts", 0.0)),
+                    key=lambda key: float(
+                        str(self._entries[key].get("ts", 0.0))
+                    ),
                 )[: len(self._entries) - self.max_entries]
                 for key in oldest:
                     del self._entries[key]
