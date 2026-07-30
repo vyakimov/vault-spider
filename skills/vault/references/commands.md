@@ -36,8 +36,7 @@ FILTERS (retrieve & synthesize):
 ```
 
 - `retrieve` defaults: `fast` / `document`. `synthesize` defaults: `thorough` / `mixed`. `mixed`
-  fuses document and section signals, promotes a document's best chunks, returns only exact
-  source sections, and applies a 3-sections-per-note cap.
+  searches sections, returns only exact source sections, and applies a 3-sections-per-note cap.
 - Filter semantics: `--folder` matches the folder or any subfolder; `--tag` is repeatable and
   every given tag must be present (case-insensitive); `--type` matches frontmatter `type` exactly;
   `--provenance` matches frontmatter `provenance` exactly (human|reference|llm|distilled);

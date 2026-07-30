@@ -174,7 +174,7 @@ PACKAGES = {
     "vault_spider.retrieval": {
         "match": lambda p: p.startswith("vault_spider/retrieval/"),
         "role": "Hybrid search: BM25 + embeddings fused by pure scoring functions, optional "
-                "rerank (thorough mode), document-promoted mixed retrieval, an on-disk "
+                "rerank (thorough mode), score-geometry recency, an on-disk "
                 "query-embedding cache, and source-safe evidence/citation assembly.",
     },
     "vault_spider.synthesis": {
