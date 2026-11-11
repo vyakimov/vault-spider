@@ -36,7 +36,7 @@ def get_provider() -> OpenRouterClient:
     try:
         return OpenRouterClient.from_env()
     except ValueError as exc:
-        # Missing OPENROUTER_API_KEY should surface as provider_error, not
+        # Missing MARKETPLACE_API_KEY should surface as provider_error, not
         # internal_error.
         raise OpenRouterError(str(exc)) from exc
 

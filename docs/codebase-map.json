@@ -2509,12 +2509,12 @@
       ]
     },
     "vault_spider.llm": {
-      "role": "OpenRouter client: embeddings, reranking, and chat completions. The only module that talks to the LLM provider.",
+      "role": "LLM client for the AI Marketplace gateway (OpenAI-compatible): embeddings, reranking, and chat completions. The only module that talks to the LLM provider.",
       "modules": [
         {
           "path": "vault_spider/llm/openrouter.py",
-          "loc": 266,
-          "summary": "OpenRouter-backed embedding, rerank, and chat helpers.",
+          "loc": 290,
+          "summary": "OpenAI-compatible embedding, rerank, and chat helpers.",
           "internal_deps": [],
           "classes": [
             {
@@ -2523,7 +2523,7 @@
                 "RuntimeError"
               ],
               "doc": "Raised when an OpenRouter request fails.",
-              "line": 17,
+              "line": 36,
               "fields": [],
               "methods": []
             },
@@ -2531,43 +2531,48 @@
               "name": "OpenRouterClient",
               "bases": [],
               "doc": null,
-              "line": 21,
+              "line": 40,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
-                  "signature": "(self, api_key: str, embedding_model: str, chat_model: str, rerank_model: Optional[str]=None, context_model: Optional[str]=None, base_url: str='https://openrouter.ai/api/v1', http_referer: Optional[str]=None, app_title: Optional[str]=None, timeout_seconds: float=60.0)",
+                  "signature": "(self, api_key: str, embedding_model: str, chat_model: str, rerank_model: Optional[str]=None, context_model: Optional[str]=None, base_url: str=DEFAULT_BASE_URL, http_referer: Optional[str]=None, app_title: Optional[str]=None, timeout_seconds: float=60.0, drop_params: bool=False)",
                   "doc": null,
-                  "line": 22
+                  "line": 41
                 },
                 {
                   "name": "from_env",
                   "signature": "(cls) -> 'OpenRouterClient'",
                   "doc": null,
-                  "line": 47
+                  "line": 68
                 },
                 {
                   "name": "embed_texts",
                   "signature": "(self, texts: List[str], batch_size: int=32) -> List[List[float]]",
                   "doc": null,
-                  "line": 118
+                  "line": 140
                 },
                 {
                   "name": "rerank",
                   "signature": "(self, query: str, documents: List[str], ids: List[str]) -> pd.DataFrame",
                   "doc": null,
-                  "line": 171
+                  "line": 193
                 },
                 {
                   "name": "chat",
                   "signature": "(self, system_prompt: str, user_prompt: str, temperature: float=0.2, max_tokens: int=1024, model: Optional[str]=None) -> str",
                   "doc": null,
-                  "line": 227
+                  "line": 249
                 }
               ]
             }
           ],
-          "functions": []
+          "functions": [],
+          "constants": [
+            "DEFAULT_BASE_URL",
+            "DEFAULT_EMBEDDING_MODEL",
+            "DEFAULT_CHAT_MODEL"
+          ]
         }
       ]
     },
@@ -3529,8 +3534,8 @@
       },
       {
         "path": "tests/test_openrouter.py",
-        "loc": 123,
-        "test_count": 9,
+        "loc": 172,
+        "test_count": 13,
         "summary": "Tests for vault_spider.llm.openrouter request/response hardening (no network).",
         "covers": [
           "vault_spider.llm",
@@ -3750,7 +3755,7 @@
     },
     {
       "path": ".env.example",
-      "role": "Template for secrets: OpenRouter key and model names."
+      "role": "Template for secrets: AI Marketplace token and model ids."
     },
     {
       "path": "pyproject.toml",

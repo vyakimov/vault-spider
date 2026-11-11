@@ -177,20 +177,27 @@ command write?"); the optional `mutates` string qualifies what and when.
 
 ## Environment
 
-Required environment variables (loaded from `.env` via `python-dotenv`):
+All LLM calls (embeddings, rerank, chat) go through the corporate **AI Marketplace** gateway
+(`https://api.marketplace.novo-genai.com/v1`, OpenAI-compatible LiteLLM — the same gateway
+Claude Code uses) via `vault_spider/llm/openrouter.py`.
+Model ids are Marketplace ids (`GET /v1/models`); pin specific ids, not `_latest` aliases.
 
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_EMBEDDING_MODEL`
-- `OPENROUTER_CHAT_MODEL`
+Environment variables (loaded from `.env` via `python-dotenv`):
+
+- `MARKETPLACE_API_KEY` (required — the AI Marketplace token)
+- `MARKETPLACE_EMBEDDING_MODEL` (default `openai_text_embedding_3_small`)
+- `MARKETPLACE_CHAT_MODEL` (default `anthropic_claude_sonnet_5_5`)
 
 Optional:
 
-- `OPENROUTER_RERANK_MODEL` (enables reranking in `thorough` mode)
-- `OPENROUTER_CONTEXT_MODEL` (OpenRouter context mode only; defaults to
-  `OPENROUTER_CHAT_MODEL`)
-- `OPENROUTER_BASE_URL`
-- `OPENROUTER_HTTP_REFERER`
-- `OPENROUTER_APP_TITLE`
+- `MARKETPLACE_RERANK_MODEL` (enables reranking in `thorough` mode, e.g. `cohere_rerank_3_5`)
+- `MARKETPLACE_CONTEXT_MODEL` (`openrouter` context source only; defaults to
+  `MARKETPLACE_CHAT_MODEL`)
+- `MARKETPLACE_BASE_URL` (defaults to the Marketplace)
+- `MARKETPLACE_DROP_PARAMS` (default `true`; LiteLLM drops per-model unsupported parameters such
+  as `temperature` on Claude 5.x)
+- `MARKETPLACE_HTTP_REFERER`
+- `MARKETPLACE_APP_TITLE`
 
 Install dependencies with `uv sync`.
 

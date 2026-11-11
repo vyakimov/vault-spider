@@ -121,3 +121,52 @@ def test_rerank_rejects_negative_index(monkeypatch):
     )
     with pytest.raises(OpenRouterError, match="invalid index -1"):
         client.rerank("query", ["document"], ["id"])
+
+
+def _capture_chat_payload(monkeypatch, client):
+    captured = {}
+
+    def fake_post(path, payload):
+        captured["payload"] = payload
+        return {"choices": [{"message": {"content": "{}"}}]}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    client.chat("system", "user")
+    return captured["payload"]
+
+
+def test_chat_omits_drop_params_by_default(monkeypatch):
+    payload = _capture_chat_payload(monkeypatch, make_client())
+    assert "drop_params" not in payload
+
+
+def test_chat_sends_drop_params_when_enabled(monkeypatch):
+    client = OpenRouterClient(
+        api_key="key", embedding_model="e", chat_model="c", drop_params=True
+    )
+    assert _capture_chat_payload(monkeypatch, client)["drop_params"] is True
+
+
+@pytest.mark.parametrize(
+    "value,expected", [("true", True), ("1", True), ("", True), ("no", False), ("false", False)]
+)
+def test_from_env_reads_drop_params_flag(monkeypatch, value, expected):
+    monkeypatch.setenv("MARKETPLACE_API_KEY", "key")
+    monkeypatch.setenv("MARKETPLACE_DROP_PARAMS", value)
+    assert OpenRouterClient.from_env().drop_params is expected
+
+
+def test_from_env_defaults_to_marketplace(monkeypatch):
+    for name in (
+        "MARKETPLACE_BASE_URL",
+        "MARKETPLACE_EMBEDDING_MODEL",
+        "MARKETPLACE_CHAT_MODEL",
+        "MARKETPLACE_DROP_PARAMS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("MARKETPLACE_API_KEY", "key")
+    client = OpenRouterClient.from_env()
+    assert client.base_url == openrouter.DEFAULT_BASE_URL
+    assert client.embedding_model == openrouter.DEFAULT_EMBEDDING_MODEL
+    assert client.chat_model == openrouter.DEFAULT_CHAT_MODEL
+    assert client.drop_params is True

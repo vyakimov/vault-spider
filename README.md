@@ -21,12 +21,19 @@ names, tag rules — live in a `config.yaml` file that Git ignores.
 
 ```bash
 uv sync
-cp .env.example .env                # OpenRouter key and model names
+cp .env.example .env                # AI Marketplace token and model ids
 cp config.yaml.example config.yaml  # optional: your own settings
 ```
 
-Add your [OpenRouter](https://openrouter.ai/keys) key to `.env`. If you do not want to use
-Obsidian's active vault, set `vault.root` in `config.yaml`.
+Add your [AI Marketplace](https://marketplace.novo-genai.com/api/) API token to `.env` as
+`MARKETPLACE_API_KEY` (the same token Claude Code uses as `ANTHROPIC_AUTH_TOKEN`). If you do not
+want to use Obsidian's active vault, set `vault.root` in `config.yaml`.
+
+Every LLM call — embeddings, reranking, and chat — goes through the AI Marketplace gateway
+(`https://api.marketplace.novo-genai.com/v1`, OpenAI-compatible LiteLLM). The defaults use
+Marketplace model ids; see the [model cards](https://marketplace.novo-genai.com/model/model-cards/).
+`MARKETPLACE_DROP_PARAMS` (default `true`) lets the gateway drop per-model unsupported parameters
+instead of failing the request. For example, Claude 5.x rejects `temperature`.
 
 Then build the index:
 

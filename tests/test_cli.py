@@ -142,7 +142,7 @@ class TestStats:
         chroma = str(tmp_path / "chroma")
         monkeypatch.setattr(cli, "get_provider", lambda: fake_provider)
         run(capsys, ["sync", "--chroma-path", chroma, "--root", str(tiny_vault)])
-        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("MARKETPLACE_API_KEY", raising=False)
 
         code, envelope = run(capsys, ["stats", "--chroma-path", chroma])
 
@@ -310,7 +310,7 @@ class TestEnrichInputSafety:
 
 class TestMissingApiKey:
     def test_missing_key_maps_to_provider_error(self, capsys, tmp_path, tiny_vault, monkeypatch):
-        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("MARKETPLACE_API_KEY", raising=False)
         code, envelope = run(
             capsys,
             ["--chroma-path", str(tmp_path / "c"), "sync", "--root", str(tiny_vault)],
@@ -318,4 +318,4 @@ class TestMissingApiKey:
         assert code == 1
         assert envelope["ok"] is False
         assert envelope["error"]["type"] == "provider_error"
-        assert "OPENROUTER_API_KEY" in envelope["error"]["message"]
+        assert "MARKETPLACE_API_KEY" in envelope["error"]["message"]
