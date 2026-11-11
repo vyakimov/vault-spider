@@ -49,6 +49,11 @@ imported ones and treats `distilled` notes as pointers; retrieval filters on it
   - Failure-safe ordering: old entries are deleted only after all new embeddings have been
     computed and validated, so a provider failure mid-sync leaves the existing index usable.
   - `--reset` rebuilds the collection from scratch (needed once after an entry-shape change).
+  - `index.vector_cache_mode`: `export` also writes every vector into the vault after a
+    successful sync (`result.vector_export`); `import` takes vectors only from that export, so
+    notes are never embedded on this machine (`result.vector_cache`: `from_cache`,
+    `pending_notes`, `export_found`). Both machines need the same vault settings, embedding
+    model and `index.contextual`.
   - With `index.contextual: true`, note-level summaries are canonically stored under
     `index.context_path` (default `context-data/summaries`). `manual` consumes summaries imported
     from coding-agent jobs and never calls a context API. `openrouter` automatically generates
@@ -209,6 +214,12 @@ The `vault_spider` package is layered:
      collection plus dense, lexical, and source views and two BM25 indexes.
    - `context_summaries.py` — canonical note-summary records plus manual jobs, validation,
      import, fingerprinting, and coverage status.
+   - `vector_cache.py` — vectors shared through the vault's file sync: one immutable
+     float32 file per `entry_hash` under `<vault>/<index.vector_cache_dir>/<model slug>/`, plus a
+     manifest. `index.vector_cache_mode: export` writes them after each successful sync
+     (`IndexStore.export_vectors`); `import` makes `sync(..., vector_cache=, offline=True)` take
+     vectors only from them and never embed notes. A note changes only when all its vectors are
+     available, otherwise it is reported pending, and deletions still apply.
    - `context_generator.py` — optional one-call-per-note OpenRouter generation into the same
      canonical store; generated text is used for retrieval, never evidence.
    - `reader.py` — read-only Chroma access for the Notes UI.

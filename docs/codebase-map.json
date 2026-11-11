@@ -11,7 +11,7 @@
     "canonical_instructions": "AGENTS.md",
     "json_envelope": "{ok: true, action, result, meta} | {ok: false, action, error}; always check `ok`, not just the exit code"
   },
-  "generated": "2026-07-30",
+  "generated": "2026-11-11",
   "generator_note": "Regenerate with `uv run python tools/build_codebase_map.py`. Structure extracted from version-controlled source via Python ast; line numbers refer to the commit current on the generation date.",
   "architecture": {
     "data_flow": {
@@ -100,7 +100,7 @@
       "modules": [
         {
           "path": "vault_spider/cli.py",
-          "loc": 1461,
+          "loc": 1523,
           "summary": "JSON-only CLI for the vault: retrieval/synthesis plus safe note mutations.",
           "internal_deps": [
             "vault_spider",
@@ -112,6 +112,7 @@
             "vault_spider.envelope",
             "vault_spider.evaluation.dataset",
             "vault_spider.evaluation.runner",
+            "vault_spider.index",
             "vault_spider.index.context_summaries",
             "vault_spider.index.reader",
             "vault_spider.index.store",
@@ -167,64 +168,70 @@
               "line": 472
             },
             {
+              "name": "embedding_models_match",
+              "signature": "(exported: str, configured: str) -> bool",
+              "doc": "Whether an exported vector cache's model is the one configured here.",
+              "line": 476
+            },
+            {
               "name": "cmd_sync",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 476
+              "line": 491
             },
             {
               "name": "cmd_context",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 514
+              "line": 576
             },
             {
               "name": "cmd_stats",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 557
+              "line": 619
             },
             {
               "name": "cmd_retrieve",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 610
+              "line": 672
             },
             {
               "name": "cmd_synthesize",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 669
+              "line": 731
             },
             {
               "name": "cmd_enrich",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 791
+              "line": 853
             },
             {
               "name": "cmd_lint",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 923
+              "line": 985
             },
             {
               "name": "cmd_eval",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 960
+              "line": 1022
             },
             {
               "name": "build_parser",
               "signature": "() -> argparse.ArgumentParser",
               "doc": null,
-              "line": 1094
+              "line": 1156
             },
             {
               "name": "main",
               "signature": "(argv: Optional[list]=None) -> int",
               "doc": null,
-              "line": 1423
+              "line": 1485
             }
           ],
           "constants": [
@@ -477,7 +484,7 @@
         },
         {
           "path": "vault_spider/settings.py",
-          "loc": 198,
+          "loc": 219,
           "summary": "Installation settings, read from an optional ``config.yaml``.",
           "internal_deps": [],
           "classes": [
@@ -487,7 +494,7 @@
                 "ValueError"
               ],
               "doc": "config.yaml exists but is unusable. Surfaced as `invalid_arguments`.",
-              "line": 57,
+              "line": 61,
               "fields": [],
               "methods": []
             }
@@ -497,97 +504,109 @@
               "name": "config_path",
               "signature": "() -> Path",
               "doc": null,
-              "line": 61
+              "line": 65
             },
             {
               "name": "reset",
               "signature": "() -> None",
               "doc": "Drop the cached config, so the next read re-parses the file.",
-              "line": 69
+              "line": 73
             },
             {
               "name": "load",
               "signature": "(refresh: bool=False) -> Dict[str, Dict[str, Any]]",
               "doc": "Defaults, overlaid with ``config.yaml`` when it exists.",
-              "line": 75
+              "line": 79
             },
             {
               "name": "vault_root",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 139
+              "line": 151
             },
             {
               "name": "skip_dirs",
               "signature": "() -> Set[str]",
               "doc": null,
-              "line": 144
+              "line": 156
             },
             {
               "name": "ignore_tags",
               "signature": "() -> List[str]",
               "doc": null,
-              "line": 148
+              "line": 160
             },
             {
               "name": "distilled_dir",
               "signature": "() -> str",
               "doc": null,
-              "line": 152
+              "line": 164
             },
             {
               "name": "chroma_path",
               "signature": "() -> str",
               "doc": null,
-              "line": 157
+              "line": 169
             },
             {
               "name": "contextual_enabled",
               "signature": "() -> bool",
               "doc": null,
-              "line": 161
+              "line": 173
             },
             {
               "name": "context_source",
               "signature": "() -> str",
               "doc": null,
-              "line": 165
+              "line": 177
             },
             {
               "name": "context_path",
               "signature": "() -> str",
               "doc": null,
-              "line": 169
+              "line": 181
             },
             {
               "name": "contextual_bm25_enabled",
               "signature": "() -> bool",
               "doc": null,
-              "line": 173
+              "line": 185
+            },
+            {
+              "name": "vector_cache_mode",
+              "signature": "() -> str",
+              "doc": null,
+              "line": 189
+            },
+            {
+              "name": "vector_cache_dir",
+              "signature": "() -> str",
+              "doc": "Vault-relative directory of the shared vector cache (validated by callers).",
+              "line": 193
             },
             {
               "name": "obsidian_binary",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 177
+              "line": 198
             },
             {
               "name": "obsidian_vault",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 182
+              "line": 203
             },
             {
               "name": "obsidian_manage_updated",
               "signature": "() -> bool",
               "doc": null,
-              "line": 187
+              "line": 208
             },
             {
               "name": "timestamp_policy",
               "signature": "() -> str",
               "doc": null,
-              "line": 191
+              "line": 212
             }
           ],
           "constants": [
@@ -1140,7 +1159,7 @@
       ]
     },
     "vault_spider.index": {
-      "role": "Builds and maintains the ChromaDB collection (one document entry + N section entries per note, distinguished by the `granularity` metadata field) with failure-safe incremental sync, one canonical note-summary store shared by manual and OpenRouter generation, and separate dense/lexical/source views; plus a read-only stats reader.",
+      "role": "Builds and maintains the ChromaDB collection (one document entry + N section entries per note, distinguished by the `granularity` metadata field) with failure-safe incremental sync, one canonical note-summary store shared by manual and OpenRouter generation, and separate dense/lexical/source views; a vault-carried vector cache so only one machine embeds (export/import); plus a read-only stats reader.",
       "modules": [
         {
           "path": "vault_spider/index/context_generator.py",
@@ -1385,7 +1404,7 @@
         },
         {
           "path": "vault_spider/index/store.py",
-          "loc": 869,
+          "loc": 951,
           "summary": "Build and maintain a Chroma collection for Markdown notes.",
           "internal_deps": [
             "vault_spider.config",
@@ -1393,6 +1412,7 @@
             "vault_spider.corpus.loader",
             "vault_spider.index.context_generator",
             "vault_spider.index.context_summaries",
+            "vault_spider.index.vector_cache",
             "vault_spider.llm.openrouter",
             "vault_spider.utils"
           ],
@@ -1403,7 +1423,7 @@
                 "ValueError"
               ],
               "doc": "Stored index metadata is incompatible with the requested configuration.",
-              "line": 46,
+              "line": 48,
               "fields": [],
               "methods": []
             },
@@ -1411,32 +1431,38 @@
               "name": "IndexStore",
               "bases": [],
               "doc": "Maintain the persistent vector store and in-memory BM25 indexes.",
-              "line": 50,
+              "line": 52,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
                   "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes', bm25_k1: Optional[float]=None, bm25_b: Optional[float]=None, provider: Optional[OpenRouterClient]=None, allow_model_mismatch: bool=False, contextual: Optional[ContextualConfig]=None)",
                   "doc": null,
-                  "line": 53
+                  "line": 55
                 },
                 {
                   "name": "granularity_data",
                   "signature": "(self, granularity: str) -> Tuple[List[str], List[str], List[Dict[str, Any]], Optional[BM25Okapi]]",
                   "doc": null,
-                  "line": 237
+                  "line": 239
                 },
                 {
                   "name": "sync",
-                  "signature": "(self, root: str, reset: bool=False, dry_run: bool=False, contextualize: bool=False, refresh_context: bool=False) -> Dict[str, object]",
-                  "doc": null,
-                  "line": 405
+                  "signature": "(self, root: str, reset: bool=False, dry_run: bool=False, contextualize: bool=False, refresh_context: bool=False, vector_cache: Optional[VectorCache]=None, offline: bool=False) -> Dict[str, object]",
+                  "doc": "Bring the index in line with the vault at ``root``.",
+                  "line": 407
+                },
+                {
+                  "name": "export_vectors",
+                  "signature": "(self, cache_root: str) -> Dict[str, Any]",
+                  "doc": "Write every vector of the index to the vector cache under ``cache_root``.",
+                  "line": 804
                 },
                 {
                   "name": "get_collection_stats",
                   "signature": "(self) -> Dict[str, object]",
                   "doc": null,
-                  "line": 825
+                  "line": 907
                 }
               ]
             }
@@ -1444,6 +1470,95 @@
           "functions": [],
           "constants": [
             "GRANULARITIES"
+          ]
+        },
+        {
+          "path": "vault_spider/index/vector_cache.py",
+          "loc": 217,
+          "summary": "Embedding vectors stored as files inside the vault, so the vault's own file sync carries them.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "VectorCacheError",
+              "bases": [
+                "ValueError"
+              ],
+              "doc": "The cache is unusable for this index (missing, wrong model, malformed).",
+              "line": 43,
+              "fields": [],
+              "methods": []
+            },
+            {
+              "name": "VectorCache",
+              "bases": [],
+              "doc": "One model's vectors in one directory.",
+              "line": 59,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, directory: Path, model: str, dimensions: int)",
+                  "doc": null,
+                  "line": 62
+                },
+                {
+                  "name": "path_for",
+                  "signature": "(self, entry_hash: str) -> Path",
+                  "doc": null,
+                  "line": 69
+                },
+                {
+                  "name": "stored_hashes",
+                  "signature": "(self) -> Iterator[str]",
+                  "doc": null,
+                  "line": 78
+                },
+                {
+                  "name": "get",
+                  "signature": "(self, entry_hash: str) -> Optional[List[float]]",
+                  "doc": "The vector for ``entry_hash``, or ``None`` if absent, partial or invalid.",
+                  "line": 91
+                },
+                {
+                  "name": "export",
+                  "signature": "(self, vectors: Dict[str, List[float]], extra: Dict[str, Any]) -> Dict[str, int]",
+                  "doc": "Make the directory hold exactly ``vectors``; returns counts.",
+                  "line": 124
+                }
+              ]
+            }
+          ],
+          "functions": [
+            {
+              "name": "model_slug",
+              "signature": "(model: str) -> str",
+              "doc": "A directory name for a model id: ``google/gemini-embedding-2`` -> ``google_gemini-embedding-2``.",
+              "line": 47
+            },
+            {
+              "name": "exact_model_match",
+              "signature": "(first: str, second: str) -> bool",
+              "doc": null,
+              "line": 55
+            },
+            {
+              "name": "for_export",
+              "signature": "(root_dir: Path, model: str, dimensions: int) -> VectorCache",
+              "doc": null,
+              "line": 173
+            },
+            {
+              "name": "for_import",
+              "signature": "(root_dir: Path, model: str, models_match: Callable[[str, str], bool]=exact_model_match) -> Tuple[Optional[VectorCache], Dict[str, Any]]",
+              "doc": "The cache whose manifest names ``model`` (or an equivalent), if any.",
+              "line": 177
+            }
+          ],
+          "constants": [
+            "FORMAT_VERSION",
+            "MANIFEST",
+            "SUFFIX",
+            "_HASH"
           ]
         }
       ]
@@ -2851,7 +2966,7 @@
       "modules": [
         {
           "path": "scripts/periodic_maintenance.py",
-          "loc": 177,
+          "loc": 236,
           "summary": "Run serialized Vault Spider maintenance for launchd.",
           "internal_deps": [],
           "classes": [
@@ -2861,7 +2976,7 @@
                 "RuntimeError"
               ],
               "doc": null,
-              "line": 25,
+              "line": 31,
               "fields": [],
               "methods": []
             }
@@ -2871,8 +2986,13 @@
               "name": "main",
               "signature": "(argv: Optional[List[str]]=None) -> int",
               "doc": null,
-              "line": 121
+              "line": 171
             }
+          ],
+          "constants": [
+            "INDEX_DIR",
+            "SNAPSHOT_DIR",
+            "_STAGING_PREFIX"
           ]
         },
         {
@@ -3101,7 +3221,7 @@
         },
         {
           "path": "tools/build_codebase_map.py",
-          "loc": 1056,
+          "loc": 1057,
           "summary": "Generate docs/codebase-map.json and docs/codebase-map.html.",
           "internal_deps": [],
           "classes": [],
@@ -3116,19 +3236,19 @@
               "name": "build_json",
               "signature": "(code_modules: list[dict], test_modules: list[dict]) -> dict",
               "doc": null,
-              "line": 418
+              "line": 419
             },
             {
               "name": "build_html",
               "signature": "(codebase_map: dict) -> str",
               "doc": null,
-              "line": 823
+              "line": 824
             },
             {
               "name": "main",
               "signature": "() -> None",
               "doc": null,
-              "line": 1039
+              "line": 1040
             }
           ],
           "constants": [
@@ -3361,8 +3481,8 @@
       },
       {
         "path": "tests/test_periodic_maintenance.py",
-        "loc": 102,
-        "test_count": 3,
+        "loc": 169,
+        "test_count": 5,
         "summary": "Tests for the launchd maintenance runner without a real vault or provider.",
         "covers": []
       },
@@ -3481,6 +3601,19 @@
         "summary": "Tests for pure helpers in vault_spider.utils.",
         "covers": [
           "vault_spider.utils"
+        ]
+      },
+      {
+        "path": "tests/test_vector_cache.py",
+        "loc": 286,
+        "test_count": 20,
+        "summary": "Tests for vectors shared through the vault (vector_cache.py, sync export/import).",
+        "covers": [
+          "vault_spider",
+          "vault_spider.corpus.loader",
+          "vault_spider.index",
+          "vault_spider.index.store",
+          "vault_spider.index.vector_cache"
         ]
       },
       {

@@ -57,6 +57,20 @@ index:
   # Requires contextual: true.
   contextual_bm25: false
 
+  # Share embeddings between machines through the vault's own file sync (e.g. Obsidian
+  # Sync with "Sync all other types" enabled), so only one machine ever embeds.
+  #   off     — default; this machine embeds for itself.
+  #   export  — this machine embeds; after every successful sync it writes each vector
+  #             as a small immutable file under vector_cache_dir.
+  #   import  — this machine never embeds notes: sync takes vectors only from those
+  #             files. A note is indexed once all its vectors have arrived; until then
+  #             it is reported as pending. Query embeddings still use the provider.
+  # Both machines need the same vault settings (skip_dirs, ignore_tags), embedding
+  # model and `contextual`, or entries won't match and stay pending.
+  vector_cache_mode: off
+  # Vault-relative. Hide it in Obsidian: Settings → Files and links → Excluded files.
+  vector_cache_dir: _vault-spider/vectors
+
 timestamps:
   # How `--fix`/`--fix-timestamps`/distilled notes write `created`/`updated`:
   #   offset_local  — 2026-07-13T14:30:00+02:00 (local wall-clock + offset)

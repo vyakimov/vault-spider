@@ -473,13 +473,38 @@ def cmd_schema(args: argparse.Namespace) -> Dict[str, Any]:
     return success("schema", result=_schema(), meta={"version": SCHEMA_VERSION})
 
 
+def embedding_models_match(exported: str, configured: str) -> bool:
+    """Whether an exported vector cache's model is the one configured here."""
+    return exported == configured
+
+
+def _vector_cache_root(root: str) -> str:
+    try:
+        relative = validate_vault_relative_path(
+            settings.vector_cache_dir(), label="index.vector_cache_dir"
+        )
+    except ValueError as exc:
+        raise CliError("invalid_arguments", str(exc)) from exc
+    return str(Path(root) / relative)
+
+
 def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
+    from vault_spider.index import vector_cache
+
     root = resolve_root(args.root)
     if not os.path.isdir(root):
         return failure("sync", "invalid_arguments", f"root directory not found: {root}")
     if args.reset and args.dry_run:
         return failure(
             "sync", "invalid_arguments", "--reset cannot be combined with --dry-run"
+        )
+    mode = settings.vector_cache_mode()
+    if mode == "import" and (args.contextualize or args.refresh_context):
+        return failure(
+            "sync",
+            "invalid_arguments",
+            "--contextualize/--refresh-context are unavailable with "
+            "index.vector_cache_mode: import (this machine never calls the provider for notes)",
         )
     provider = get_provider()
     store = get_store(
@@ -488,6 +513,24 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
         provider,
         allow_model_mismatch=args.reset,
     )
+    cache = None
+    cache_info: Dict[str, Any] = {}
+    if mode == "import":
+        try:
+            cache, cache_info = vector_cache.for_import(
+                Path(_vector_cache_root(root)),
+                provider.embedding_model,
+                embedding_models_match,
+            )
+        except vector_cache.VectorCacheError as exc:
+            raise CliError("config_mismatch", str(exc)) from exc
+        local_state = "on" if store.contextual.enabled else "off"
+        if cache is not None and cache_info.get("contextual_state", local_state) != local_state:
+            raise CliError(
+                "config_mismatch",
+                f"vector export was built with index.contextual "
+                f"{cache_info.get('contextual_state')}, this machine has {local_state}",
+            )
     try:
         result = store.sync(
             root,
@@ -495,9 +538,27 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
             dry_run=args.dry_run,
             contextualize=args.contextualize,
             refresh_context=args.refresh_context,
+            vector_cache=cache,
+            offline=mode == "import",
         )
     except ValueError as exc:
         raise CliError("invalid_arguments", str(exc)) from exc
+    if mode == "import" and not args.dry_run:
+        report = dict(result.get("vector_cache") or {})
+        report["export_found"] = cache is not None
+        if cache is None:
+            report["available_models"] = cache_info.get("available_models", [])
+            result.setdefault("warnings", []).append(
+                "no vector export for this embedding model has arrived yet; "
+                "new and changed notes stay pending (keyword search still finds them)"
+            )
+        result["vector_cache"] = report
+    if mode == "export" and not args.dry_run:
+        try:
+            result["vector_export"] = store.export_vectors(_vector_cache_root(root))
+        except (OSError, vector_cache.VectorCacheError) as exc:
+            result["vector_export"] = {"error": str(exc)}
+            result.setdefault("warnings", []).append(f"vector export failed: {exc}")
     return success(
         "sync",
         result=result,
@@ -507,6 +568,7 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
             "dry_run": args.dry_run,
             "contextualize": args.contextualize or args.refresh_context,
             "refresh_context": args.refresh_context,
+            "vector_cache_mode": mode,
         },
     )
 

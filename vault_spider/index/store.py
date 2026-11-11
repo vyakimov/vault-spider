@@ -8,7 +8,7 @@ metadata field.
 from __future__ import annotations
 
 import hashlib
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import chromadb
@@ -37,6 +37,8 @@ from vault_spider.index.context_summaries import (
     SummaryResolution,
     SummaryStore,
 )
+from vault_spider.index.vector_cache import VectorCache
+from vault_spider.index.vector_cache import for_export as vector_cache_for_export
 from vault_spider.llm.openrouter import OpenRouterClient, OpenRouterError
 from vault_spider.utils import DEFAULT_STOP_WORDS, tokenize_for_bm25
 
@@ -409,7 +411,18 @@ class IndexStore:
         dry_run: bool = False,
         contextualize: bool = False,
         refresh_context: bool = False,
+        vector_cache: Optional[VectorCache] = None,
+        offline: bool = False,
     ) -> Dict[str, object]:
+        """Bring the index in line with the vault at ``root``.
+
+        ``vector_cache`` supplies vectors by entry hash before the provider is
+        asked. With ``offline=True`` the provider is never asked: a note is
+        added or updated only when every one of its vectors is available
+        (reused from the index or found in the cache). Otherwise it is left
+        exactly as it is and reported as pending, so a note is never half
+        indexed. Deleted notes are still removed.
+        """
         if reset and dry_run:
             # Reset drops the collection before anything is predicted; a
             # "dry run" that destroys data must be impossible.
@@ -612,6 +625,19 @@ class IndexStore:
         generated = summary_hits = 0
         failed_notes: List[str] = []
         added_notes = updated_notes = 0
+        pending_notes: List[str] = []
+        from_cache: Dict[str, List[float]] = {}
+
+        def resolvable(entry_hash: str) -> bool:
+            if not entry_hash:
+                return False
+            if entry_hash in reusable or entry_hash in from_cache:
+                return True
+            vector = vector_cache.get(entry_hash) if vector_cache is not None else None
+            if vector is not None:
+                from_cache[entry_hash] = vector
+            return vector is not None
+
         for note, sections, group, reason in action_plans:
             contexts: Dict[str, str] = {}
             input_hashes: Dict[str, str] = {}
@@ -656,6 +682,16 @@ class IndexStore:
                     }
                     summary_hits += 1
 
+            note_entries = self._entries_for_note(
+                note,
+                sections,
+                contexts,
+                input_hashes,
+                context_status=context_status,
+                note_context=note_context,
+                note_context_key=note_context_key,
+                note_context_model=note_context_model,
+            )
             if group is not None:
                 old = self.collection.get(
                     ids=cast(List[str], group["ids"]),
@@ -669,22 +705,20 @@ class IndexStore:
                     entry_hash = str(metadata.get("entry_hash", ""))
                     if entry_hash and embedding is not None:
                         reusable[entry_hash] = [float(value) for value in embedding]
+            if offline and not all(
+                resolvable(str(metadata.get("entry_hash", "")))
+                for _, _, metadata in note_entries
+            ):
+                # Leave the note exactly as indexed (or absent) until all its
+                # vectors have arrived: never half a note.
+                pending_notes.append(note.path)
+                continue
+            if group is not None:
                 ids_to_delete.extend(group["ids"])  # type: ignore[arg-type]
                 updated_notes += 1
             else:
                 added_notes += 1
-            entries_to_add.extend(
-                self._entries_for_note(
-                    note,
-                    sections,
-                    contexts,
-                    input_hashes,
-                    context_status=context_status,
-                    note_context=note_context,
-                    note_context_key=note_context_key,
-                    note_context_model=note_context_model,
-                )
-            )
+            entries_to_add.extend(note_entries)
 
         add_ids: List[str] = []
         add_texts: List[str] = []
@@ -698,12 +732,19 @@ class IndexStore:
             missing_indexes = []
             missing_texts = []
             for index, metadata in enumerate(add_metas):
-                cached = reusable.get(str(metadata.get("entry_hash", "")))
+                entry_hash = str(metadata.get("entry_hash", ""))
+                cached = reusable.get(entry_hash)
+                if cached is None and resolvable(entry_hash):
+                    cached = reusable.get(entry_hash) or from_cache.get(entry_hash)
                 if cached is None:
                     missing_indexes.append(index)
                     missing_texts.append(add_texts[index])
                 else:
                     embeddings[index] = cached
+            if missing_texts and offline:
+                raise RuntimeError(
+                    f"offline sync had {len(missing_texts)} entries without vectors"
+                )
             if missing_texts:
                 computed = self.provider.embed_texts(missing_texts, batch_size=32)
                 if len(computed) != len(missing_indexes):
@@ -739,6 +780,18 @@ class IndexStore:
             "total_entries": self.collection.count(),
             "warnings": warnings,
             "dry_run": False,
+            **(
+                {
+                    "vector_cache": {
+                        "offline": offline,
+                        "from_cache": len(from_cache),
+                        "pending_notes": len(pending_notes),
+                        "pending": sorted(pending_notes)[:50],
+                    }
+                }
+                if vector_cache is not None or offline
+                else {}
+            ),
             "context": self._context_summary(
                 notes,
                 sections_by_note,
@@ -747,6 +800,35 @@ class IndexStore:
                 failed_notes=failed_notes,
             ),
         }
+
+    def export_vectors(self, cache_root: str) -> Dict[str, Any]:
+        """Write every vector of the index to the vector cache under ``cache_root``.
+
+        Run on the machine that embeds, after a successful sync. Other machines
+        import from it (``sync(..., vector_cache=..., offline=True)``).
+        """
+        payload = self.collection.get(include=["embeddings", "metadatas"])
+        raw_embeddings = payload.get("embeddings")
+        vectors: Dict[str, List[float]] = {}
+        for embedding, metadata in zip(
+            [] if raw_embeddings is None else raw_embeddings, payload.get("metadatas") or []
+        ):
+            entry_hash = str((metadata or {}).get("entry_hash", ""))
+            if entry_hash and embedding is not None:
+                vectors[entry_hash] = [float(value) for value in embedding]
+        if not vectors:
+            return {"written": 0, "deleted": 0, "total": 0, "skipped": "index is empty"}
+        dimensions = len(next(iter(vectors.values())))
+        cache = vector_cache_for_export(Path(cache_root), self.provider.embedding_model, dimensions)
+        report = cache.export(
+            vectors,
+            extra={
+                "chunk_schema_version": CHUNK_SCHEMA_VERSION,
+                "contextual_state": "on" if self.contextual.enabled else "off",
+            },
+        )
+        report["directory"] = str(cache.directory)
+        return report
 
     def _context_summary(
         self,

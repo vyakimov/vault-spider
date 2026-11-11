@@ -39,6 +39,10 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         "context_source": "manual",
         "context_path": "context-data/summaries",
         "contextual_bm25": False,
+        # Vectors shared through the vault's own file sync (vector_cache.py):
+        # `export` on the machine that embeds, `import` on machines that must not.
+        "vector_cache_mode": "off",
+        "vector_cache_dir": "_vault-spider/vectors",
     },
     "timestamps": {
         "policy": "offset_local",  # or "utc_z" / "obsidian_local"
@@ -116,6 +120,14 @@ def load(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
         raise ConfigError(
             f"{path}: index.context_source must be 'manual' or 'openrouter'"
         )
+    mode = merged["index"]["vector_cache_mode"]
+    if mode not in {"off", "export", "import"}:
+        raise ConfigError(
+            f"{path}: index.vector_cache_mode must be 'off', 'export' or 'import'"
+        )
+    cache_dir = merged["index"]["vector_cache_dir"]
+    if not isinstance(cache_dir, str) or not cache_dir.strip():
+        raise ConfigError(f"{path}: index.vector_cache_dir must be a vault-relative path")
     context_path_value = merged["index"]["context_path"]
     if not isinstance(context_path_value, str) or not context_path_value.strip():
         raise ConfigError(f"{path}: index.context_path must be a non-empty path")
@@ -172,6 +184,15 @@ def context_path() -> str:
 
 def contextual_bm25_enabled() -> bool:
     return bool(_get("index", "contextual_bm25"))
+
+
+def vector_cache_mode() -> str:
+    return str(_get("index", "vector_cache_mode"))
+
+
+def vector_cache_dir() -> str:
+    """Vault-relative directory of the shared vector cache (validated by callers)."""
+    return str(_get("index", "vector_cache_dir"))
 
 
 def obsidian_binary() -> Optional[str]:

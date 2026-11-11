@@ -169,6 +169,7 @@ PACKAGES = {
                 "entries per note, distinguished by the `granularity` metadata field) with "
                 "failure-safe incremental sync, one canonical note-summary store shared by "
                 "manual and OpenRouter generation, and separate dense/lexical/source views; "
+                "a vault-carried vector cache so only one machine embeds (export/import); "
                 "plus a read-only stats reader.",
     },
     "vault_spider.retrieval": {
