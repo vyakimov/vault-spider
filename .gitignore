@@ -8,8 +8,6 @@ config.yaml
 **/.DS_Store
 CLAUDE.md
 chroma_db/
-chroma-snapshot/
-.chroma-snapshot.*/
 chroma_db_lowmem/
 context-data/
 search_results/

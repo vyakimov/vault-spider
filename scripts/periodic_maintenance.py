@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Run serialized Vault Spider maintenance for launchd.
 
-The default job performs an incremental sync and, when it reports ok, publishes
-a copy of the index as ``chroma-snapshot/`` for other devices to pull. Set
+The default job performs an incremental sync only. Set
 ``VAULT_SPIDER_RUN_LINT=1`` (or pass ``--lint``) to run the read-only lint
 report after a successful sync. Full command envelopes are kept in a private
 per-user state directory while launchd receives compact JSON-line events.
@@ -14,7 +13,6 @@ import argparse
 import fcntl
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,10 +20,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-INDEX_DIR = "chroma_db"
-SNAPSHOT_DIR = "chroma-snapshot"
-_STAGING_PREFIX = f".{SNAPSHOT_DIR}."
 
 
 class MaintenanceError(RuntimeError):
@@ -108,50 +102,6 @@ def _run_command(wrapper: Path, repo: Path, action: str) -> Tuple[int, Dict[str,
     return process.returncode, payload
 
 
-def _publish_snapshot(repo: Path) -> Dict[str, Any]:
-    """Copy the index to a staging folder, then rename it over the snapshot.
-
-    Readers pulling ``chroma-snapshot/`` never see a half-copied index: the
-    slow copy happens in a hidden sibling and only two renames touch the
-    published name.
-    """
-    started = time.monotonic()
-    source = repo / INDEX_DIR
-    target = repo / SNAPSHOT_DIR
-    if not source.is_dir():
-        raise MaintenanceError(f"index directory not found: {source}")
-
-    # A run killed mid-copy leaves its staging folder behind; the maintenance
-    # lock guarantees no other run owns one.
-    for leftover in repo.glob(f"{_STAGING_PREFIX}*"):
-        shutil.rmtree(leftover, ignore_errors=True)
-
-    staging = Path(tempfile.mkdtemp(prefix=_STAGING_PREFIX, dir=repo))
-    try:
-        fresh = staging / "new"
-        shutil.copytree(source, fresh)
-        retired = staging / "old"
-        replaced = target.exists()
-        if replaced:
-            os.rename(target, retired)
-        try:
-            os.rename(fresh, target)
-        except OSError:
-            if replaced:
-                os.rename(retired, target)
-            raise
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
-
-    files = [item for item in target.rglob("*") if item.is_file()]
-    return {
-        "path": str(target),
-        "files": len(files),
-        "bytes": sum(item.stat().st_size for item in files),
-        "duration_ms": round((time.monotonic() - started) * 1000, 2),
-    }
-
-
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -199,15 +149,6 @@ def main(argv: Optional[List[str]] = None) -> int:
             if sync_code != 0 or not sync_payload.get("ok"):
                 return sync_code or 1
 
-            snapshot_ok = True
-            try:
-                _event("snapshot_published", ok=True, **_publish_snapshot(repo))
-            except (OSError, MaintenanceError) as exc:
-                # The local index is still good; keep going, but exit non-zero
-                # so launchd records that other devices did not get an update.
-                snapshot_ok = False
-                _event("snapshot_published", ok=False, error=str(exc))
-
             if lint_enabled:
                 lint_code, lint_payload = _run_command(wrapper, repo, "lint")
                 _atomic_json(state / "last-lint.json", lint_payload)
@@ -225,8 +166,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 if lint_code != 0 or not lint_payload.get("ok"):
                     return lint_code or 1
 
-            _event("maintenance_completed", ok=snapshot_ok)
-            return 0 if snapshot_ok else 1
+            _event("maintenance_completed", ok=True)
+            return 0
     except (OSError, MaintenanceError) as exc:
         _event("maintenance_failed", error=str(exc))
         return 1
