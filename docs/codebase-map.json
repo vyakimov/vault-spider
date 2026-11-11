@@ -484,7 +484,7 @@
         },
         {
           "path": "vault_spider/settings.py",
-          "loc": 219,
+          "loc": 265,
           "summary": "Installation settings, read from an optional ``config.yaml``.",
           "internal_deps": [],
           "classes": [
@@ -494,7 +494,7 @@
                 "ValueError"
               ],
               "doc": "config.yaml exists but is unusable. Surfaced as `invalid_arguments`.",
-              "line": 61,
+              "line": 64,
               "fields": [],
               "methods": []
             }
@@ -504,109 +504,121 @@
               "name": "config_path",
               "signature": "() -> Path",
               "doc": null,
-              "line": 65
+              "line": 68
             },
             {
               "name": "reset",
               "signature": "() -> None",
               "doc": "Drop the cached config, so the next read re-parses the file.",
-              "line": 73
+              "line": 76
             },
             {
               "name": "load",
               "signature": "(refresh: bool=False) -> Dict[str, Dict[str, Any]]",
               "doc": "Defaults, overlaid with ``config.yaml`` when it exists.",
-              "line": 79
+              "line": 82
             },
             {
               "name": "vault_root",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 151
+              "line": 182
             },
             {
               "name": "skip_dirs",
               "signature": "() -> Set[str]",
               "doc": null,
-              "line": 156
+              "line": 187
             },
             {
               "name": "ignore_tags",
               "signature": "() -> List[str]",
               "doc": null,
-              "line": 160
+              "line": 191
             },
             {
               "name": "distilled_dir",
               "signature": "() -> str",
               "doc": null,
-              "line": 164
+              "line": 195
             },
             {
               "name": "chroma_path",
               "signature": "() -> str",
               "doc": null,
-              "line": 169
+              "line": 200
             },
             {
               "name": "contextual_enabled",
               "signature": "() -> bool",
               "doc": null,
-              "line": 173
+              "line": 204
             },
             {
               "name": "context_source",
               "signature": "() -> str",
               "doc": null,
-              "line": 177
+              "line": 208
             },
             {
               "name": "context_path",
               "signature": "() -> str",
               "doc": null,
-              "line": 181
+              "line": 212
             },
             {
               "name": "contextual_bm25_enabled",
               "signature": "() -> bool",
               "doc": null,
-              "line": 185
+              "line": 216
+            },
+            {
+              "name": "embedding_model_equivalents",
+              "signature": "() -> List[List[str]]",
+              "doc": null,
+              "line": 220
+            },
+            {
+              "name": "embedding_models_equivalent",
+              "signature": "(first: str, second: str, groups: Optional[List[List[str]]]=None) -> bool",
+              "doc": "True when both names are the same model: identical, or listed in one group.",
+              "line": 227
             },
             {
               "name": "vector_cache_mode",
               "signature": "() -> str",
               "doc": null,
-              "line": 189
+              "line": 235
             },
             {
               "name": "vector_cache_dir",
               "signature": "() -> str",
               "doc": "Vault-relative directory of the shared vector cache (validated by callers).",
-              "line": 193
+              "line": 239
             },
             {
               "name": "obsidian_binary",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 198
+              "line": 244
             },
             {
               "name": "obsidian_vault",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 203
+              "line": 249
             },
             {
               "name": "obsidian_manage_updated",
               "signature": "() -> bool",
               "doc": null,
-              "line": 208
+              "line": 254
             },
             {
               "name": "timestamp_policy",
               "signature": "() -> str",
               "doc": null,
-              "line": 212
+              "line": 258
             }
           ],
           "constants": [
@@ -1404,9 +1416,10 @@
         },
         {
           "path": "vault_spider/index/store.py",
-          "loc": 951,
+          "loc": 967,
           "summary": "Build and maintain a Chroma collection for Markdown notes.",
           "internal_deps": [
+            "vault_spider",
             "vault_spider.config",
             "vault_spider.corpus.chunker",
             "vault_spider.corpus.loader",
@@ -1423,7 +1436,7 @@
                 "ValueError"
               ],
               "doc": "Stored index metadata is incompatible with the requested configuration.",
-              "line": 48,
+              "line": 49,
               "fields": [],
               "methods": []
             },
@@ -1431,38 +1444,38 @@
               "name": "IndexStore",
               "bases": [],
               "doc": "Maintain the persistent vector store and in-memory BM25 indexes.",
-              "line": 52,
+              "line": 53,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
-                  "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes', bm25_k1: Optional[float]=None, bm25_b: Optional[float]=None, provider: Optional[OpenRouterClient]=None, allow_model_mismatch: bool=False, contextual: Optional[ContextualConfig]=None)",
+                  "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes', bm25_k1: Optional[float]=None, bm25_b: Optional[float]=None, provider: Optional[OpenRouterClient]=None, allow_model_mismatch: bool=False, contextual: Optional[ContextualConfig]=None, embedding_model_equivalents: Optional[List[List[str]]]=None)",
                   "doc": null,
-                  "line": 55
+                  "line": 56
                 },
                 {
                   "name": "granularity_data",
                   "signature": "(self, granularity: str) -> Tuple[List[str], List[str], List[Dict[str, Any]], Optional[BM25Okapi]]",
                   "doc": null,
-                  "line": 239
+                  "line": 255
                 },
                 {
                   "name": "sync",
                   "signature": "(self, root: str, reset: bool=False, dry_run: bool=False, contextualize: bool=False, refresh_context: bool=False, vector_cache: Optional[VectorCache]=None, offline: bool=False) -> Dict[str, object]",
                   "doc": "Bring the index in line with the vault at ``root``.",
-                  "line": 407
+                  "line": 423
                 },
                 {
                   "name": "export_vectors",
                   "signature": "(self, cache_root: str) -> Dict[str, Any]",
                   "doc": "Write every vector of the index to the vector cache under ``cache_root``.",
-                  "line": 804
+                  "line": 820
                 },
                 {
                   "name": "get_collection_stats",
                   "signature": "(self) -> Dict[str, object]",
                   "doc": null,
-                  "line": 907
+                  "line": 923
                 }
               ]
             }
@@ -2966,7 +2979,7 @@
       "modules": [
         {
           "path": "scripts/periodic_maintenance.py",
-          "loc": 236,
+          "loc": 177,
           "summary": "Run serialized Vault Spider maintenance for launchd.",
           "internal_deps": [],
           "classes": [
@@ -2976,7 +2989,7 @@
                 "RuntimeError"
               ],
               "doc": null,
-              "line": 31,
+              "line": 25,
               "fields": [],
               "methods": []
             }
@@ -2986,13 +2999,8 @@
               "name": "main",
               "signature": "(argv: Optional[List[str]]=None) -> int",
               "doc": null,
-              "line": 171
+              "line": 121
             }
-          ],
-          "constants": [
-            "INDEX_DIR",
-            "SNAPSHOT_DIR",
-            "_STAGING_PREFIX"
           ]
         },
         {
@@ -3481,8 +3489,8 @@
       },
       {
         "path": "tests/test_periodic_maintenance.py",
-        "loc": 169,
-        "test_count": 5,
+        "loc": 102,
+        "test_count": 3,
         "summary": "Tests for the launchd maintenance runner without a real vault or provider.",
         "covers": []
       },
@@ -3553,8 +3561,8 @@
       },
       {
         "path": "tests/test_settings.py",
-        "loc": 181,
-        "test_count": 18,
+        "loc": 220,
+        "test_count": 22,
         "summary": "Tests for vault_spider.settings (the optional config.yaml).",
         "covers": [
           "vault_spider",
@@ -3577,8 +3585,8 @@
       },
       {
         "path": "tests/test_store_sync.py",
-        "loc": 249,
-        "test_count": 12,
+        "loc": 302,
+        "test_count": 15,
         "summary": "Tests for vault_spider.index.store.IndexStore.sync against a real Chroma db.",
         "covers": [
           "vault_spider.index.store",

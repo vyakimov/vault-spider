@@ -57,6 +57,15 @@ index:
   # Requires contextual: true.
   contextual_bm25: false
 
+  # The index records which embedding model built it and refuses to open under a
+  # different one. Some models are served under different names by different
+  # providers (an index embedded through OpenRouter on one machine, queried through
+  # another OpenAI-compatible endpoint on another). List every name of the same model in one group;
+  # a name may appear in only one group. Only group names you have verified produce
+  # identical vectors, because mixing different models silently ruins retrieval.
+  embedding_model_equivalents: []
+  #  - [text-embedding-3-small, openai/text-embedding-3-small]   # OpenAI, OpenRouter
+
   # Share embeddings between machines through the vault's own file sync (e.g. Obsidian
   # Sync with "Sync all other types" enabled), so only one machine ever embeds.
   #   off     — default; this machine embeds for itself.

@@ -39,6 +39,9 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         "context_source": "manual",
         "context_path": "context-data/summaries",
         "contextual_bm25": False,
+        # Groups of names for the same embedding model on different providers,
+        # e.g. [[text-embedding-3-small, openai/text-embedding-3-small]].
+        "embedding_model_equivalents": [],
         # Vectors shared through the vault's own file sync (vector_cache.py):
         # `export` on the machine that embeds, `import` on machines that must not.
         "vector_cache_mode": "off",
@@ -120,6 +123,7 @@ def load(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
         raise ConfigError(
             f"{path}: index.context_source must be 'manual' or 'openrouter'"
         )
+    _validate_equivalents(path, merged["index"]["embedding_model_equivalents"])
     mode = merged["index"]["vector_cache_mode"]
     if mode not in {"off", "export", "import"}:
         raise ConfigError(
@@ -134,6 +138,33 @@ def load(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
 
     _cache = merged
     return merged
+
+
+def _validate_equivalents(path: Path, groups: Any) -> None:
+    key = "index.embedding_model_equivalents"
+    if not isinstance(groups, list):
+        raise ConfigError(f"{path}: {key} must be a list of name groups")
+    seen: Dict[str, int] = {}
+    for position, group in enumerate(groups):
+        if (
+            not isinstance(group, list)
+            or not all(isinstance(name, str) and name.strip() for name in group)
+        ):
+            raise ConfigError(
+                f"{path}: {key}[{position}] must be a list of non-empty model names"
+            )
+        names = {name.strip() for name in group}
+        if len(names) < 2:
+            raise ConfigError(
+                f"{path}: {key}[{position}] must list at least two distinct names"
+            )
+        for name in names:
+            if name in seen:
+                raise ConfigError(
+                    f"{path}: {key}: {name!r} appears in groups {seen[name]} "
+                    f"and {position}; a model name may belong to one group only"
+                )
+            seen[name] = position
 
 
 def _get(section: str, key: str) -> Any:
@@ -186,6 +217,21 @@ def contextual_bm25_enabled() -> bool:
     return bool(_get("index", "contextual_bm25"))
 
 
+def embedding_model_equivalents() -> List[List[str]]:
+    return [
+        [name.strip() for name in group]
+        for group in _get("index", "embedding_model_equivalents")
+    ]
+
+
+def embedding_models_equivalent(
+    first: str, second: str, groups: Optional[List[List[str]]] = None
+) -> bool:
+    """True when both names are the same model: identical, or listed in one group."""
+    if first == second:
+        return True
+    groups = embedding_model_equivalents() if groups is None else groups
+    return any(first in group and second in group for group in groups)
 def vector_cache_mode() -> str:
     return str(_get("index", "vector_cache_mode"))
 

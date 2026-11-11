@@ -290,6 +290,10 @@ from `config.yaml` (`timestamps.policy`: `offset_local`, `utc_z`, or `obsidian_l
 All of these are configurable in `config.yaml`; the values below are the defaults.
 
 - ChromaDB directory: `./chroma_db/` (`index.chroma_path`)
+- Embedding-model guard: an index opens only under the embedding model recorded at build time,
+  or a name in the same `index.embedding_model_equivalents` group (default none) — every name of
+  one model served by different providers, e.g.
+  `[text-embedding-3-small, openai/text-embedding-3-small]`. A name belongs to one group only.
 - Durable manual context summaries: `./context-data/summaries/` (`index.context_path`);
   prepared jobs default to the sibling `./context-data/jobs/`
 - Eval artifacts are persistent but isolated: each committed eval config resolves its

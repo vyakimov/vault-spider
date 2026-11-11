@@ -332,6 +332,12 @@ checked. If the embedding provider fails partway through, the existing index sti
 next sync retries cleanly. Every provider response is checked (index order, vector size, no
 invalid numbers). A bad response becomes a `provider_error` — it never corrupts the index.
 
+The index records the embedding model that built it and refuses to open under a different one.
+When one model is served under different names by different providers — for example an index
+built through OpenRouter (`openai/text-embedding-3-small`) and queried through OpenAI directly
+(`text-embedding-3-small`) — list every name for it in one `index.embedding_model_equivalents` group in
+`config.yaml`. Group only names that produce identical vectors.
+
 ## Vault health — `lint`
 
 `lint` is read-only by default. It reports the checks you would actually act on:

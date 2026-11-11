@@ -16,6 +16,7 @@ from chromadb.errors import NotFoundError
 from nltk.stem import PorterStemmer
 from rank_bm25 import BM25Okapi
 
+from vault_spider import settings
 from vault_spider.config import BM25_CONFIG
 from vault_spider.corpus.chunker import (
     CHUNK_SCHEMA_VERSION,
@@ -61,6 +62,7 @@ class IndexStore:
         provider: Optional[OpenRouterClient] = None,
         allow_model_mismatch: bool = False,
         contextual: Optional[ContextualConfig] = None,
+        embedding_model_equivalents: Optional[List[List[str]]] = None,
     ):
         self.chroma_db_path = chroma_db_path
         self.collection_name = collection_name
@@ -68,6 +70,13 @@ class IndexStore:
         # True when the caller intends to reset the collection anyway (sync
         # --reset); an embedding-model mismatch is then not an error.
         self.allow_model_mismatch = allow_model_mismatch
+        # Same model served under different names (e.g. a provider's own id
+        # vs OpenRouter's), so an index embedded on one provider is queryable on another.
+        self.embedding_model_equivalents = (
+            settings.embedding_model_equivalents()
+            if embedding_model_equivalents is None
+            else embedding_model_equivalents
+        )
         self.contextual = contextual or ContextualConfig.from_settings(self.provider)
         if self.contextual.source not in {"manual", "openrouter"}:
             raise IndexConfigError(
@@ -157,12 +166,19 @@ class IndexStore:
         existing_model = current_metadata.get("embedding_model")
         if (
             existing_model
-            and existing_model != self.provider.embedding_model
+            and not settings.embedding_models_equivalent(
+                existing_model,
+                self.provider.embedding_model,
+                self.embedding_model_equivalents,
+            )
             and not self.allow_model_mismatch
         ):
             raise IndexConfigError(
-                "Collection was built with a different embedding model. "
-                "Run `vault-spider sync --reset` to rebuild it."
+                f"Collection was built with embedding model {existing_model!r}, "
+                f"but {self.provider.embedding_model!r} is configured. Run "
+                "`vault-spider sync --reset` to rebuild it, or, if both names are "
+                "the same model on different providers, list them together in "
+                "index.embedding_model_equivalents."
             )
         if (
             current_metadata.get("contextual_state") == "on"
