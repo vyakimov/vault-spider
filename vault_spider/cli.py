@@ -62,6 +62,26 @@ def get_store(
         raise CliError("config_mismatch", str(exc)) from exc
 
 
+def apply_live_overlay(store, root_arg: Optional[str] = None) -> Dict[str, Any]:
+    """Refresh the store's lexical view from the live vault; returns ``meta.live_overlay``.
+
+    Never fails the command. Retrieval over the snapshot alone still works, so an
+    unresolvable vault, or any overlay error, is reported as a skip with its reason.
+    """
+    if not settings.live_lexical_enabled():
+        return {"applied": False, "reason": "disabled (index.live_lexical: false)"}
+    started = time.monotonic()
+    try:
+        root = resolve_root(root_arg)
+        if not os.path.isdir(root):
+            return {"applied": False, "reason": f"vault root not found: {root}"}
+        report = store.apply_live_overlay(root)
+    except Exception as exc:  # noqa: BLE001 - degrade to the snapshot, never fail
+        return {"applied": False, "reason": f"{type(exc).__name__}: {exc}"}
+    report["timing_ms"] = round((time.monotonic() - started) * 1000, 2)
+    return report
+
+
 def resolve_root(explicit: Optional[str]) -> str:
     if explicit is not None:
         return explicit
@@ -473,13 +493,42 @@ def cmd_schema(args: argparse.Namespace) -> Dict[str, Any]:
     return success("schema", result=_schema(), meta={"version": SCHEMA_VERSION})
 
 
+def embedding_models_match(exported: str, configured: str) -> bool:
+    """Whether an exported vector cache's model is the one configured here.
+
+    Honours index.embedding_model_equivalents: the exporting machine may name the
+    same model differently (e.g. through another provider).
+    """
+    return settings.embedding_models_equivalent(exported, configured)
+
+
+def _vector_cache_root(root: str) -> str:
+    try:
+        relative = validate_vault_relative_path(
+            settings.vector_cache_dir(), label="index.vector_cache_dir"
+        )
+    except ValueError as exc:
+        raise CliError("invalid_arguments", str(exc)) from exc
+    return str(Path(root) / relative)
+
+
 def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
+    from vault_spider.index import vector_cache
+
     root = resolve_root(args.root)
     if not os.path.isdir(root):
         return failure("sync", "invalid_arguments", f"root directory not found: {root}")
     if args.reset and args.dry_run:
         return failure(
             "sync", "invalid_arguments", "--reset cannot be combined with --dry-run"
+        )
+    mode = settings.vector_cache_mode()
+    if mode == "import" and (args.contextualize or args.refresh_context):
+        return failure(
+            "sync",
+            "invalid_arguments",
+            "--contextualize/--refresh-context are unavailable with "
+            "index.vector_cache_mode: import (this machine never calls the provider for notes)",
         )
     provider = get_provider()
     store = get_store(
@@ -488,6 +537,24 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
         provider,
         allow_model_mismatch=args.reset,
     )
+    cache = None
+    cache_info: Dict[str, Any] = {}
+    if mode == "import":
+        try:
+            cache, cache_info = vector_cache.for_import(
+                Path(_vector_cache_root(root)),
+                provider.embedding_model,
+                embedding_models_match,
+            )
+        except vector_cache.VectorCacheError as exc:
+            raise CliError("config_mismatch", str(exc)) from exc
+        local_state = "on" if store.contextual.enabled else "off"
+        if cache is not None and cache_info.get("contextual_state", local_state) != local_state:
+            raise CliError(
+                "config_mismatch",
+                f"vector export was built with index.contextual "
+                f"{cache_info.get('contextual_state')}, this machine has {local_state}",
+            )
     try:
         result = store.sync(
             root,
@@ -495,9 +562,27 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
             dry_run=args.dry_run,
             contextualize=args.contextualize,
             refresh_context=args.refresh_context,
+            vector_cache=cache,
+            offline=mode == "import",
         )
     except ValueError as exc:
         raise CliError("invalid_arguments", str(exc)) from exc
+    if mode == "import" and not args.dry_run:
+        report = dict(result.get("vector_cache") or {})
+        report["export_found"] = cache is not None
+        if cache is None:
+            report["available_models"] = cache_info.get("available_models", [])
+            result.setdefault("warnings", []).append(
+                "no vector export for this embedding model has arrived yet; "
+                "new and changed notes stay pending (keyword search still finds them)"
+            )
+        result["vector_cache"] = report
+    if mode == "export" and not args.dry_run:
+        try:
+            result["vector_export"] = store.export_vectors(_vector_cache_root(root))
+        except (OSError, vector_cache.VectorCacheError) as exc:
+            result["vector_export"] = {"error": str(exc)}
+            result.setdefault("warnings", []).append(f"vector export failed: {exc}")
     return success(
         "sync",
         result=result,
@@ -507,6 +592,7 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
             "dry_run": args.dry_run,
             "contextualize": args.contextualize or args.refresh_context,
             "refresh_context": args.refresh_context,
+            "vector_cache_mode": mode,
         },
     )
 
@@ -623,6 +709,7 @@ def cmd_retrieve(args: argparse.Namespace) -> Dict[str, Any]:
             "index_empty",
             "index is empty; run `vault-spider sync --root <dir>` first",
         )
+    live_overlay = apply_live_overlay(store, getattr(args, "root", None))
     try:
         output, result = _run_retrieval(
             store, provider, args.query, args.mode, args.granularity, args.n, args
@@ -631,7 +718,11 @@ def cmd_retrieve(args: argparse.Namespace) -> Dict[str, Any]:
         return failure("retrieve", "provider_error", str(exc))
     except ValueError as exc:
         return failure("retrieve", "not_found", str(exc))
-    meta = {"timing_ms": round(result.timing_ms, 2), "tunables": result.debug_info}
+    meta = {
+        "timing_ms": round(result.timing_ms, 2),
+        "tunables": result.debug_info,
+        "live_overlay": live_overlay,
+    }
     return success("retrieve", result=output, meta=meta)
 
 
@@ -729,6 +820,7 @@ def cmd_synthesize(args: argparse.Namespace) -> Dict[str, Any]:
             )
 
     provider = get_provider()
+    live_overlay: Optional[Dict[str, Any]] = None
     if not args.retrieval:
         store = get_store(args.chroma_path, args.collection, provider)
         if store.collection.count() == 0:
@@ -737,6 +829,7 @@ def cmd_synthesize(args: argparse.Namespace) -> Dict[str, Any]:
                 "index_empty",
                 "index is empty; run `vault-spider sync --root <dir>` first",
             )
+        live_overlay = apply_live_overlay(store, args.root)
         try:
             retrieval_output, _ = _run_retrieval(
                 store, provider, query, args.mode, args.granularity, args.n, args
@@ -756,6 +849,8 @@ def cmd_synthesize(args: argparse.Namespace) -> Dict[str, Any]:
         return failure("synthesize", "provider_error", str(exc))
 
     meta: Dict[str, Any] = {}
+    if live_overlay is not None:
+        meta["live_overlay"] = live_overlay
     if args.save:
         from vault_spider.compounding.distill import (
             EmptySlugError,
@@ -838,6 +933,7 @@ def cmd_enrich(args: argparse.Namespace) -> Dict[str, Any]:
             "enrich", "index_empty", "index is empty; run `vault-spider sync --root <dir>` first"
         )
 
+    live_overlay = apply_live_overlay(store, args.root)
     inp = EnrichInput(
         body=body,
         title=title,
@@ -851,7 +947,7 @@ def cmd_enrich(args: argparse.Namespace) -> Dict[str, Any]:
         result = plan(inp, store, provider)
     except OpenRouterError as exc:
         return failure("enrich", "provider_error", str(exc))
-    return success("enrich", result=result)
+    return success("enrich", result=result, meta={"live_overlay": live_overlay})
 
 
 def _lint_text(report: Dict[str, Any]) -> str:

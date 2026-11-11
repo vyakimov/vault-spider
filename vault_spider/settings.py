@@ -39,6 +39,16 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         "context_source": "manual",
         "context_path": "context-data/summaries",
         "contextual_bm25": False,
+        # Groups of names for the same embedding model on different providers,
+        # e.g. [[text-embedding-3-small, openai/text-embedding-3-small]].
+        "embedding_model_equivalents": [],
+        # Rebuild BM25 and cited source text from the live vault at query time, so
+        # notes written since the last embedding are findable by keyword.
+        "live_lexical": True,
+        # Vectors shared through the vault's own file sync (vector_cache.py):
+        # `export` on the machine that embeds, `import` on machines that must not.
+        "vector_cache_mode": "off",
+        "vector_cache_dir": "_vault-spider/vectors",
     },
     "timestamps": {
         "policy": "offset_local",  # or "utc_z" / "obsidian_local"
@@ -103,7 +113,7 @@ def load(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
                     )
                 merged[section].update(values)
 
-    for key in ("contextual", "contextual_bm25"):
+    for key in ("contextual", "contextual_bm25", "live_lexical"):
         value = merged["index"][key]
         if not isinstance(value, bool):
             raise ConfigError(f"{path}: index.{key} must be true or false")
@@ -116,12 +126,48 @@ def load(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
         raise ConfigError(
             f"{path}: index.context_source must be 'manual' or 'openrouter'"
         )
+    _validate_equivalents(path, merged["index"]["embedding_model_equivalents"])
+    mode = merged["index"]["vector_cache_mode"]
+    if mode not in {"off", "export", "import"}:
+        raise ConfigError(
+            f"{path}: index.vector_cache_mode must be 'off', 'export' or 'import'"
+        )
+    cache_dir = merged["index"]["vector_cache_dir"]
+    if not isinstance(cache_dir, str) or not cache_dir.strip():
+        raise ConfigError(f"{path}: index.vector_cache_dir must be a vault-relative path")
     context_path_value = merged["index"]["context_path"]
     if not isinstance(context_path_value, str) or not context_path_value.strip():
         raise ConfigError(f"{path}: index.context_path must be a non-empty path")
 
     _cache = merged
     return merged
+
+
+def _validate_equivalents(path: Path, groups: Any) -> None:
+    key = "index.embedding_model_equivalents"
+    if not isinstance(groups, list):
+        raise ConfigError(f"{path}: {key} must be a list of name groups")
+    seen: Dict[str, int] = {}
+    for position, group in enumerate(groups):
+        if (
+            not isinstance(group, list)
+            or not all(isinstance(name, str) and name.strip() for name in group)
+        ):
+            raise ConfigError(
+                f"{path}: {key}[{position}] must be a list of non-empty model names"
+            )
+        names = {name.strip() for name in group}
+        if len(names) < 2:
+            raise ConfigError(
+                f"{path}: {key}[{position}] must list at least two distinct names"
+            )
+        for name in names:
+            if name in seen:
+                raise ConfigError(
+                    f"{path}: {key}: {name!r} appears in groups {seen[name]} "
+                    f"and {position}; a model name may belong to one group only"
+                )
+            seen[name] = position
 
 
 def _get(section: str, key: str) -> Any:
@@ -172,6 +218,34 @@ def context_path() -> str:
 
 def contextual_bm25_enabled() -> bool:
     return bool(_get("index", "contextual_bm25"))
+
+
+def live_lexical_enabled() -> bool:
+    return bool(_get("index", "live_lexical"))
+
+
+def embedding_model_equivalents() -> List[List[str]]:
+    return [
+        [name.strip() for name in group]
+        for group in _get("index", "embedding_model_equivalents")
+    ]
+
+
+def embedding_models_equivalent(
+    first: str, second: str, groups: Optional[List[List[str]]] = None
+) -> bool:
+    """True when both names are the same model: identical, or listed in one group."""
+    if first == second:
+        return True
+    groups = embedding_model_equivalents() if groups is None else groups
+    return any(first in group and second in group for group in groups)
+def vector_cache_mode() -> str:
+    return str(_get("index", "vector_cache_mode"))
+
+
+def vector_cache_dir() -> str:
+    """Vault-relative directory of the shared vector cache (validated by callers)."""
+    return str(_get("index", "vector_cache_dir"))
 
 
 def obsidian_binary() -> Optional[str]:

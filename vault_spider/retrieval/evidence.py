@@ -30,7 +30,21 @@ def _zscores(values: List[float]) -> List[float]:
     return ((arr - mean) / std).tolist()
 
 
+# Set by IndexStore.apply_live_overlay on entries rebuilt from the live vault.
+_INDEX_STATE_NOTES = {
+    "unembedded": "not embedded yet (keyword match only)",
+    "edited": "edited since it was embedded",
+}
+
+
 def _why(row: Dict[str, Any]) -> str:
+    reason = _base_why(row)
+    state = (row.get("metadata") or {}).get("index_state")
+    note = _INDEX_STATE_NOTES.get(str(state)) if state else None
+    return f"{reason}; {note}" if note else reason
+
+
+def _base_why(row: Dict[str, Any]) -> str:
     rerank_rank = row.get("rerank_rank")
     if rerank_rank is not None and int(rerank_rank) <= 3:
         return f"reranked into top {int(rerank_rank)} for this query"

@@ -40,7 +40,7 @@ def test_build_plan_exposes_lint_but_never_enrichment(tmp_path, monkeypatch):
     repo = tmp_path / "vault-spider"
     home = tmp_path / "home"
     uv = home / ".local" / "bin" / "uv"
-    monkeypatch.setattr(setup_launchd, "_loaded", lambda: False)
+    monkeypatch.setattr(setup_launchd, "_loaded", lambda label=None: False)
 
     plan = setup_launchd.build_plan(repo, uv, home, 30, True, False)
 
@@ -111,7 +111,7 @@ def test_apply_starts_once_via_bootstrap_without_kickstart(tmp_path, monkeypatch
     home = tmp_path / "home"
     plist = setup_launchd.build_plist(repo, tmp_path / "bin" / "uv", home, 60, False)
     calls: list[list[str]] = []
-    monkeypatch.setattr(setup_launchd, "_loaded", lambda: False)
+    monkeypatch.setattr(setup_launchd, "_loaded", lambda label=None: False)
     monkeypatch.setattr(
         setup_launchd,
         "_launchctl",
@@ -129,3 +129,24 @@ def test_apply_starts_once_via_bootstrap_without_kickstart(tmp_path, monkeypatch
             str(home / "Library" / "LaunchAgents" / "ai.vault-spider.sync.plist"),
         ],
     ]
+
+
+def test_find_uv_skips_version_manager_shims(tmp_path):
+    """A mise/asdf shim resolves to the manager binary; launchd must get real uv."""
+    manager = tmp_path / "mise" / "bin" / "mise"
+    manager.parent.mkdir(parents=True)
+    manager.write_text("#!/bin/sh\n", encoding="utf-8")
+    manager.chmod(0o755)
+    shims = tmp_path / "shims"
+    shims.mkdir()
+    (shims / "uv").symlink_to(manager)
+    real_dir = tmp_path / "local" / "bin"
+    real_dir.mkdir(parents=True)
+    real = real_dir / "uv"
+    real.write_text("#!/bin/sh\n", encoding="utf-8")
+    real.chmod(0o755)
+
+    found = setup_launchd.find_uv(f"{shims}:{real_dir}")
+
+    assert found == real.resolve()
+    assert setup_launchd.find_uv(str(shims)) is None

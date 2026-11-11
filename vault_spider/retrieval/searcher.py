@@ -78,6 +78,38 @@ class Searcher:
             keyword_scores[doc_id] = float(base_score) * (1.0 + phrase_boost)
         return pd.Series(keyword_scores, dtype=float, name="keyword_scores")
 
+    @staticmethod
+    def impute_unembedded_semantic(
+        semantic: pd.Series, keyword: pd.Series, unembedded_ids: List[str]
+    ) -> pd.Series:
+        """Semantic scores for fusion, with a neutral stand-in for unembedded entries.
+
+        An entry added by the live lexical overlay has no vector yet, so its raw
+        semantic score is 0. Fusing that 0 ranks a brand-new note below whatever
+        is merely semantically nearest, even when it is the only exact keyword
+        match. Its semantic similarity is unknown, so it is assumed consistent
+        with its keyword evidence: the entry gets the semantic score found at
+        the same rank among the embedded candidates. Keyword rank 1 gets the
+        best semantic score present. Used for fusion only; reported scores stay
+        the raw ones.
+        """
+        if not unembedded_ids:
+            return semantic
+        missing = set(unembedded_ids)
+        embedded = sorted(
+            (float(value) for doc_id, value in semantic.items() if doc_id not in missing),
+            reverse=True,
+        )
+        imputed = semantic.copy()
+        if not embedded:
+            return imputed
+        keyword_rank = keyword.rank(ascending=False, method="first")
+        span = max(len(keyword) - 1, 1)
+        for doc_id in unembedded_ids:
+            quantile = (float(keyword_rank[doc_id]) - 1.0) / span
+            imputed[doc_id] = embedded[round(quantile * (len(embedded) - 1))]
+        return imputed
+
     def calculate_recency_scores(
         self,
         doc_ids: List[str],
@@ -348,10 +380,18 @@ class Searcher:
         raw_scores["keyword_scores"] = keyword_scores.reindex(
             candidate_ids
         ).fillna(0.0)
+        unembedded_ids = [
+            doc_id
+            for doc_id in candidate_ids
+            if metadata_by_id[doc_id].get("index_state") == "unembedded"
+        ]
+        fusion_semantic = self.impute_unembedded_semantic(
+            raw_scores["semantic_scores"], raw_scores["keyword_scores"], unembedded_ids
+        )
 
         if strategy == "rrf":
             fused = reciprocal_rank_fusion(
-                raw_scores["semantic_scores"],
+                fusion_semantic,
                 raw_scores["keyword_scores"],
                 allowed_ids=candidate_ids,
                 weight=params.semantic_weight,
@@ -359,7 +399,7 @@ class Searcher:
             )
         elif strategy == "zsigmoid":
             fused = zscore_sigmoid_fusion(
-                raw_scores["semantic_scores"],
+                fusion_semantic,
                 raw_scores["keyword_scores"],
                 allowed_ids=candidate_ids,
                 temperature=params.zsigmoid_temperature,
@@ -367,7 +407,7 @@ class Searcher:
             )
         elif strategy == "minmax":
             fused = pd.DataFrame(index=candidate_ids)
-            fused["semantic_score"] = min_max_scale(raw_scores["semantic_scores"])
+            fused["semantic_score"] = min_max_scale(fusion_semantic)
             fused["keyword_score"] = min_max_scale(raw_scores["keyword_scores"])
             fused["fused_score"] = (
                 fused["semantic_score"] * params.semantic_weight
@@ -544,6 +584,7 @@ class Searcher:
             ),
             "rerank_enabled": rerank_ran,
             "data_granularity": data_granularity,
+            "unembedded_candidates": len(unembedded_ids),
             "filters": {
                 key: value
                 for key, value in {

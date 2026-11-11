@@ -8,7 +8,7 @@ metadata field.
 from __future__ import annotations
 
 import hashlib
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import chromadb
@@ -16,6 +16,7 @@ from chromadb.errors import NotFoundError
 from nltk.stem import PorterStemmer
 from rank_bm25 import BM25Okapi
 
+from vault_spider import settings
 from vault_spider.config import BM25_CONFIG
 from vault_spider.corpus.chunker import (
     CHUNK_SCHEMA_VERSION,
@@ -37,6 +38,8 @@ from vault_spider.index.context_summaries import (
     SummaryResolution,
     SummaryStore,
 )
+from vault_spider.index.vector_cache import VectorCache
+from vault_spider.index.vector_cache import for_export as vector_cache_for_export
 from vault_spider.llm.openrouter import OpenRouterClient, OpenRouterError
 from vault_spider.utils import DEFAULT_STOP_WORDS, tokenize_for_bm25
 
@@ -59,6 +62,7 @@ class IndexStore:
         provider: Optional[OpenRouterClient] = None,
         allow_model_mismatch: bool = False,
         contextual: Optional[ContextualConfig] = None,
+        embedding_model_equivalents: Optional[List[List[str]]] = None,
     ):
         self.chroma_db_path = chroma_db_path
         self.collection_name = collection_name
@@ -66,6 +70,13 @@ class IndexStore:
         # True when the caller intends to reset the collection anyway (sync
         # --reset); an embedding-model mismatch is then not an error.
         self.allow_model_mismatch = allow_model_mismatch
+        # Same model served under different names (e.g. a provider's own id
+        # vs OpenRouter's), so an index embedded on one provider is queryable on another.
+        self.embedding_model_equivalents = (
+            settings.embedding_model_equivalents()
+            if embedding_model_equivalents is None
+            else embedding_model_equivalents
+        )
         self.contextual = contextual or ContextualConfig.from_settings(self.provider)
         if self.contextual.source not in {"manual", "openrouter"}:
             raise IndexConfigError(
@@ -155,12 +166,19 @@ class IndexStore:
         existing_model = current_metadata.get("embedding_model")
         if (
             existing_model
-            and existing_model != self.provider.embedding_model
+            and not settings.embedding_models_equivalent(
+                existing_model,
+                self.provider.embedding_model,
+                self.embedding_model_equivalents,
+            )
             and not self.allow_model_mismatch
         ):
             raise IndexConfigError(
-                "Collection was built with a different embedding model. "
-                "Run `vault-spider sync --reset` to rebuild it."
+                f"Collection was built with embedding model {existing_model!r}, "
+                f"but {self.provider.embedding_model!r} is configured. Run "
+                "`vault-spider sync --reset` to rebuild it, or, if both names are "
+                "the same model on different providers, list them together in "
+                "index.embedding_model_equivalents."
             )
         if (
             current_metadata.get("contextual_state") == "on"
@@ -192,15 +210,7 @@ class IndexStore:
         ]
 
     def _rehydrate_from_collection(self) -> None:
-        for granularity in GRANULARITIES:
-            self.documents[granularity] = []
-            self.lexical_documents[granularity] = []
-            self.source_documents[granularity] = []
-            self.ids[granularity] = []
-            self.metadatas[granularity] = []
-            self.tokenized[granularity] = []
-            self.bm25[granularity] = None
-
+        self._install_views(self._empty_views())
         if self.collection.count() == 0:
             return
 
@@ -209,20 +219,120 @@ class IndexStore:
         all_documents = payload.get("documents") or []
         all_metadatas = payload.get("metadatas") or []
 
+        views = self._empty_views()
         for entry_id, document, metadata in zip(all_ids, all_documents, all_metadatas):
-            metadata_dict: Dict[str, Any] = dict(metadata)
-            granularity = str(metadata_dict.get("granularity", "document"))
-            if granularity not in self.documents:
-                granularity = "document"
-            self.ids[granularity].append(entry_id)
-            self.documents[granularity].append(document)
-            source_offset = int(str(metadata_dict.get("source_offset", 0) or 0))
-            source = document[source_offset:] if source_offset else document
-            self.source_documents[granularity].append(source)
-            self.lexical_documents[granularity].append(
-                self._lexical_text(document, metadata_dict, source)
-            )
-            self.metadatas[granularity].append(metadata_dict)
+            self._append_entry(views, entry_id, document, dict(metadata))
+        self._install_views(views)
+
+    # Per-granularity parallel lists the searcher reads. Built into a fresh
+    # dict and installed in one step, so a reader never sees a half-built view.
+    _VIEW_FIELDS = ("documents", "lexical_documents", "source_documents", "ids", "metadatas")
+
+    def _empty_views(self) -> Dict[str, Dict[str, List[Any]]]:
+        return {field: {g: [] for g in GRANULARITIES} for field in self._VIEW_FIELDS}
+
+    def _append_entry(
+        self,
+        views: Dict[str, Dict[str, List[Any]]],
+        entry_id: str,
+        document: str,
+        metadata: Dict[str, Any],
+    ) -> None:
+        granularity = str(metadata.get("granularity", "document"))
+        if granularity not in GRANULARITIES:
+            granularity = "document"
+        source_offset = int(str(metadata.get("source_offset", 0) or 0))
+        source = document[source_offset:] if source_offset else document
+        views["ids"][granularity].append(entry_id)
+        views["documents"][granularity].append(document)
+        views["source_documents"][granularity].append(source)
+        views["lexical_documents"][granularity].append(
+            self._lexical_text(document, metadata, source)
+        )
+        views["metadatas"][granularity].append(metadata)
+
+    def _install_views(self, views: Dict[str, Dict[str, List[Any]]]) -> None:
+        self.documents = views["documents"]
+        self.lexical_documents = views["lexical_documents"]
+        self.source_documents = views["source_documents"]
+        self.ids = views["ids"]
+        self.metadatas = views["metadatas"]
+        self.tokenized = {g: [] for g in GRANULARITIES}
+        self.bm25 = {g: None for g in GRANULARITIES}
+
+    # -- live lexical overlay -------------------------------------------------
+
+    def apply_live_overlay(self, root: str) -> Dict[str, Any]:
+        """Make the lexical and source views reflect the live vault, without embedding.
+
+        The dense side stays the snapshot in Chroma: on a machine that pulls its
+        index from another, that can be days old. BM25 and the cited source text
+        are cheap to rebuild from the files, so this replaces the in-memory views:
+
+        - a note unchanged since the snapshot (same path and content hash) keeps
+          its snapshot entries exactly, including any note summary;
+        - a new, edited, or moved note gets entries rebuilt from the live file by
+          the same ``_entries_for_note`` that sync uses (no summary). A new note
+          is findable by keyword only until it is embedded; an edited one keeps
+          its previous vector, matched by entry id, until then;
+        - a note deleted since the snapshot is dropped, and so is any dense hit
+          for it, because the searcher only ranks ids present in these views.
+
+        Uses the same loader and duplicate-id rule as sync, so ``#secret`` /
+        ``#ignore`` notes and skipped folders stay excluded. Only the in-memory
+        views change; Chroma is never written.
+        """
+        notes = load_notes(root)
+        seen: set = set()
+        live: List[Note] = []
+        for note in notes:  # path-sorted; first id wins, as in sync
+            if note.note_id in seen:
+                continue
+            seen.add(note.note_id)
+            live.append(note)
+
+        snapshot_docs: Dict[str, Dict[str, Any]] = {
+            str(metadata.get("note_id", "")): metadata
+            for metadata in self.metadatas["document"]
+        }
+        unchanged: set = set()
+        rebuilt: List[Note] = []
+        added = changed = 0
+        for note in live:
+            previous = snapshot_docs.get(note.note_id)
+            if (
+                previous is not None
+                and previous.get("content_hash") == note.content_hash
+                and previous.get("path") == note.path
+            ):
+                unchanged.add(note.note_id)
+                continue
+            rebuilt.append(note)
+            if previous is None:
+                added += 1
+            else:
+                changed += 1
+
+        views = self._empty_views()
+        for granularity in GRANULARITIES:
+            for entry_id, document, metadata in zip(
+                self.ids[granularity], self.documents[granularity], self.metadatas[granularity]
+            ):
+                if str(metadata.get("note_id", "")) in unchanged:
+                    self._append_entry(views, entry_id, document, metadata)
+        for note in rebuilt:
+            state = "edited" if note.note_id in snapshot_docs else "unembedded"
+            for entry_id, document, metadata in self._entries_for_note(note):
+                metadata["index_state"] = state
+                self._append_entry(views, entry_id, document, metadata)
+        self._install_views(views)
+        return {
+            "applied": True,
+            "notes": len(live),
+            "added": added,
+            "changed": changed,
+            "removed": len(set(snapshot_docs) - seen),
+        }
 
     def _ensure_bm25(self, granularity: str) -> None:
         if self.bm25[granularity] is not None or not self.lexical_documents[granularity]:
@@ -409,7 +519,18 @@ class IndexStore:
         dry_run: bool = False,
         contextualize: bool = False,
         refresh_context: bool = False,
+        vector_cache: Optional[VectorCache] = None,
+        offline: bool = False,
     ) -> Dict[str, object]:
+        """Bring the index in line with the vault at ``root``.
+
+        ``vector_cache`` supplies vectors by entry hash before the provider is
+        asked. With ``offline=True`` the provider is never asked: a note is
+        added or updated only when every one of its vectors is available
+        (reused from the index or found in the cache). Otherwise it is left
+        exactly as it is and reported as pending, so a note is never half
+        indexed. Deleted notes are still removed.
+        """
         if reset and dry_run:
             # Reset drops the collection before anything is predicted; a
             # "dry run" that destroys data must be impossible.
@@ -612,6 +733,19 @@ class IndexStore:
         generated = summary_hits = 0
         failed_notes: List[str] = []
         added_notes = updated_notes = 0
+        pending_notes: List[str] = []
+        from_cache: Dict[str, List[float]] = {}
+
+        def resolvable(entry_hash: str) -> bool:
+            if not entry_hash:
+                return False
+            if entry_hash in reusable or entry_hash in from_cache:
+                return True
+            vector = vector_cache.get(entry_hash) if vector_cache is not None else None
+            if vector is not None:
+                from_cache[entry_hash] = vector
+            return vector is not None
+
         for note, sections, group, reason in action_plans:
             contexts: Dict[str, str] = {}
             input_hashes: Dict[str, str] = {}
@@ -656,6 +790,16 @@ class IndexStore:
                     }
                     summary_hits += 1
 
+            note_entries = self._entries_for_note(
+                note,
+                sections,
+                contexts,
+                input_hashes,
+                context_status=context_status,
+                note_context=note_context,
+                note_context_key=note_context_key,
+                note_context_model=note_context_model,
+            )
             if group is not None:
                 old = self.collection.get(
                     ids=cast(List[str], group["ids"]),
@@ -669,22 +813,20 @@ class IndexStore:
                     entry_hash = str(metadata.get("entry_hash", ""))
                     if entry_hash and embedding is not None:
                         reusable[entry_hash] = [float(value) for value in embedding]
+            if offline and not all(
+                resolvable(str(metadata.get("entry_hash", "")))
+                for _, _, metadata in note_entries
+            ):
+                # Leave the note exactly as indexed (or absent) until all its
+                # vectors have arrived: never half a note.
+                pending_notes.append(note.path)
+                continue
+            if group is not None:
                 ids_to_delete.extend(group["ids"])  # type: ignore[arg-type]
                 updated_notes += 1
             else:
                 added_notes += 1
-            entries_to_add.extend(
-                self._entries_for_note(
-                    note,
-                    sections,
-                    contexts,
-                    input_hashes,
-                    context_status=context_status,
-                    note_context=note_context,
-                    note_context_key=note_context_key,
-                    note_context_model=note_context_model,
-                )
-            )
+            entries_to_add.extend(note_entries)
 
         add_ids: List[str] = []
         add_texts: List[str] = []
@@ -698,12 +840,19 @@ class IndexStore:
             missing_indexes = []
             missing_texts = []
             for index, metadata in enumerate(add_metas):
-                cached = reusable.get(str(metadata.get("entry_hash", "")))
+                entry_hash = str(metadata.get("entry_hash", ""))
+                cached = reusable.get(entry_hash)
+                if cached is None and resolvable(entry_hash):
+                    cached = reusable.get(entry_hash) or from_cache.get(entry_hash)
                 if cached is None:
                     missing_indexes.append(index)
                     missing_texts.append(add_texts[index])
                 else:
                     embeddings[index] = cached
+            if missing_texts and offline:
+                raise RuntimeError(
+                    f"offline sync had {len(missing_texts)} entries without vectors"
+                )
             if missing_texts:
                 computed = self.provider.embed_texts(missing_texts, batch_size=32)
                 if len(computed) != len(missing_indexes):
@@ -739,6 +888,18 @@ class IndexStore:
             "total_entries": self.collection.count(),
             "warnings": warnings,
             "dry_run": False,
+            **(
+                {
+                    "vector_cache": {
+                        "offline": offline,
+                        "from_cache": len(from_cache),
+                        "pending_notes": len(pending_notes),
+                        "pending": sorted(pending_notes)[:50],
+                    }
+                }
+                if vector_cache is not None or offline
+                else {}
+            ),
             "context": self._context_summary(
                 notes,
                 sections_by_note,
@@ -747,6 +908,35 @@ class IndexStore:
                 failed_notes=failed_notes,
             ),
         }
+
+    def export_vectors(self, cache_root: str) -> Dict[str, Any]:
+        """Write every vector of the index to the vector cache under ``cache_root``.
+
+        Run on the machine that embeds, after a successful sync. Other machines
+        import from it (``sync(..., vector_cache=..., offline=True)``).
+        """
+        payload = self.collection.get(include=["embeddings", "metadatas"])
+        raw_embeddings = payload.get("embeddings")
+        vectors: Dict[str, List[float]] = {}
+        for embedding, metadata in zip(
+            [] if raw_embeddings is None else raw_embeddings, payload.get("metadatas") or []
+        ):
+            entry_hash = str((metadata or {}).get("entry_hash", ""))
+            if entry_hash and embedding is not None:
+                vectors[entry_hash] = [float(value) for value in embedding]
+        if not vectors:
+            return {"written": 0, "deleted": 0, "total": 0, "skipped": "index is empty"}
+        dimensions = len(next(iter(vectors.values())))
+        cache = vector_cache_for_export(Path(cache_root), self.provider.embedding_model, dimensions)
+        report = cache.export(
+            vectors,
+            extra={
+                "chunk_schema_version": CHUNK_SCHEMA_VERSION,
+                "contextual_state": "on" if self.contextual.enabled else "off",
+            },
+        )
+        report["directory"] = str(cache.directory)
+        return report
 
     def _context_summary(
         self,

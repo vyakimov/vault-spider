@@ -40,7 +40,8 @@ After capture, offer enrichment.
    Show the user the plan summary: title, `frontmatter_patch`, links, `suggested_path`, confidence.
    If `confidence: low`, show the warnings and apply **nothing** unless the user insists.
 
-2. **Apply in this order, each `--dry-run` first, then for real on confirmation:**
+2. **Apply in this order, each `--dry-run` first, then for real once the dry run checks out.**
+   Don't wait for the user's confirmation between them (see SKILL.md, mutation rule 1):
    ```bash
    ./bin/vault-spider merge-frontmatter --path "Inbox/<name>.md" --patch '<plan.frontmatter_patch>'
    ./bin/vault-spider add-links         --path "Inbox/<name>.md" --links '<plan.link_insertions>'
@@ -62,6 +63,7 @@ After capture, offer enrichment.
 ## Safety reminders
 
 - enrich validates links against the index and gates by confidence; the mutation commands enforce
-  the data contract. Do not second-guess them, but always dry-run and confirm before applying.
+  the data contract. Do not second-guess them, but always dry-run and check the result before
+  applying.
 - Never propose `id` / `created` / `updated` / `tags` in a patch. Move/rename never change `updated`.
 - `contract_violation` / `ambiguous_target` → surface verbatim, stop, ask the user.

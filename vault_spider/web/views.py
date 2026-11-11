@@ -92,6 +92,10 @@ def run_retrieval(
     """Retrieve, returning (output, error, meta). Exactly one of output/error is set."""
     # A `sync` between requests replaces the index under us; reconnect before querying.
     state.ensure_fresh_index()
+    # Notes written since the last embedding: keep keyword search and cited text current.
+    ensure_fresh_lexical = getattr(state, "ensure_fresh_lexical", None)
+    if ensure_fresh_lexical is not None:
+        ensure_fresh_lexical()
 
     def search_once():
         return state.searcher.hybrid_search(

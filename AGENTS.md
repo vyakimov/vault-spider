@@ -49,6 +49,11 @@ imported ones and treats `distilled` notes as pointers; retrieval filters on it
   - Failure-safe ordering: old entries are deleted only after all new embeddings have been
     computed and validated, so a provider failure mid-sync leaves the existing index usable.
   - `--reset` rebuilds the collection from scratch (needed once after an entry-shape change).
+  - `index.vector_cache_mode`: `export` also writes every vector into the vault after a
+    successful sync (`result.vector_export`); `import` takes vectors only from that export, so
+    notes are never embedded on this machine (`result.vector_cache`: `from_cache`,
+    `pending_notes`, `export_found`). Both machines need the same vault settings, embedding
+    model and `index.contextual`.
   - With `index.contextual: true`, note-level summaries are canonically stored under
     `index.context_path` (default `context-data/summaries`). `manual` consumes summaries imported
     from coding-agent jobs and never calls a context API. `openrouter` automatically generates
@@ -209,6 +214,12 @@ The `vault_spider` package is layered:
      collection plus dense, lexical, and source views and two BM25 indexes.
    - `context_summaries.py` — canonical note-summary records plus manual jobs, validation,
      import, fingerprinting, and coverage status.
+   - `vector_cache.py` — vectors shared through the vault's file sync: one immutable
+     float32 file per `entry_hash` under `<vault>/<index.vector_cache_dir>/<model slug>/`, plus a
+     manifest. `index.vector_cache_mode: export` writes them after each successful sync
+     (`IndexStore.export_vectors`); `import` makes `sync(..., vector_cache=, offline=True)` take
+     vectors only from them and never embed notes. A note changes only when all its vectors are
+     available, otherwise it is reported pending, and deletions still apply.
    - `context_generator.py` — optional one-call-per-note OpenRouter generation into the same
      canonical store; generated text is used for retrieval, never evidence.
    - `reader.py` — read-only Chroma access for the Notes UI.
@@ -279,6 +290,18 @@ from `config.yaml` (`timestamps.policy`: `offset_local`, `utc_z`, or `obsidian_l
 All of these are configurable in `config.yaml`; the values below are the defaults.
 
 - ChromaDB directory: `./chroma_db/` (`index.chroma_path`)
+- Live lexical overlay (`index.live_lexical`, default true): `retrieve`/`synthesize`/`enrich`
+  and the web app call `IndexStore.apply_live_overlay(root)`. It rebuilds the in-memory BM25,
+  source and metadata views from the live vault, reusing snapshot entries for unchanged notes
+  (same path and content hash) and dropping deleted ones, so only embeddings come from the last
+  sync. Chroma is never written. Rebuilt entries carry `index_state`: `unembedded` (new: keyword
+  only; the searcher imputes a rank-matched semantic score for fusion, while the reported score
+  stays 0) or `edited` (old vector, live text). `why` notes both states. `meta.live_overlay`
+  reports counts, or the reason it was skipped. Sync and eval never apply it.
+- Embedding-model guard: an index opens only under the embedding model recorded at build time,
+  or a name in the same `index.embedding_model_equivalents` group (default none) — every name of
+  one model served by different providers, e.g.
+  `[text-embedding-3-small, openai/text-embedding-3-small]`. A name belongs to one group only.
 - Durable manual context summaries: `./context-data/summaries/` (`index.context_path`);
   prepared jobs default to the sibling `./context-data/jobs/`
 - Eval artifacts are persistent but isolated: each committed eval config resolves its

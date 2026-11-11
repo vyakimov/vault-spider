@@ -247,3 +247,56 @@ def test_embedding_failure_leaves_existing_index_intact(
         store.sync(str(tiny_vault))
 
     assert snapshot() == before
+
+
+def _build_with_model(chroma_dir: Path, provider, model: str, groups=None) -> IndexStore:
+    provider.embedding_model = model
+    return IndexStore(
+        chroma_db_path=str(chroma_dir),
+        collection_name="vault_notes",
+        provider=provider,
+        embedding_model_equivalents=groups,
+    )
+
+
+def test_different_embedding_model_is_refused(tmp_path, tiny_vault, fake_provider):
+    from vault_spider.index.store import IndexConfigError
+
+    _build_with_model(tmp_path / "chroma", fake_provider, "openai/text-embedding-3-small").sync(
+        str(tiny_vault)
+    )
+    with pytest.raises(IndexConfigError, match="embedding_model_equivalents"):
+        _build_with_model(tmp_path / "chroma", fake_provider, "text-embedding-3-small", groups=[])
+
+
+def test_equivalent_embedding_model_opens_index(tmp_path, tiny_vault, fake_provider):
+    groups = [["text-embedding-3-small", "openai/text-embedding-3-small"]]
+    built = _build_with_model(
+        tmp_path / "chroma", fake_provider, "openai/text-embedding-3-small"
+    )
+    built.sync(str(tiny_vault))
+    expected = built.collection.count()
+
+    store = _build_with_model(
+        tmp_path / "chroma", fake_provider, "text-embedding-3-small", groups=groups
+    )
+    assert store.collection.count() == expected
+    # An unchanged vault re-embeds nothing under the equivalent name.
+    fake_provider.embed_calls.clear()
+    store.sync(str(tiny_vault))
+    assert fake_provider.embed_calls == []
+
+
+def test_equivalents_are_read_from_config(tmp_path, tiny_vault, fake_provider, isolated_config):
+    from conftest import write_config
+
+    _build_with_model(tmp_path / "chroma", fake_provider, "openai/text-embedding-3-small").sync(
+        str(tiny_vault)
+    )
+    write_config(
+        isolated_config,
+        "index:\n  embedding_model_equivalents:\n"
+        "    - [text-embedding-3-small, openai/text-embedding-3-small]\n",
+    )
+    store = _build_with_model(tmp_path / "chroma", fake_provider, "text-embedding-3-small")
+    assert store.collection.count() > 0

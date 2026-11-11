@@ -11,7 +11,7 @@
     "canonical_instructions": "AGENTS.md",
     "json_envelope": "{ok: true, action, result, meta} | {ok: false, action, error}; always check `ok`, not just the exit code"
   },
-  "generated": "2026-07-30",
+  "generated": "2026-11-11",
   "generator_note": "Regenerate with `uv run python tools/build_codebase_map.py`. Structure extracted from version-controlled source via Python ast; line numbers refer to the commit current on the generation date.",
   "architecture": {
     "data_flow": {
@@ -100,7 +100,7 @@
       "modules": [
         {
           "path": "vault_spider/cli.py",
-          "loc": 1461,
+          "loc": 1557,
           "summary": "JSON-only CLI for the vault: retrieval/synthesis plus safe note mutations.",
           "internal_deps": [
             "vault_spider",
@@ -112,6 +112,7 @@
             "vault_spider.envelope",
             "vault_spider.evaluation.dataset",
             "vault_spider.evaluation.runner",
+            "vault_spider.index",
             "vault_spider.index.context_summaries",
             "vault_spider.index.reader",
             "vault_spider.index.store",
@@ -155,76 +156,88 @@
               "line": 44
             },
             {
+              "name": "apply_live_overlay",
+              "signature": "(store, root_arg: Optional[str]=None) -> Dict[str, Any]",
+              "doc": "Refresh the store's lexical view from the live vault; returns ``meta.live_overlay``.",
+              "line": 65
+            },
+            {
               "name": "resolve_root",
               "signature": "(explicit: Optional[str]) -> str",
               "doc": null,
-              "line": 65
+              "line": 85
             },
             {
               "name": "cmd_schema",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 472
+              "line": 492
+            },
+            {
+              "name": "embedding_models_match",
+              "signature": "(exported: str, configured: str) -> bool",
+              "doc": "Whether an exported vector cache's model is the one configured here.",
+              "line": 496
             },
             {
               "name": "cmd_sync",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 476
+              "line": 515
             },
             {
               "name": "cmd_context",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 514
+              "line": 600
             },
             {
               "name": "cmd_stats",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 557
+              "line": 643
             },
             {
               "name": "cmd_retrieve",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 610
+              "line": 696
             },
             {
               "name": "cmd_synthesize",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 669
+              "line": 760
             },
             {
               "name": "cmd_enrich",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 791
+              "line": 886
             },
             {
               "name": "cmd_lint",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 923
+              "line": 1019
             },
             {
               "name": "cmd_eval",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 960
+              "line": 1056
             },
             {
               "name": "build_parser",
               "signature": "() -> argparse.ArgumentParser",
               "doc": null,
-              "line": 1094
+              "line": 1190
             },
             {
               "name": "main",
               "signature": "(argv: Optional[list]=None) -> int",
               "doc": null,
-              "line": 1423
+              "line": 1519
             }
           ],
           "constants": [
@@ -477,7 +490,7 @@
         },
         {
           "path": "vault_spider/settings.py",
-          "loc": 198,
+          "loc": 272,
           "summary": "Installation settings, read from an optional ``config.yaml``.",
           "internal_deps": [],
           "classes": [
@@ -487,7 +500,7 @@
                 "ValueError"
               ],
               "doc": "config.yaml exists but is unusable. Surfaced as `invalid_arguments`.",
-              "line": 57,
+              "line": 67,
               "fields": [],
               "methods": []
             }
@@ -497,97 +510,127 @@
               "name": "config_path",
               "signature": "() -> Path",
               "doc": null,
-              "line": 61
+              "line": 71
             },
             {
               "name": "reset",
               "signature": "() -> None",
               "doc": "Drop the cached config, so the next read re-parses the file.",
-              "line": 69
+              "line": 79
             },
             {
               "name": "load",
               "signature": "(refresh: bool=False) -> Dict[str, Dict[str, Any]]",
               "doc": "Defaults, overlaid with ``config.yaml`` when it exists.",
-              "line": 75
+              "line": 85
             },
             {
               "name": "vault_root",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 139
+              "line": 185
             },
             {
               "name": "skip_dirs",
               "signature": "() -> Set[str]",
               "doc": null,
-              "line": 144
+              "line": 190
             },
             {
               "name": "ignore_tags",
               "signature": "() -> List[str]",
               "doc": null,
-              "line": 148
+              "line": 194
             },
             {
               "name": "distilled_dir",
               "signature": "() -> str",
               "doc": null,
-              "line": 152
+              "line": 198
             },
             {
               "name": "chroma_path",
               "signature": "() -> str",
               "doc": null,
-              "line": 157
+              "line": 203
             },
             {
               "name": "contextual_enabled",
               "signature": "() -> bool",
               "doc": null,
-              "line": 161
+              "line": 207
             },
             {
               "name": "context_source",
               "signature": "() -> str",
               "doc": null,
-              "line": 165
+              "line": 211
             },
             {
               "name": "context_path",
               "signature": "() -> str",
               "doc": null,
-              "line": 169
+              "line": 215
             },
             {
               "name": "contextual_bm25_enabled",
               "signature": "() -> bool",
               "doc": null,
-              "line": 173
+              "line": 219
+            },
+            {
+              "name": "live_lexical_enabled",
+              "signature": "() -> bool",
+              "doc": null,
+              "line": 223
+            },
+            {
+              "name": "embedding_model_equivalents",
+              "signature": "() -> List[List[str]]",
+              "doc": null,
+              "line": 227
+            },
+            {
+              "name": "embedding_models_equivalent",
+              "signature": "(first: str, second: str, groups: Optional[List[List[str]]]=None) -> bool",
+              "doc": "True when both names are the same model: identical, or listed in one group.",
+              "line": 234
+            },
+            {
+              "name": "vector_cache_mode",
+              "signature": "() -> str",
+              "doc": null,
+              "line": 242
+            },
+            {
+              "name": "vector_cache_dir",
+              "signature": "() -> str",
+              "doc": "Vault-relative directory of the shared vector cache (validated by callers).",
+              "line": 246
             },
             {
               "name": "obsidian_binary",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 177
+              "line": 251
             },
             {
               "name": "obsidian_vault",
               "signature": "() -> Optional[str]",
               "doc": null,
-              "line": 182
+              "line": 256
             },
             {
               "name": "obsidian_manage_updated",
               "signature": "() -> bool",
               "doc": null,
-              "line": 187
+              "line": 261
             },
             {
               "name": "timestamp_policy",
               "signature": "() -> str",
               "doc": null,
-              "line": 191
+              "line": 265
             }
           ],
           "constants": [
@@ -1140,7 +1183,7 @@
       ]
     },
     "vault_spider.index": {
-      "role": "Builds and maintains the ChromaDB collection (one document entry + N section entries per note, distinguished by the `granularity` metadata field) with failure-safe incremental sync, one canonical note-summary store shared by manual and OpenRouter generation, and separate dense/lexical/source views; plus a read-only stats reader.",
+      "role": "Builds and maintains the ChromaDB collection (one document entry + N section entries per note, distinguished by the `granularity` metadata field) with failure-safe incremental sync, one canonical note-summary store shared by manual and OpenRouter generation, and separate dense/lexical/source views; a vault-carried vector cache so only one machine embeds (export/import); plus a read-only stats reader.",
       "modules": [
         {
           "path": "vault_spider/index/context_generator.py",
@@ -1385,14 +1428,16 @@
         },
         {
           "path": "vault_spider/index/store.py",
-          "loc": 869,
+          "loc": 1059,
           "summary": "Build and maintain a Chroma collection for Markdown notes.",
           "internal_deps": [
+            "vault_spider",
             "vault_spider.config",
             "vault_spider.corpus.chunker",
             "vault_spider.corpus.loader",
             "vault_spider.index.context_generator",
             "vault_spider.index.context_summaries",
+            "vault_spider.index.vector_cache",
             "vault_spider.llm.openrouter",
             "vault_spider.utils"
           ],
@@ -1403,7 +1448,7 @@
                 "ValueError"
               ],
               "doc": "Stored index metadata is incompatible with the requested configuration.",
-              "line": 46,
+              "line": 49,
               "fields": [],
               "methods": []
             },
@@ -1411,32 +1456,44 @@
               "name": "IndexStore",
               "bases": [],
               "doc": "Maintain the persistent vector store and in-memory BM25 indexes.",
-              "line": 50,
+              "line": 53,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
-                  "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes', bm25_k1: Optional[float]=None, bm25_b: Optional[float]=None, provider: Optional[OpenRouterClient]=None, allow_model_mismatch: bool=False, contextual: Optional[ContextualConfig]=None)",
+                  "signature": "(self, chroma_db_path: str='chroma_db', collection_name: str='vault_notes', bm25_k1: Optional[float]=None, bm25_b: Optional[float]=None, provider: Optional[OpenRouterClient]=None, allow_model_mismatch: bool=False, contextual: Optional[ContextualConfig]=None, embedding_model_equivalents: Optional[List[List[str]]]=None)",
                   "doc": null,
-                  "line": 53
+                  "line": 56
+                },
+                {
+                  "name": "apply_live_overlay",
+                  "signature": "(self, root: str) -> Dict[str, Any]",
+                  "doc": "Make the lexical and source views reflect the live vault, without embedding.",
+                  "line": 265
                 },
                 {
                   "name": "granularity_data",
                   "signature": "(self, granularity: str) -> Tuple[List[str], List[str], List[Dict[str, Any]], Optional[BM25Okapi]]",
                   "doc": null,
-                  "line": 237
+                  "line": 347
                 },
                 {
                   "name": "sync",
-                  "signature": "(self, root: str, reset: bool=False, dry_run: bool=False, contextualize: bool=False, refresh_context: bool=False) -> Dict[str, object]",
-                  "doc": null,
-                  "line": 405
+                  "signature": "(self, root: str, reset: bool=False, dry_run: bool=False, contextualize: bool=False, refresh_context: bool=False, vector_cache: Optional[VectorCache]=None, offline: bool=False) -> Dict[str, object]",
+                  "doc": "Bring the index in line with the vault at ``root``.",
+                  "line": 515
+                },
+                {
+                  "name": "export_vectors",
+                  "signature": "(self, cache_root: str) -> Dict[str, Any]",
+                  "doc": "Write every vector of the index to the vector cache under ``cache_root``.",
+                  "line": 912
                 },
                 {
                   "name": "get_collection_stats",
                   "signature": "(self) -> Dict[str, object]",
                   "doc": null,
-                  "line": 825
+                  "line": 1015
                 }
               ]
             }
@@ -1444,6 +1501,95 @@
           "functions": [],
           "constants": [
             "GRANULARITIES"
+          ]
+        },
+        {
+          "path": "vault_spider/index/vector_cache.py",
+          "loc": 217,
+          "summary": "Embedding vectors stored as files inside the vault, so the vault's own file sync carries them.",
+          "internal_deps": [],
+          "classes": [
+            {
+              "name": "VectorCacheError",
+              "bases": [
+                "ValueError"
+              ],
+              "doc": "The cache is unusable for this index (missing, wrong model, malformed).",
+              "line": 43,
+              "fields": [],
+              "methods": []
+            },
+            {
+              "name": "VectorCache",
+              "bases": [],
+              "doc": "One model's vectors in one directory.",
+              "line": 59,
+              "fields": [],
+              "methods": [
+                {
+                  "name": "__init__",
+                  "signature": "(self, directory: Path, model: str, dimensions: int)",
+                  "doc": null,
+                  "line": 62
+                },
+                {
+                  "name": "path_for",
+                  "signature": "(self, entry_hash: str) -> Path",
+                  "doc": null,
+                  "line": 69
+                },
+                {
+                  "name": "stored_hashes",
+                  "signature": "(self) -> Iterator[str]",
+                  "doc": null,
+                  "line": 78
+                },
+                {
+                  "name": "get",
+                  "signature": "(self, entry_hash: str) -> Optional[List[float]]",
+                  "doc": "The vector for ``entry_hash``, or ``None`` if absent, partial or invalid.",
+                  "line": 91
+                },
+                {
+                  "name": "export",
+                  "signature": "(self, vectors: Dict[str, List[float]], extra: Dict[str, Any]) -> Dict[str, int]",
+                  "doc": "Make the directory hold exactly ``vectors``; returns counts.",
+                  "line": 124
+                }
+              ]
+            }
+          ],
+          "functions": [
+            {
+              "name": "model_slug",
+              "signature": "(model: str) -> str",
+              "doc": "A directory name for a model id: ``google/gemini-embedding-2`` -> ``google_gemini-embedding-2``.",
+              "line": 47
+            },
+            {
+              "name": "exact_model_match",
+              "signature": "(first: str, second: str) -> bool",
+              "doc": null,
+              "line": 55
+            },
+            {
+              "name": "for_export",
+              "signature": "(root_dir: Path, model: str, dimensions: int) -> VectorCache",
+              "doc": null,
+              "line": 173
+            },
+            {
+              "name": "for_import",
+              "signature": "(root_dir: Path, model: str, models_match: Callable[[str, str], bool]=exact_model_match) -> Tuple[Optional[VectorCache], Dict[str, Any]]",
+              "doc": "The cache whose manifest names ``model`` (or an equivalent), if any.",
+              "line": 177
+            }
+          ],
+          "constants": [
+            "FORMAT_VERSION",
+            "MANIFEST",
+            "SUFFIX",
+            "_HASH"
           ]
         }
       ]
@@ -1453,7 +1599,7 @@
       "modules": [
         {
           "path": "vault_spider/retrieval/evidence.py",
-          "loc": 97,
+          "loc": 111,
           "summary": "Assemble the retrieval output contract (the citation/evidence JSON).",
           "internal_deps": [],
           "classes": [],
@@ -1468,17 +1614,18 @@
               "name": "build_evidence",
               "signature": "(result_row: Dict[str, Any], vault_name: Optional[str]=None) -> Dict[str, object]",
               "doc": null,
-              "line": 46
+              "line": 60
             },
             {
               "name": "build_retrieval_output",
               "signature": "(query: str, mode: str, granularity: str, rows: List[Dict[str, Any]], vault_name: Optional[str]=None) -> Dict[str, object]",
               "doc": null,
-              "line": 78
+              "line": 92
             }
           ],
           "constants": [
-            "EXCERPT_CHARS"
+            "EXCERPT_CHARS",
+            "_INDEX_STATE_NOTES"
           ]
         },
         {
@@ -1546,7 +1693,7 @@
         },
         {
           "path": "vault_spider/retrieval/searcher.py",
-          "loc": 591,
+          "loc": 632,
           "summary": "Hybrid retrieval over the IndexStore (BM25 + embeddings + optional rerank).",
           "internal_deps": [
             "vault_spider.config",
@@ -1591,28 +1738,34 @@
                   "line": 51
                 },
                 {
+                  "name": "impute_unembedded_semantic",
+                  "signature": "(semantic: pd.Series, keyword: pd.Series, unembedded_ids: List[str]) -> pd.Series",
+                  "doc": "Semantic scores for fusion, with a neutral stand-in for unembedded entries.",
+                  "line": 82
+                },
+                {
                   "name": "calculate_recency_scores",
                   "signature": "(self, doc_ids: List[str], metadata_by_id: Dict[str, Dict[str, object]], decay_days: float=365.0) -> pd.Series",
                   "doc": null,
-                  "line": 81
+                  "line": 113
                 },
                 {
                   "name": "calculate_freshness",
                   "signature": "(self, doc_ids: List[str], metadata_by_id: Dict[str, Dict[str, object]], decay_days: float=365.0) -> pd.Series",
                   "doc": "Freshness in [0, 1]: 1.0 for today, exponentially decaying with age.",
-                  "line": 109
+                  "line": 141
                 },
                 {
                   "name": "recency_budget",
                   "signature": "(relevance: pd.Series, *, cutoff: int, rank_budget: int) -> float",
                   "doc": "Semantic score a maximally fresh document may spend: s_(k) - s_(k+B).",
-                  "line": 146
+                  "line": 178
                 },
                 {
                   "name": "hybrid_search",
                   "signature": "(self, query: str, *, mode: str='fast', granularity: Optional[str]=None, n_results: Optional[int]=None, semantic_weight: Optional[float]=None, must_include_terms: Optional[List[str]]=None, top_k: Optional[int]=None, rerank_top_k: Optional[int]=None, combine_strategy: Optional[str]=None, rrf_k: Optional[int]=None, zsigmoid_temperature: Optional[float]=None, recency_boost_enabled: Optional[bool]=None, recency_strategy: Optional[str]=None, recency_rank_budget: Optional[int]=None, recency_weight: Optional[float]=None, recency_decay_days: Optional[float]=None, folder: Optional[str]=None, tags: Optional[List[str]]=None, note_type: Optional[str]=None, provenance: Optional[str]=None, since: Optional[str]=None, until: Optional[str]=None) -> RetrievalResult",
                   "doc": null,
-                  "line": 192
+                  "line": 224
                 }
               ]
             }
@@ -2622,7 +2775,7 @@
         },
         {
           "path": "vault_spider/web/state.py",
-          "loc": 289,
+          "loc": 318,
           "summary": "Process-wide singletons for the web app.",
           "internal_deps": [
             "vault_spider",
@@ -2674,43 +2827,49 @@
                   "name": "connect",
                   "signature": "(cls, vault_root: str, chroma_path: str, collection: str='vault_notes') -> 'AppState'",
                   "doc": "Build the real singletons: provider, store, searcher.",
-                  "line": 90
+                  "line": 92
                 },
                 {
                   "name": "warm",
                   "signature": "(self) -> None",
                   "doc": "Build both BM25 pools up front.",
-                  "line": 109
+                  "line": 111
                 },
                 {
                   "name": "stats",
                   "signature": "(self) -> Dict[str, object]",
                   "doc": null,
-                  "line": 122
+                  "line": 124
                 },
                 {
                   "name": "reconnect",
                   "signature": "(self) -> bool",
                   "doc": "Rebuild the store and searcher against the index as it now stands on disk.",
-                  "line": 158
+                  "line": 160
                 },
                 {
                   "name": "ensure_fresh_index",
                   "signature": "(self) -> None",
                   "doc": "Reconnect when `sync` has rewritten the index since we last looked.",
-                  "line": 196
+                  "line": 200
+                },
+                {
+                  "name": "ensure_fresh_lexical",
+                  "signature": "(self) -> None",
+                  "doc": "Re-apply the live lexical overlay when a note file has changed.",
+                  "line": 213
                 },
                 {
                   "name": "snapshot",
                   "signature": "(self) -> VaultSnapshot",
                   "doc": "The current vault walk, rebuilt only when a note file has changed.",
-                  "line": 226
+                  "line": 254
                 },
                 {
                   "name": "note",
                   "signature": "(self, relative_path: str) -> Optional[VaultNote]",
                   "doc": "Read one note from disk. ``None`` covers missing, unreadable and ignored.",
-                  "line": 242
+                  "line": 270
                 }
               ]
             }
@@ -2720,25 +2879,25 @@
               "name": "resolve_vault_root",
               "signature": "() -> str",
               "doc": "The vault to serve, pinned at startup.",
-              "line": 247
+              "line": 275
             },
             {
               "name": "resolve_vault_name",
               "signature": "() -> Optional[str]",
               "doc": "The Obsidian vault name used to build `obsidian://` deep links, pinned at startup.",
-              "line": 264
+              "line": 292
             },
             {
               "name": "build_state",
               "signature": "() -> AppState",
               "doc": "Construct the singletons, turning setup problems into readable failures.",
-              "line": 278
+              "line": 306
             }
           ]
         },
         {
           "path": "vault_spider/web/views.py",
-          "loc": 367,
+          "loc": 371,
           "summary": "Routes.",
           "internal_deps": [
             "vault_spider.corpus.loader",
@@ -2797,43 +2956,43 @@
               "name": "index",
               "signature": "(request: Request) -> Response",
               "doc": "The retrieval page.",
-              "line": 139
+              "line": 143
             },
             {
               "name": "answer",
               "signature": "(request: Request, q: str=Form(...), mode: str=Form('thorough'), granularity: str=Form('mixed'), n: int=Form(10)) -> Response",
               "doc": "Synthesize an answer over the retrieved notes. Returns a fragment for HTMX.",
-              "line": 168
+              "line": 172
             },
             {
               "name": "note",
               "signature": "(request: Request, path: str) -> Response",
               "doc": "The reading view: the note's own file, rendered.",
-              "line": 218
+              "line": 222
             },
             {
               "name": "attachment",
               "signature": "(request: Request, path: str) -> Response",
               "doc": "Serve an image or file the vault links to.",
-              "line": 258
+              "line": 262
             },
             {
               "name": "healthz",
               "signature": "(request: Request) -> JSONResponse",
               "doc": null,
-              "line": 279
+              "line": 283
             },
             {
               "name": "api_retrieve",
               "signature": "(request: Request) -> JSONResponse",
               "doc": "The retrieval contract, in the same envelope the CLI emits.",
-              "line": 290
+              "line": 294
             },
             {
               "name": "api_note",
               "signature": "(request: Request, path: str) -> JSONResponse",
               "doc": null,
-              "line": 304
+              "line": 308
             }
           ],
           "constants": [
@@ -2877,7 +3036,7 @@
         },
         {
           "path": "scripts/setup_launchd.py",
-          "loc": 318,
+          "loc": 341,
           "summary": "Install Vault Spider's periodic sync as a macOS per-user LaunchAgent.",
           "internal_deps": [],
           "classes": [
@@ -2911,34 +3070,40 @@
           ],
           "functions": [
             {
+              "name": "find_uv",
+              "signature": "(path: Optional[str]=None) -> Optional[Path]",
+              "doc": "The real uv binary on PATH, skipping version-manager shims.",
+              "line": 50
+            },
+            {
               "name": "build_plist",
               "signature": "(repo: Path, uv_binary: Path, home: Path, interval_minutes: int, with_lint: bool) -> Dict[str, Any]",
               "doc": null,
-              "line": 68
+              "line": 88
             },
             {
               "name": "build_plan",
               "signature": "(repo: Path, uv_binary: Path, home: Path, interval_minutes: int, with_lint: bool, uninstall: bool) -> Dict[str, Any]",
               "doc": null,
-              "line": 119
+              "line": 139
             },
             {
               "name": "apply_install",
-              "signature": "(plist: Dict[str, Any], home: Path) -> Dict[str, Any]",
-              "doc": null,
-              "line": 200
+              "signature": "(plist: Dict[str, Any], home: Path, paths: Optional[Dict[str, Path]]=None) -> Dict[str, Any]",
+              "doc": "Install or update the agent described by ``plist`` (any label) and start it.",
+              "line": 220
             },
             {
               "name": "apply_uninstall",
               "signature": "(home: Path) -> Dict[str, Any]",
               "doc": null,
-              "line": 235
+              "line": 259
             },
             {
               "name": "main",
               "signature": "(argv: Optional[List[str]]=None) -> int",
               "doc": null,
-              "line": 271
+              "line": 295
             }
           ],
           "constants": [
@@ -3101,7 +3266,7 @@
         },
         {
           "path": "tools/build_codebase_map.py",
-          "loc": 1056,
+          "loc": 1057,
           "summary": "Generate docs/codebase-map.json and docs/codebase-map.html.",
           "internal_deps": [],
           "classes": [],
@@ -3116,19 +3281,19 @@
               "name": "build_json",
               "signature": "(code_modules: list[dict], test_modules: list[dict]) -> dict",
               "doc": null,
-              "line": 418
+              "line": 419
             },
             {
               "name": "build_html",
               "signature": "(codebase_map: dict) -> str",
               "doc": null,
-              "line": 823
+              "line": 824
             },
             {
               "name": "main",
               "signature": "() -> None",
               "doc": null,
-              "line": 1039
+              "line": 1040
             }
           ],
           "constants": [
@@ -3320,6 +3485,19 @@
         ]
       },
       {
+        "path": "tests/test_live_overlay.py",
+        "loc": 294,
+        "test_count": 19,
+        "summary": "Tests for the live lexical overlay (index.live_lexical): keyword search and cited",
+        "covers": [
+          "vault_spider",
+          "vault_spider.index.store",
+          "vault_spider.retrieval.evidence",
+          "vault_spider.retrieval.searcher",
+          "vault_spider.web.state"
+        ]
+      },
+      {
         "path": "tests/test_loader.py",
         "loc": 161,
         "test_count": 21,
@@ -3433,8 +3611,8 @@
       },
       {
         "path": "tests/test_settings.py",
-        "loc": 181,
-        "test_count": 18,
+        "loc": 220,
+        "test_count": 22,
         "summary": "Tests for vault_spider.settings (the optional config.yaml).",
         "covers": [
           "vault_spider",
@@ -3443,8 +3621,8 @@
       },
       {
         "path": "tests/test_setup_launchd.py",
-        "loc": 131,
-        "test_count": 7,
+        "loc": 152,
+        "test_count": 8,
         "summary": "Tests for the launchd plist renderer; no real service is loaded.",
         "covers": []
       },
@@ -3457,8 +3635,8 @@
       },
       {
         "path": "tests/test_store_sync.py",
-        "loc": 249,
-        "test_count": 12,
+        "loc": 302,
+        "test_count": 15,
         "summary": "Tests for vault_spider.index.store.IndexStore.sync against a real Chroma db.",
         "covers": [
           "vault_spider.index.store",
@@ -3481,6 +3659,19 @@
         "summary": "Tests for pure helpers in vault_spider.utils.",
         "covers": [
           "vault_spider.utils"
+        ]
+      },
+      {
+        "path": "tests/test_vector_cache.py",
+        "loc": 307,
+        "test_count": 21,
+        "summary": "Tests for vectors shared through the vault (vector_cache.py, sync export/import).",
+        "covers": [
+          "vault_spider",
+          "vault_spider.corpus.loader",
+          "vault_spider.index",
+          "vault_spider.index.store",
+          "vault_spider.index.vector_cache"
         ]
       },
       {

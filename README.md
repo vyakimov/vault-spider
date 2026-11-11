@@ -51,6 +51,19 @@ runs on a schedule — it needs a specific note and a plan the user must review.
 See [docs/launchd.md](docs/launchd.md) for the interval, logs, status, and uninstall commands — and
 for the optional `ai.vault-spider.web` agent that keeps the web app running across logins.
 
+### Several machines, one embedder
+
+If the vault is synced to several machines (Obsidian Sync, iCloud, Syncthing, ...), only one needs
+to embed. Set `index.vector_cache_mode: export` there: after each successful sync it writes every
+vector into the vault as a small immutable file (`_vault-spider/vectors/`, one ~12 KB file per
+entry, named by the hash of the embedded text). On the other machines set
+`vector_cache_mode: import` and run `sync` as usual. It builds a local index from the vault and
+those files, and never calls the embedding API for notes. A note whose vectors haven't arrived yet
+is reported as pending and indexed by a later sync. Files are only ever created or deleted, never
+rewritten, which keeps a sync service's version history small. Both machines need the same vault
+settings, embedding model and `index.contextual`. With Obsidian Sync, enable "Sync all other
+types", and hide the folder via Settings → Files and links → Excluded files.
+
 ## Basic commands
 
 ```bash
@@ -318,6 +331,17 @@ Vault Spider also treats this as an abstention — it never shows an answer it c
 checked. If the embedding provider fails partway through, the existing index still works, and the
 next sync retries cleanly. Every provider response is checked (index order, vector size, no
 invalid numbers). A bad response becomes a `provider_error` — it never corrupts the index.
+
+Search also covers notes written since the last `sync`. At query time, keyword search (BM25)
+and the cited text are rebuilt from the live vault files (`index.live_lexical`, on by default).
+Only the embeddings come from the last sync. A new note matches by keyword until it is
+embedded; its `why` says "not embedded yet".
+
+The index records the embedding model that built it and refuses to open under a different one.
+When one model is served under different names by different providers — for example an index
+built through OpenRouter (`openai/text-embedding-3-small`) and queried through OpenAI directly
+(`text-embedding-3-small`) — list every name for it in one `index.embedding_model_equivalents` group in
+`config.yaml`. Group only names that produce identical vectors.
 
 ## Vault health — `lint`
 

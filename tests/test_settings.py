@@ -179,3 +179,42 @@ class TestLoaderHonoursConfig:
         (vault / "keep.md").write_text("this is #secret", encoding="utf-8")  # no longer ignored
 
         assert [n.path for n in load_notes(str(vault))] == ["keep.md"]
+
+
+class TestEmbeddingModelEquivalents:
+    def test_default_is_empty(self, isolated_config):
+        assert settings.embedding_model_equivalents() == []
+
+    def test_groups_are_read_and_trimmed(self, isolated_config):
+        write_config(
+            isolated_config,
+            "index:\n  embedding_model_equivalents:\n"
+            "    - [' text-embedding-3-small', openai/text-embedding-3-small]\n",
+        )
+        assert settings.embedding_model_equivalents() == [
+            ["text-embedding-3-small", "openai/text-embedding-3-small"]
+        ]
+
+    def test_equivalence_is_symmetric_and_scoped_to_one_group(self):
+        groups = [["a", "b"], ["c", "d"]]
+        assert settings.embedding_models_equivalent("a", "a", groups)
+        assert settings.embedding_models_equivalent("a", "b", groups)
+        assert settings.embedding_models_equivalent("b", "a", groups)
+        assert not settings.embedding_models_equivalent("a", "c", groups)
+        assert not settings.embedding_models_equivalent("a", "x", [])
+
+    @pytest.mark.parametrize(
+        "value,message",
+        [
+            ("text-embedding-3-small", "list of name groups"),
+            ("[text-embedding-3-small]", r"\[0\] must be a list"),
+            ("[[only_one]]", "at least two distinct"),
+            ("[[same, same]]", "at least two distinct"),
+            ("[[a, '']]", "non-empty model names"),
+            ("[[a, b], [b, c]]", "one group only"),
+        ],
+    )
+    def test_invalid_groups_rejected(self, isolated_config, value, message):
+        write_config(isolated_config, f"index:\n  embedding_model_equivalents: {value}\n")
+        with pytest.raises(settings.ConfigError, match=message):
+            settings.embedding_model_equivalents()

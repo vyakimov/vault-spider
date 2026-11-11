@@ -16,10 +16,6 @@ user, can read the user's vault and repository `.env`, and does not require root
 - Serializes runs with a non-blocking file lock, so a slow sync is not started twice.
 - Writes compact JSON-line events to the launchd log and the latest full sync envelope to a private
   state directory.
-- After a sync that reports ok, publishes the index for other devices: `chroma_db/` is copied to a
-  hidden staging folder in the repository root and renamed over `chroma-snapshot/`, so a puller
-  never sees a half-copied index. A failed publish keeps the previous snapshot, logs
-  `snapshot_published` with `ok: false`, and makes the run exit non-zero.
 - Runs with background process priority and low-priority I/O.
 
 Incremental sync computes a content/path diff first. When every indexed note is unchanged, it makes
@@ -128,6 +124,15 @@ uv run scripts/setup_launchd.py --uninstall --apply
 
 Uninstalling unloads and removes the plist but preserves logs and latest-run state. If the repository
 is moved, rerun the setup command from its new location so the installed absolute paths are updated.
+
+## A machine that never embeds
+
+On a second machine with the same vault (via Obsidian Sync, iCloud, ...), install the same
+`ai.vault-spider.sync` agent but set `index.vector_cache_mode: import` in its `config.yaml`. The
+embedding machine needs `vector_cache_mode: export`. The hourly sync there then builds the local
+index from the vault and the vectors the other machine exported into it, and never calls the
+embedding API for notes. Notes whose vectors haven't arrived yet are listed in
+`result.vector_cache.pending` and indexed by a later run. See `config.yaml.example`.
 
 ## Web app — `ai.vault-spider.web`
 

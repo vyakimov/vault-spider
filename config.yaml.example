@@ -57,6 +57,38 @@ index:
   # Requires contextual: true.
   contextual_bm25: false
 
+  # The index records which embedding model built it and refuses to open under a
+  # different one. Some models are served under different names by different
+  # providers (an index embedded through OpenRouter on one machine, queried through
+  # another OpenAI-compatible endpoint on another). List every name of the same model in one group;
+  # a name may appear in only one group. Only group names you have verified produce
+  # identical vectors, because mixing different models silently ruins retrieval.
+  embedding_model_equivalents: []
+  #  - [text-embedding-3-small, openai/text-embedding-3-small]   # OpenAI, OpenRouter
+
+  # Share embeddings between machines through the vault's own file sync (e.g. Obsidian
+  # Sync with "Sync all other types" enabled), so only one machine ever embeds.
+  #   off     — default; this machine embeds for itself.
+  #   export  — this machine embeds; after every successful sync it writes each vector
+  #             as a small immutable file under vector_cache_dir.
+  #   import  — this machine never embeds notes: sync takes vectors only from those
+  #             files. A note is indexed once all its vectors have arrived; until then
+  #             it is reported as pending. Query embeddings still use the provider.
+  # Both machines need the same vault settings (skip_dirs, ignore_tags), embedding
+  # model and `contextual`, or entries won't match and stay pending.
+  vector_cache_mode: off
+  # Vault-relative. Hide it in Obsidian: Settings → Files and links → Excluded files.
+  vector_cache_dir: _vault-spider/vectors
+
+  # Rebuild keyword search (BM25) and cited source text from the live vault files at
+  # query time; only embeddings come from the last sync. Notes written, edited, moved or
+  # deleted since then show up correctly in `retrieve`/`synthesize`/`enrich` and the web
+  # app. New notes match by keyword only until embedded ("why" says "not embedded
+  # yet"). Uses the same loader as sync, so #secret/#ignore stay excluded. Costs about
+  # 1 s per CLI call for ~850 notes. Mainly for machines that import vectors
+  # (vector_cache_mode: import), where a new note waits for the embedding machine.
+  live_lexical: true
+
 timestamps:
   # How `--fix`/`--fix-timestamps`/distilled notes write `created`/`updated`:
   #   offset_local  — 2026-07-13T14:30:00+02:00 (local wall-clock + offset)

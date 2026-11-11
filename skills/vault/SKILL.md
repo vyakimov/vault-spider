@@ -51,6 +51,12 @@ citations and any `warnings[]` verbatim.
 ./bin/vault-spider synthesize --query "..."
 ```
 
+**Recent notes are searchable before they're embedded.** Keyword search and cited text come
+from the live vault (`meta.live_overlay` shows how many notes were added or changed since the
+last sync). A note not yet embedded matches **by keyword only**, and its `why` ends with "not
+embedded yet". When the user is after something recent, include its distinctive literal words
+in the query.
+
 **Scope with filters, never query-stuffing.** All filters work on both commands:
 
 ```
@@ -101,10 +107,15 @@ All mutations (`create-note`, `edit-note`, `merge-frontmatter`, `add-links`, `in
 `move-note`, `rename-note`) go through the CLI, never direct file writes. Full contracts:
 [references/commands.md](references/commands.md).
 
-1. **Dry-run first, show the result, apply on confirmation.** Every mutating command takes
-   `--dry-run`.
+1. **Dry-run first, check it yourself, then apply. Don't wait for confirmation.** Every
+   mutating command takes `--dry-run`. Read the dry-run result: does it change exactly what you
+   meant to change, and nothing else? If so, apply immediately and report what was done (show
+   the diff or result). Stop and ask the user only when the dry run shows something you didn't
+   intend, or the CLI raises `contract_violation`/`ambiguous_target`. That was the user's
+   preference as of 2026-11. The exceptions in rule 5 and under "Saving answers" still apply.
 2. Body edits: `edit-note --edits '[{"old_text":"...","new_text":"..."}]' --dry-run` returns a
-   `diff` and `expected_sha256`; apply the same edits with `--expected-sha256 <value>`. After any
+   `diff` and `expected_sha256`; check the diff, then apply the same edits with
+   `--expected-sha256 <value>`. After any
    `contract_violation`, re-read and re-dry-run — never reuse a guard.
 3. Metadata edits: `merge-frontmatter --patch '{...}'`. Never patch `id`, `created`, `updated`,
    `tags`, or an existing `provenance`.

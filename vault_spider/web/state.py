@@ -85,6 +85,8 @@ class AppState:
         self._lock = threading.Lock()
         self._index_lock = threading.Lock()
         self._index_signature = self._read_index_signature()
+        # Vault signature the live lexical overlay was last built from (None: not yet).
+        self._overlay_signature: Optional[int] = None
 
     @classmethod
     def connect(
@@ -187,6 +189,8 @@ class AppState:
             self.store = store
             self.searcher = searcher
             self._index_signature = self._read_index_signature()
+            self._overlay_signature = None  # the new store starts from the bare snapshot
+        self.ensure_fresh_lexical()
         self.warm()
         # Logged because this is otherwise invisible: a silent recovery and a silently
         # broken one look identical from the outside.
@@ -205,6 +209,30 @@ class AppState:
         if signature is None or signature == self._index_signature:
             return
         self.reconnect()
+
+    def ensure_fresh_lexical(self) -> None:
+        """Re-apply the live lexical overlay when a note file has changed.
+
+        Keeps keyword search and cited text current with the vault between
+        embeddings (``index.live_lexical``). It costs one stat per note while the
+        vault is unchanged, and a reload plus a BM25 rebuild after an edit.
+        """
+        apply = getattr(self.store, "apply_live_overlay", None)
+        if apply is None or not settings.live_lexical_enabled():
+            return
+        signature = self._vault_signature()
+        if signature == self._overlay_signature:
+            return
+        with self._index_lock:
+            if signature == self._overlay_signature:
+                return
+            try:
+                report = apply(self.vault_root)
+            except Exception:  # noqa: BLE001 - the snapshot alone still serves
+                logger.exception("live lexical overlay failed; serving the snapshot")
+                return
+            self._overlay_signature = signature
+        logger.info("live lexical overlay applied: %s", report)
 
     # -- vault -------------------------------------------------------------
 
@@ -285,5 +313,6 @@ def build_state() -> AppState:
         raise StartupError(str(exc)) from exc
     if state.store.collection is None or state.store.collection.count() == 0:
         raise StartupError("The index is empty. Run `./bin/vault-spider sync` first.")
+    state.ensure_fresh_lexical()
     state.warm()
     return state
