@@ -80,6 +80,15 @@ index:
   # Vault-relative. Hide it in Obsidian: Settings → Files and links → Excluded files.
   vector_cache_dir: _vault-spider/vectors
 
+  # Rebuild keyword search (BM25) and cited source text from the live vault files at
+  # query time; only embeddings come from the last sync. Notes written, edited, moved or
+  # deleted since then show up correctly in `retrieve`/`synthesize`/`enrich` and the web
+  # app. New notes match by keyword only until embedded ("why" says "not embedded
+  # yet"). Uses the same loader as sync, so #secret/#ignore stay excluded. Costs about
+  # 1 s per CLI call for ~850 notes. Mainly for machines that import vectors
+  # (vector_cache_mode: import), where a new note waits for the embedding machine.
+  live_lexical: true
+
 timestamps:
   # How `--fix`/`--fix-timestamps`/distilled notes write `created`/`updated`:
   #   offset_local  — 2026-07-13T14:30:00+02:00 (local wall-clock + offset)

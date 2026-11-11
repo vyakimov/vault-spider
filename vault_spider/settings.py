@@ -42,6 +42,9 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         # Groups of names for the same embedding model on different providers,
         # e.g. [[text-embedding-3-small, openai/text-embedding-3-small]].
         "embedding_model_equivalents": [],
+        # Rebuild BM25 and cited source text from the live vault at query time, so
+        # notes written since the last embedding are findable by keyword.
+        "live_lexical": True,
         # Vectors shared through the vault's own file sync (vector_cache.py):
         # `export` on the machine that embeds, `import` on machines that must not.
         "vector_cache_mode": "off",
@@ -110,7 +113,7 @@ def load(refresh: bool = False) -> Dict[str, Dict[str, Any]]:
                     )
                 merged[section].update(values)
 
-    for key in ("contextual", "contextual_bm25"):
+    for key in ("contextual", "contextual_bm25", "live_lexical"):
         value = merged["index"][key]
         if not isinstance(value, bool):
             raise ConfigError(f"{path}: index.{key} must be true or false")
@@ -215,6 +218,10 @@ def context_path() -> str:
 
 def contextual_bm25_enabled() -> bool:
     return bool(_get("index", "contextual_bm25"))
+
+
+def live_lexical_enabled() -> bool:
+    return bool(_get("index", "live_lexical"))
 
 
 def embedding_model_equivalents() -> List[List[str]]:

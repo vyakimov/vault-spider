@@ -332,6 +332,11 @@ checked. If the embedding provider fails partway through, the existing index sti
 next sync retries cleanly. Every provider response is checked (index order, vector size, no
 invalid numbers). A bad response becomes a `provider_error` — it never corrupts the index.
 
+Search also covers notes written since the last `sync`. At query time, keyword search (BM25)
+and the cited text are rebuilt from the live vault files (`index.live_lexical`, on by default).
+Only the embeddings come from the last sync. A new note matches by keyword until it is
+embedded; its `why` says "not embedded yet".
+
 The index records the embedding model that built it and refuses to open under a different one.
 When one model is served under different names by different providers — for example an index
 built through OpenRouter (`openai/text-embedding-3-small`) and queried through OpenAI directly

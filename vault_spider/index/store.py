@@ -210,15 +210,7 @@ class IndexStore:
         ]
 
     def _rehydrate_from_collection(self) -> None:
-        for granularity in GRANULARITIES:
-            self.documents[granularity] = []
-            self.lexical_documents[granularity] = []
-            self.source_documents[granularity] = []
-            self.ids[granularity] = []
-            self.metadatas[granularity] = []
-            self.tokenized[granularity] = []
-            self.bm25[granularity] = None
-
+        self._install_views(self._empty_views())
         if self.collection.count() == 0:
             return
 
@@ -227,20 +219,120 @@ class IndexStore:
         all_documents = payload.get("documents") or []
         all_metadatas = payload.get("metadatas") or []
 
+        views = self._empty_views()
         for entry_id, document, metadata in zip(all_ids, all_documents, all_metadatas):
-            metadata_dict: Dict[str, Any] = dict(metadata)
-            granularity = str(metadata_dict.get("granularity", "document"))
-            if granularity not in self.documents:
-                granularity = "document"
-            self.ids[granularity].append(entry_id)
-            self.documents[granularity].append(document)
-            source_offset = int(str(metadata_dict.get("source_offset", 0) or 0))
-            source = document[source_offset:] if source_offset else document
-            self.source_documents[granularity].append(source)
-            self.lexical_documents[granularity].append(
-                self._lexical_text(document, metadata_dict, source)
-            )
-            self.metadatas[granularity].append(metadata_dict)
+            self._append_entry(views, entry_id, document, dict(metadata))
+        self._install_views(views)
+
+    # Per-granularity parallel lists the searcher reads. Built into a fresh
+    # dict and installed in one step, so a reader never sees a half-built view.
+    _VIEW_FIELDS = ("documents", "lexical_documents", "source_documents", "ids", "metadatas")
+
+    def _empty_views(self) -> Dict[str, Dict[str, List[Any]]]:
+        return {field: {g: [] for g in GRANULARITIES} for field in self._VIEW_FIELDS}
+
+    def _append_entry(
+        self,
+        views: Dict[str, Dict[str, List[Any]]],
+        entry_id: str,
+        document: str,
+        metadata: Dict[str, Any],
+    ) -> None:
+        granularity = str(metadata.get("granularity", "document"))
+        if granularity not in GRANULARITIES:
+            granularity = "document"
+        source_offset = int(str(metadata.get("source_offset", 0) or 0))
+        source = document[source_offset:] if source_offset else document
+        views["ids"][granularity].append(entry_id)
+        views["documents"][granularity].append(document)
+        views["source_documents"][granularity].append(source)
+        views["lexical_documents"][granularity].append(
+            self._lexical_text(document, metadata, source)
+        )
+        views["metadatas"][granularity].append(metadata)
+
+    def _install_views(self, views: Dict[str, Dict[str, List[Any]]]) -> None:
+        self.documents = views["documents"]
+        self.lexical_documents = views["lexical_documents"]
+        self.source_documents = views["source_documents"]
+        self.ids = views["ids"]
+        self.metadatas = views["metadatas"]
+        self.tokenized = {g: [] for g in GRANULARITIES}
+        self.bm25 = {g: None for g in GRANULARITIES}
+
+    # -- live lexical overlay -------------------------------------------------
+
+    def apply_live_overlay(self, root: str) -> Dict[str, Any]:
+        """Make the lexical and source views reflect the live vault, without embedding.
+
+        The dense side stays the snapshot in Chroma: on a machine that pulls its
+        index from another, that can be days old. BM25 and the cited source text
+        are cheap to rebuild from the files, so this replaces the in-memory views:
+
+        - a note unchanged since the snapshot (same path and content hash) keeps
+          its snapshot entries exactly, including any note summary;
+        - a new, edited, or moved note gets entries rebuilt from the live file by
+          the same ``_entries_for_note`` that sync uses (no summary). A new note
+          is findable by keyword only until it is embedded; an edited one keeps
+          its previous vector, matched by entry id, until then;
+        - a note deleted since the snapshot is dropped, and so is any dense hit
+          for it, because the searcher only ranks ids present in these views.
+
+        Uses the same loader and duplicate-id rule as sync, so ``#secret`` /
+        ``#ignore`` notes and skipped folders stay excluded. Only the in-memory
+        views change; Chroma is never written.
+        """
+        notes = load_notes(root)
+        seen: set = set()
+        live: List[Note] = []
+        for note in notes:  # path-sorted; first id wins, as in sync
+            if note.note_id in seen:
+                continue
+            seen.add(note.note_id)
+            live.append(note)
+
+        snapshot_docs: Dict[str, Dict[str, Any]] = {
+            str(metadata.get("note_id", "")): metadata
+            for metadata in self.metadatas["document"]
+        }
+        unchanged: set = set()
+        rebuilt: List[Note] = []
+        added = changed = 0
+        for note in live:
+            previous = snapshot_docs.get(note.note_id)
+            if (
+                previous is not None
+                and previous.get("content_hash") == note.content_hash
+                and previous.get("path") == note.path
+            ):
+                unchanged.add(note.note_id)
+                continue
+            rebuilt.append(note)
+            if previous is None:
+                added += 1
+            else:
+                changed += 1
+
+        views = self._empty_views()
+        for granularity in GRANULARITIES:
+            for entry_id, document, metadata in zip(
+                self.ids[granularity], self.documents[granularity], self.metadatas[granularity]
+            ):
+                if str(metadata.get("note_id", "")) in unchanged:
+                    self._append_entry(views, entry_id, document, metadata)
+        for note in rebuilt:
+            state = "edited" if note.note_id in snapshot_docs else "unembedded"
+            for entry_id, document, metadata in self._entries_for_note(note):
+                metadata["index_state"] = state
+                self._append_entry(views, entry_id, document, metadata)
+        self._install_views(views)
+        return {
+            "applied": True,
+            "notes": len(live),
+            "added": added,
+            "changed": changed,
+            "removed": len(set(snapshot_docs) - seen),
+        }
 
     def _ensure_bm25(self, granularity: str) -> None:
         if self.bm25[granularity] is not None or not self.lexical_documents[granularity]:

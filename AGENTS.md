@@ -290,6 +290,14 @@ from `config.yaml` (`timestamps.policy`: `offset_local`, `utc_z`, or `obsidian_l
 All of these are configurable in `config.yaml`; the values below are the defaults.
 
 - ChromaDB directory: `./chroma_db/` (`index.chroma_path`)
+- Live lexical overlay (`index.live_lexical`, default true): `retrieve`/`synthesize`/`enrich`
+  and the web app call `IndexStore.apply_live_overlay(root)`. It rebuilds the in-memory BM25,
+  source and metadata views from the live vault, reusing snapshot entries for unchanged notes
+  (same path and content hash) and dropping deleted ones, so only embeddings come from the last
+  sync. Chroma is never written. Rebuilt entries carry `index_state`: `unembedded` (new: keyword
+  only; the searcher imputes a rank-matched semantic score for fusion, while the reported score
+  stays 0) or `edited` (old vector, live text). `why` notes both states. `meta.live_overlay`
+  reports counts, or the reason it was skipped. Sync and eval never apply it.
 - Embedding-model guard: an index opens only under the embedding model recorded at build time,
   or a name in the same `index.embedding_model_equivalents` group (default none) — every name of
   one model served by different providers, e.g.
