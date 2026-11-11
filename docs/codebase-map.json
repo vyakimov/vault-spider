@@ -688,7 +688,7 @@
       "modules": [
         {
           "path": "vault_spider/corpus/chunker.py",
-          "loc": 614,
+          "loc": 615,
           "summary": "Deterministic, Markdown-aware section splitting for notes (no LLM).",
           "internal_deps": [
             "vault_spider.corpus.loader"
@@ -698,7 +698,7 @@
               "name": "Section",
               "bases": [],
               "doc": null,
-              "line": 31,
+              "line": 32,
               "fields": [
                 "chunk_id",
                 "note_id",
@@ -717,7 +717,7 @@
               "name": "_Block",
               "bases": [],
               "doc": null,
-              "line": 45,
+              "line": 46,
               "fields": [
                 "start0",
                 "end0",
@@ -734,7 +734,7 @@
                   "name": "token_count",
                   "signature": "(self) -> int",
                   "doc": null,
-                  "line": 57
+                  "line": 58
                 }
               ]
             }
@@ -744,43 +744,43 @@
               "name": "estimate_tokens",
               "signature": "(text: str) -> int",
               "doc": "Return a deterministic, model-independent token estimate.",
-              "line": 61
+              "line": 62
             },
             {
               "name": "split_sections",
               "signature": "(note: Note, max_chars: Optional[int]=None, overlap_chars: int=300) -> List[Section]",
               "doc": "Split one note into deterministic, structure-aware retrieval chunks.",
-              "line": 508
+              "line": 509
             },
             {
               "name": "document_text",
               "signature": "(note: Note, context: str='', context_label: str='Context') -> str",
               "doc": null,
-              "line": 554
+              "line": 555
             },
             {
               "name": "document_source_offset",
               "signature": "(note: Note, context: str='', context_label: str='Context') -> int",
               "doc": null,
-              "line": 571
+              "line": 572
             },
             {
               "name": "section_prefix",
               "signature": "(note: Note, section: Section, context: str='', context_label: str='Context') -> str",
               "doc": "Section header, optionally carrying one canonical note summary.",
-              "line": 581
+              "line": 582
             },
             {
               "name": "section_text",
               "signature": "(note: Note, section: Section, context: str='', context_label: str='Context') -> str",
               "doc": null,
-              "line": 599
+              "line": 600
             },
             {
               "name": "section_source_offset",
               "signature": "(note: Note, section: Section, context: str='', context_label: str='Context') -> int",
               "doc": null,
-              "line": 608
+              "line": 609
             }
           ],
           "constants": [
@@ -1006,7 +1006,7 @@
         },
         {
           "path": "vault_spider/corpus/loader.py",
-          "loc": 150,
+          "loc": 156,
           "summary": "Load Markdown notes from the vault into ``Note`` objects.",
           "internal_deps": [
             "vault_spider",
@@ -1071,19 +1071,19 @@
               "name": "is_skipped_path",
               "signature": "(relative_path: Path) -> bool",
               "doc": "True when any parent directory is skipped or hidden.",
-              "line": 91
+              "line": 97
             },
             {
               "name": "is_excalidraw",
               "signature": "(relative_path: Path, frontmatter: Dict[str, Any]) -> bool",
               "doc": null,
-              "line": 104
+              "line": 110
             },
             {
               "name": "load_notes",
               "signature": "(root: str) -> List[Note]",
               "doc": null,
-              "line": 111
+              "line": 117
             }
           ],
           "constants": [
@@ -3499,8 +3499,8 @@
       },
       {
         "path": "tests/test_loader.py",
-        "loc": 161,
-        "test_count": 21,
+        "loc": 173,
+        "test_count": 22,
         "summary": "Tests for vault_spider.corpus.loader (Note loading, date resolution, doc text).",
         "covers": [
           "vault_spider.corpus.chunker",

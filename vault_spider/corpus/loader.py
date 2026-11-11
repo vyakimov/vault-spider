@@ -79,7 +79,13 @@ def resolve_note_date(path: Path, frontmatter: Dict[str, Any]) -> str:
         )
         return resolved.isoformat()
 
-    modified = dt.datetime.fromtimestamp(path.stat().st_mtime, tz=dt.timezone.utc)
+    # Whole seconds only. The date is part of the embedded text, and copies of a file
+    # on two machines carry mtimes that agree only to the millisecond or so (Obsidian
+    # Sync stores milliseconds). Sub-second digits would give the same note different
+    # text, so different entry hashes, on each machine.
+    modified = dt.datetime.fromtimestamp(
+        int(path.stat().st_mtime), tz=dt.timezone.utc
+    )
     return modified.isoformat()
 
 

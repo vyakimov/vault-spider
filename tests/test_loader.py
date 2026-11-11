@@ -46,6 +46,18 @@ class TestResolveNoteDate:
         path.write_text("body")
         assert resolve_note_date(path, {}).startswith("2023-09-15")
 
+    def test_mtime_date_is_identical_across_sub_second_skew(self, tmp_path: Path):
+        """Copies synced to two machines agree on mtime only to ~1 ms; the date must not differ."""
+        import os
+
+        first, second = tmp_path / "a.md", tmp_path / "b.md"
+        for path in (first, second):
+            path.write_text("body")
+        os.utime(first, ns=(0, 1_753_477_340_254_000_000))   # .254000 s
+        os.utime(second, ns=(0, 1_753_477_340_253_999_872))  # .253999… s
+        assert resolve_note_date(first, {}) == resolve_note_date(second, {})
+        assert resolve_note_date(first, {}) == "2025-07-25T21:02:20+00:00"
+
     def test_falls_back_to_mtime(self, tmp_path: Path):
         path = tmp_path / "untitled.md"
         path.write_text("body")

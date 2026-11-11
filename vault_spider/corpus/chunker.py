@@ -11,7 +11,8 @@ from markdown_it import MarkdownIt
 
 from vault_spider.corpus.loader import Note
 
-CHUNK_SCHEMA_VERSION = 2
+# 3: mtime-derived note dates are whole seconds (they are part of the embedded text).
+CHUNK_SCHEMA_VERSION = 3
 TARGET_TOKENS = 450
 MIN_TOKENS = 300
 MAX_TOKENS = 600
