@@ -16,6 +16,10 @@ user, can read the user's vault and repository `.env`, and does not require root
 - Serializes runs with a non-blocking file lock, so a slow sync is not started twice.
 - Writes compact JSON-line events to the launchd log and the latest full sync envelope to a private
   state directory.
+- After a sync that reports ok, publishes the index for other devices: `chroma_db/` is copied to a
+  hidden staging folder in the repository root and renamed over `chroma-snapshot/`, so a puller
+  never sees a half-copied index. A failed publish keeps the previous snapshot, logs
+  `snapshot_published` with `ok: false`, and makes the run exit non-zero.
 - Runs with background process priority and low-priority I/O.
 
 Incremental sync computes a content/path diff first. When every indexed note is unchanged, it makes

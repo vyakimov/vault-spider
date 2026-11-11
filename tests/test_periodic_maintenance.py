@@ -34,6 +34,10 @@ def make_repo(tmp_path: Path, sync_ok: bool = True) -> Path:
         encoding="utf-8",
     )
     wrapper.chmod(0o755)
+    index = repo / "chroma_db"
+    (index / "segment").mkdir(parents=True)
+    (index / "chroma.sqlite3").write_text("index-v1", encoding="utf-8")
+    (index / "segment" / "data.bin").write_text("vectors-v1", encoding="utf-8")
     return repo
 
 
@@ -54,6 +58,7 @@ def test_sync_only_writes_private_latest_envelope(tmp_path, monkeypatch, capsys)
     assert [item["event"] for item in output] == [
         "maintenance_started",
         "sync_completed",
+        "snapshot_published",
         "maintenance_completed",
     ]
     assert output[1]["result"]["unchanged"] == 26
@@ -77,10 +82,11 @@ def test_opt_in_lint_records_summary_and_full_envelope(tmp_path, monkeypatch, ca
     assert [item["event"] for item in output] == [
         "maintenance_started",
         "sync_completed",
+        "snapshot_published",
         "lint_completed",
         "maintenance_completed",
     ]
-    assert output[2]["summary"] == {"broken_wikilinks": 0}
+    assert output[3]["summary"] == {"broken_wikilinks": 0}
     assert json.loads((state / "last-lint.json").read_text(encoding="utf-8"))["ok"] is True
 
 
@@ -100,3 +106,64 @@ def test_sync_failure_stops_before_lint(tmp_path, monkeypatch, capsys):
     ]
     assert output[1]["error"]["type"] == "provider_error"
     assert not (state / "last-lint.json").exists()
+    assert not (repo / "chroma-snapshot").exists()
+
+
+def snapshot_files(repo: Path) -> dict[str, str]:
+    root = repo / "chroma-snapshot"
+    return {
+        str(item.relative_to(root)): item.read_text(encoding="utf-8")
+        for item in root.rglob("*")
+        if item.is_file()
+    }
+
+
+def test_snapshot_replaces_previous_copy_and_leaves_no_staging(tmp_path, monkeypatch, capsys):
+    repo = make_repo(tmp_path)
+    monkeypatch.setenv("VAULT_SPIDER_MAINTENANCE_STATE", str(tmp_path / "state"))
+    monkeypatch.delenv("VAULT_SPIDER_RUN_LINT", raising=False)
+    stale = repo / ".chroma-snapshot.crashed" / "new"
+    stale.mkdir(parents=True)
+
+    assert periodic_maintenance.main(["--repo", str(repo)]) == 0
+    first = events(capsys)[2]
+    assert first["ok"] is True and first["files"] == 2
+    assert snapshot_files(repo) == {
+        "chroma.sqlite3": "index-v1",
+        "segment/data.bin": "vectors-v1",
+    }
+
+    (repo / "chroma_db" / "chroma.sqlite3").write_text("index-v2", encoding="utf-8")
+    (repo / "chroma_db" / "segment" / "data.bin").unlink()
+    assert periodic_maintenance.main(["--repo", str(repo)]) == 0
+
+    assert snapshot_files(repo) == {"chroma.sqlite3": "index-v2"}
+    assert not list(repo.glob(".chroma-snapshot.*"))
+
+
+def test_snapshot_failure_keeps_previous_copy_and_fails_run(tmp_path, monkeypatch, capsys):
+    repo = make_repo(tmp_path)
+    monkeypatch.setenv("VAULT_SPIDER_MAINTENANCE_STATE", str(tmp_path / "state"))
+    monkeypatch.setenv("VAULT_SPIDER_RUN_LINT", "1")
+    assert periodic_maintenance.main(["--repo", str(repo)]) == 0
+    capsys.readouterr()
+
+    def broken_copy(source, destination):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(periodic_maintenance.shutil, "copytree", broken_copy)
+    code = periodic_maintenance.main(["--repo", str(repo)])
+    output = events(capsys)
+
+    assert code == 1
+    assert [item["event"] for item in output] == [
+        "maintenance_started",
+        "sync_completed",
+        "snapshot_published",
+        "lint_completed",
+        "maintenance_completed",
+    ]
+    assert output[2] == {**output[2], "ok": False, "error": "disk full"}
+    assert output[4]["ok"] is False
+    assert snapshot_files(repo)["chroma.sqlite3"] == "index-v1"
+    assert not list(repo.glob(".chroma-snapshot.*"))
