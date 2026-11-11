@@ -100,7 +100,7 @@
       "modules": [
         {
           "path": "vault_spider/cli.py",
-          "loc": 1553,
+          "loc": 1557,
           "summary": "JSON-only CLI for the vault: retrieval/synthesis plus safe note mutations.",
           "internal_deps": [
             "vault_spider",
@@ -183,61 +183,61 @@
               "name": "cmd_sync",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 511
+              "line": 515
             },
             {
               "name": "cmd_context",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 596
+              "line": 600
             },
             {
               "name": "cmd_stats",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 639
+              "line": 643
             },
             {
               "name": "cmd_retrieve",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 692
+              "line": 696
             },
             {
               "name": "cmd_synthesize",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 756
+              "line": 760
             },
             {
               "name": "cmd_enrich",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 882
+              "line": 886
             },
             {
               "name": "cmd_lint",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 1015
+              "line": 1019
             },
             {
               "name": "cmd_eval",
               "signature": "(args: argparse.Namespace) -> Dict[str, Any]",
               "doc": null,
-              "line": 1052
+              "line": 1056
             },
             {
               "name": "build_parser",
               "signature": "() -> argparse.ArgumentParser",
               "doc": null,
-              "line": 1186
+              "line": 1190
             },
             {
               "name": "main",
               "signature": "(argv: Optional[list]=None) -> int",
               "doc": null,
-              "line": 1515
+              "line": 1519
             }
           ],
           "constants": [
@@ -486,306 +486,6 @@
             "MUTATING",
             "MUTATING_NETWORK",
             "NONDESTRUCTIVE_SIDE_EFFECT"
-          ]
-        },
-        {
-          "path": "vault_spider/settings.py",
-          "loc": 272,
-          "summary": "Installation settings, read from an optional ``config.yaml``.",
-          "internal_deps": [],
-          "classes": [
-            {
-              "name": "ConfigError",
-              "bases": [
-                "ValueError"
-              ],
-              "doc": "config.yaml exists but is unusable. Surfaced as `invalid_arguments`.",
-              "line": 67,
-              "fields": [],
-              "methods": []
-            }
-          ],
-          "functions": [
-            {
-              "name": "config_path",
-              "signature": "() -> Path",
-              "doc": null,
-              "line": 71
-            },
-            {
-              "name": "reset",
-              "signature": "() -> None",
-              "doc": "Drop the cached config, so the next read re-parses the file.",
-              "line": 79
-            },
-            {
-              "name": "load",
-              "signature": "(refresh: bool=False) -> Dict[str, Dict[str, Any]]",
-              "doc": "Defaults, overlaid with ``config.yaml`` when it exists.",
-              "line": 85
-            },
-            {
-              "name": "vault_root",
-              "signature": "() -> Optional[str]",
-              "doc": null,
-              "line": 185
-            },
-            {
-              "name": "skip_dirs",
-              "signature": "() -> Set[str]",
-              "doc": null,
-              "line": 190
-            },
-            {
-              "name": "ignore_tags",
-              "signature": "() -> List[str]",
-              "doc": null,
-              "line": 194
-            },
-            {
-              "name": "distilled_dir",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 198
-            },
-            {
-              "name": "chroma_path",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 203
-            },
-            {
-              "name": "contextual_enabled",
-              "signature": "() -> bool",
-              "doc": null,
-              "line": 207
-            },
-            {
-              "name": "context_source",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 211
-            },
-            {
-              "name": "context_path",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 215
-            },
-            {
-              "name": "contextual_bm25_enabled",
-              "signature": "() -> bool",
-              "doc": null,
-              "line": 219
-            },
-            {
-              "name": "live_lexical_enabled",
-              "signature": "() -> bool",
-              "doc": null,
-              "line": 223
-            },
-            {
-              "name": "embedding_model_equivalents",
-              "signature": "() -> List[List[str]]",
-              "doc": null,
-              "line": 227
-            },
-            {
-              "name": "embedding_models_equivalent",
-              "signature": "(first: str, second: str, groups: Optional[List[List[str]]]=None) -> bool",
-              "doc": "True when both names are the same model: identical, or listed in one group.",
-              "line": 234
-            },
-            {
-              "name": "vector_cache_mode",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 242
-            },
-            {
-              "name": "vector_cache_dir",
-              "signature": "() -> str",
-              "doc": "Vault-relative directory of the shared vector cache (validated by callers).",
-              "line": 246
-            },
-            {
-              "name": "obsidian_binary",
-              "signature": "() -> Optional[str]",
-              "doc": null,
-              "line": 251
-            },
-            {
-              "name": "obsidian_vault",
-              "signature": "() -> Optional[str]",
-              "doc": null,
-              "line": 256
-            },
-            {
-              "name": "obsidian_manage_updated",
-              "signature": "() -> bool",
-              "doc": null,
-              "line": 261
-            },
-            {
-              "name": "timestamp_policy",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 265
-            }
-          ],
-          "constants": [
-            "REPO_ROOT",
-            "DEFAULT_CONFIG_PATH"
-          ]
-        },
-        {
-          "path": "vault_spider/settings.py",
-          "loc": 272,
-          "summary": "Installation settings, read from an optional ``config.yaml``.",
-          "internal_deps": [],
-          "classes": [
-            {
-              "name": "ConfigError",
-              "bases": [
-                "ValueError"
-              ],
-              "doc": "config.yaml exists but is unusable. Surfaced as `invalid_arguments`.",
-              "line": 67,
-              "fields": [],
-              "methods": []
-            }
-          ],
-          "functions": [
-            {
-              "name": "config_path",
-              "signature": "() -> Path",
-              "doc": null,
-              "line": 71
-            },
-            {
-              "name": "reset",
-              "signature": "() -> None",
-              "doc": "Drop the cached config, so the next read re-parses the file.",
-              "line": 79
-            },
-            {
-              "name": "load",
-              "signature": "(refresh: bool=False) -> Dict[str, Dict[str, Any]]",
-              "doc": "Defaults, overlaid with ``config.yaml`` when it exists.",
-              "line": 85
-            },
-            {
-              "name": "vault_root",
-              "signature": "() -> Optional[str]",
-              "doc": null,
-              "line": 185
-            },
-            {
-              "name": "skip_dirs",
-              "signature": "() -> Set[str]",
-              "doc": null,
-              "line": 190
-            },
-            {
-              "name": "ignore_tags",
-              "signature": "() -> List[str]",
-              "doc": null,
-              "line": 194
-            },
-            {
-              "name": "distilled_dir",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 198
-            },
-            {
-              "name": "chroma_path",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 203
-            },
-            {
-              "name": "contextual_enabled",
-              "signature": "() -> bool",
-              "doc": null,
-              "line": 207
-            },
-            {
-              "name": "context_source",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 211
-            },
-            {
-              "name": "context_path",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 215
-            },
-            {
-              "name": "contextual_bm25_enabled",
-              "signature": "() -> bool",
-              "doc": null,
-              "line": 219
-            },
-            {
-              "name": "live_lexical_enabled",
-              "signature": "() -> bool",
-              "doc": null,
-              "line": 223
-            },
-            {
-              "name": "embedding_model_equivalents",
-              "signature": "() -> List[List[str]]",
-              "doc": null,
-              "line": 227
-            },
-            {
-              "name": "embedding_models_equivalent",
-              "signature": "(first: str, second: str, groups: Optional[List[List[str]]]=None) -> bool",
-              "doc": "True when both names are the same model: identical, or listed in one group.",
-              "line": 234
-            },
-            {
-              "name": "vector_cache_mode",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 242
-            },
-            {
-              "name": "vector_cache_dir",
-              "signature": "() -> str",
-              "doc": "Vault-relative directory of the shared vector cache (validated by callers).",
-              "line": 246
-            },
-            {
-              "name": "obsidian_binary",
-              "signature": "() -> Optional[str]",
-              "doc": null,
-              "line": 251
-            },
-            {
-              "name": "obsidian_vault",
-              "signature": "() -> Optional[str]",
-              "doc": null,
-              "line": 256
-            },
-            {
-              "name": "obsidian_manage_updated",
-              "signature": "() -> bool",
-              "doc": null,
-              "line": 261
-            },
-            {
-              "name": "timestamp_policy",
-              "signature": "() -> str",
-              "doc": null,
-              "line": 265
-            }
-          ],
-          "constants": [
-            "REPO_ROOT",
-            "DEFAULT_CONFIG_PATH"
           ]
         },
         {
@@ -3963,8 +3663,8 @@
       },
       {
         "path": "tests/test_vector_cache.py",
-        "loc": 286,
-        "test_count": 20,
+        "loc": 307,
+        "test_count": 21,
         "summary": "Tests for vectors shared through the vault (vector_cache.py, sync export/import).",
         "covers": [
           "vault_spider",

@@ -284,3 +284,24 @@ def test_cli_import_refuses_summary_generation(capsys, tiny_vault, isolated_conf
     write_config(isolated_config, "index:\n  vector_cache_mode: import\n  contextual: true\n")
     code, envelope = _run(capsys, ["sync", "--root", str(tiny_vault), "--contextualize"])
     assert code == 1 and envelope["error"]["type"] == "invalid_arguments"
+
+
+def test_cli_import_accepts_an_equivalent_model_name(capsys, tmp_path, tiny_vault, monkeypatch,
+                                                     isolated_config):
+    source, importer = FakeProvider(), FakeProvider()
+    source.embedding_model = "provider-a/embed"
+    importer.embedding_model = "embed_on_b"
+    write_config(isolated_config, "index:\n  vector_cache_mode: export\n")
+    monkeypatch.setattr(cli, "get_provider", lambda: source)
+    assert _run(capsys, ["--chroma-path", str(tmp_path / "a"), "sync", "--root", str(tiny_vault)])[0] == 0
+
+    write_config(isolated_config, "index:\n  vector_cache_mode: import\n")
+    monkeypatch.setattr(cli, "get_provider", lambda: importer)
+    _, envelope = _run(capsys, ["--chroma-path", str(tmp_path / "b"), "sync", "--root", str(tiny_vault)])
+    assert envelope["result"]["vector_cache"]["export_found"] is False  # different names, no group
+
+    write_config(isolated_config, "index:\n  vector_cache_mode: import\n  embedding_model_equivalents:\n"
+                                  "    - [provider-a/embed, embed_on_b]\n")
+    _, envelope = _run(capsys, ["--chroma-path", str(tmp_path / "b"), "sync", "--root", str(tiny_vault)])
+    assert envelope["result"]["vector_cache"]["export_found"] is True
+    assert envelope["result"]["added_notes"] == 5 and importer.embed_calls == []

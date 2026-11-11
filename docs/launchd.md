@@ -125,6 +125,15 @@ uv run scripts/setup_launchd.py --uninstall --apply
 Uninstalling unloads and removes the plist but preserves logs and latest-run state. If the repository
 is moved, rerun the setup command from its new location so the installed absolute paths are updated.
 
+## A machine that never embeds
+
+On a second machine with the same vault (via Obsidian Sync, iCloud, ...), install the same
+`ai.vault-spider.sync` agent but set `index.vector_cache_mode: import` in its `config.yaml`. The
+embedding machine needs `vector_cache_mode: export`. The hourly sync there then builds the local
+index from the vault and the vectors the other machine exported into it, and never calls the
+embedding API for notes. Notes whose vectors haven't arrived yet are listed in
+`result.vector_cache.pending` and indexed by a later run. See `config.yaml.example`.
+
 ## Web app — `ai.vault-spider.web`
 
 `vault-spider-web` is a long-running server, not a scheduled job, so it has no setup script: the

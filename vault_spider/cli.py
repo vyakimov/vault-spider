@@ -494,8 +494,12 @@ def cmd_schema(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def embedding_models_match(exported: str, configured: str) -> bool:
-    """Whether an exported vector cache's model is the one configured here."""
-    return exported == configured
+    """Whether an exported vector cache's model is the one configured here.
+
+    Honours index.embedding_model_equivalents: the exporting machine may name the
+    same model differently (e.g. through another provider).
+    """
+    return settings.embedding_models_equivalent(exported, configured)
 
 
 def _vector_cache_root(root: str) -> str:
