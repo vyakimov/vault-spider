@@ -47,12 +47,32 @@ def _launchctl(arguments: List[str], check: bool = True) -> subprocess.Completed
     return process
 
 
-def _service_target() -> str:
-    return f"gui/{os.getuid()}/{LABEL}"
+def find_uv(path: Optional[str] = None) -> Optional[Path]:
+    """The real uv binary on PATH, skipping version-manager shims.
+
+    Shims (mise, asdf, ...) are symlinks to the manager's own binary, so
+    resolving one yields e.g. ``mise``, which ``launchd`` would then run as
+    ``mise run ...`` -- a different command. A candidate counts only if it
+    resolves to a file that is itself named ``uv``.
+    """
+    for directory in (path if path is not None else os.environ.get("PATH", "")).split(os.pathsep):
+        if not directory:
+            continue
+        candidate = Path(directory) / "uv"
+        if not (candidate.is_file() and os.access(candidate, os.X_OK)):
+            continue
+        resolved = candidate.resolve()
+        if resolved.name == "uv":
+            return resolved
+    return None
 
 
-def _loaded() -> bool:
-    return _launchctl(["print", _service_target()], check=False).returncode == 0
+def _service_target(label: str = LABEL) -> str:
+    return f"gui/{os.getuid()}/{label}"
+
+
+def _loaded(label: str = LABEL) -> bool:
+    return _launchctl(["print", _service_target(label)], check=False).returncode == 0
 
 
 def _paths(home: Path) -> Dict[str, Path]:
@@ -197,28 +217,32 @@ def _atomic_write(path: Path, payload: bytes) -> None:
         raise
 
 
-def apply_install(plist: Dict[str, Any], home: Path) -> Dict[str, Any]:
-    paths = _paths(home)
+def apply_install(
+    plist: Dict[str, Any], home: Path, paths: Optional[Dict[str, Path]] = None
+) -> Dict[str, Any]:
+    """Install or update the agent described by ``plist`` (any label) and start it."""
+    label = plist["Label"]
+    paths = paths or _paths(home)
     payload = _validated_plist_bytes(plist)
     paths["logs"].mkdir(parents=True, exist_ok=True)
     paths["logs"].chmod(0o700)
     paths["state"].mkdir(parents=True, exist_ok=True)
     paths["state"].chmod(0o700)
 
-    was_loaded = _loaded()
+    was_loaded = _loaded(label)
     previous = paths["agent"].read_bytes() if paths["agent"].exists() else None
     if was_loaded:
-        _launchctl(["bootout", _service_target()])
+        _launchctl(["bootout", _service_target(label)])
     try:
         _atomic_write(paths["agent"], payload)
-        _launchctl(["enable", _service_target()])
+        _launchctl(["enable", _service_target(label)])
         # RunAtLoad starts the job as part of bootstrap. A subsequent
         # ``kickstart -k`` would terminate that first run and trigger launchd's
         # throttle window before any sync output is written.
         _launchctl(["bootstrap", f"gui/{os.getuid()}", str(paths["agent"])])
     except BaseException:
-        if _loaded():
-            _launchctl(["bootout", _service_target()], check=False)
+        if _loaded(label):
+            _launchctl(["bootout", _service_target(label)], check=False)
         if previous is None:
             paths["agent"].unlink(missing_ok=True)
         else:
@@ -280,10 +304,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         wrapper = repo / "bin" / "vault-spider"
         if not runner.is_file() or not wrapper.is_file():
             raise SetupError("Vault Spider runner or wrapper is missing")
-        uv = shutil.which("uv")
-        if not uv:
-            raise SetupError("uv is not available on PATH")
-        uv_binary = Path(uv).resolve()
+        uv_binary = find_uv()
+        if uv_binary is None:
+            raise SetupError("uv is not available on PATH (version-manager shims are skipped)")
         home = Path.home().resolve()
         plan = build_plan(
             repo,
