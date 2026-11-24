@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -58,7 +59,9 @@ def test_run_cli_fails_closed_on_non_json_stdout(monkeypatch) -> None:
 
 
 def test_search_tool_maps_filters_to_cli_arguments(monkeypatch) -> None:
-    monkeypatch.setattr(mcp_server, "_run_cli", lambda arguments: {"arguments": arguments})
+    monkeypatch.setattr(
+        mcp_server, "_run_cli", lambda arguments, vault=None: {"arguments": arguments}
+    )
 
     result = mcp_server.search_vault(
         "network setup",
@@ -107,7 +110,7 @@ def test_mutation_tools_default_to_dry_run_and_encode_structured_inputs(monkeypa
     monkeypatch.setattr(
         mcp_server,
         "_run_cli",
-        lambda arguments: calls.append(arguments) or {"ok": True},
+        lambda arguments, vault=None: calls.append(arguments) or {"ok": True},
     )
 
     mcp_server.create_note(
@@ -140,6 +143,7 @@ def test_generated_tools_expose_safety_annotations_and_bounded_schemas() -> None
     tools = {tool.name: tool for tool in asyncio.run(mcp_server.mcp.list_tools())}
 
     assert set(tools) == {
+        "list_vaults",
         "vault_stats",
         "sync_index",
         "search_vault",
@@ -163,9 +167,11 @@ def test_generated_tools_expose_safety_annotations_and_bounded_schemas() -> None
     assert create_annotations is not None
     assert search_annotations.readOnlyHint is True
     assert search_annotations.openWorldHint is True
-    assert {"contextualize", "refresh_context"}.issubset(
-        sync_schema["properties"]
-    )
+    assert {"contextualize", "refresh_context"}.issubset(sync_schema["properties"])
+    for name, tool in tools.items():
+        if name != "list_vaults":
+            assert "vault" in tool.inputSchema["properties"], name
+            assert "vault" not in tool.inputSchema.get("required", []), name
     assert create_annotations.readOnlyHint is False
     assert create_annotations.destructiveHint is True
     assert tools["create_note"].inputSchema["properties"]["dry_run"]["default"] is True
@@ -235,3 +241,84 @@ def test_main_configures_http_transport_and_cli_overrides(monkeypatch) -> None:
         "--collection",
         "other-notes",
     ]
+
+
+def _two_vaults(monkeypatch, tmp_path) -> tuple[Path, Path]:
+    """A default vault ("Vault 14") plus a second one configured as novo.yaml."""
+    default_config = tmp_path / "config.yaml"
+    default_config.write_text("vault:\n  root: /vaults/Vault 14\n", encoding="utf-8")
+    vaults = tmp_path / "vaults"
+    vaults.mkdir()
+    novo_config = vaults / "novo.yaml"
+    novo_config.write_text("vault:\n  root: /vaults/Vault Novo\n", encoding="utf-8")
+    (vaults / "notes.txt").write_text("not a config", encoding="utf-8")
+    monkeypatch.setenv("VAULT_SPIDER_CONFIG", str(default_config))
+    monkeypatch.setattr(mcp_server, "_vaults_dir", vaults)
+    return default_config, novo_config
+
+
+def test_list_vaults_reports_the_default_and_each_configured_vault(monkeypatch, tmp_path) -> None:
+    default_config, novo_config = _two_vaults(monkeypatch, tmp_path)
+
+    envelope = mcp_server.list_vaults()
+
+    assert envelope["ok"] is True
+    assert [
+        (vault["name"], vault["default"], vault["config"]) for vault in envelope["result"]["vaults"]
+    ] == [("Vault 14", True, str(default_config)), ("novo", False, str(novo_config))]
+    assert envelope["result"]["vaults"][1]["aliases"] == ["novo", "Vault Novo"]
+
+
+def test_a_vault_name_selects_that_vaults_config(monkeypatch, tmp_path) -> None:
+    _, novo_config = _two_vaults(monkeypatch, tmp_path)
+    calls: list[tuple[list[str], object]] = []
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs["env"]))
+        return subprocess.CompletedProcess(argv, 0, json.dumps({"ok": True}), "")
+
+    monkeypatch.setattr(mcp_server, "_cli_prefix", ["--collection", "default-notes"])
+    monkeypatch.setattr(mcp_server.subprocess, "run", fake_run)
+
+    for name in ("novo", "Novo", "Vault Novo", "novo vault"):
+        assert mcp_server.vault_stats(vault=name) == {"ok": True}
+    assert mcp_server.vault_stats() == {"ok": True}
+    assert mcp_server.vault_stats(vault="vault 14") == {"ok": True}
+
+    for argv, env in calls[:4]:
+        # Another vault runs under its own config, without the default index overrides.
+        assert env["VAULT_SPIDER_CONFIG"] == str(novo_config)
+        assert "--collection" not in argv
+    for argv, env in calls[4:]:
+        assert env is None
+        assert argv[3:5] == ["--collection", "default-notes"]
+
+
+def test_an_unknown_vault_fails_without_running_anything(monkeypatch, tmp_path) -> None:
+    _two_vaults(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        mcp_server.subprocess, "run", lambda *args, **kwargs: pytest.fail("must not run")
+    )
+
+    envelope = mcp_server.search_vault("anything", vault="work")
+
+    assert envelope["ok"] is False
+    assert envelope["action"] == "retrieve"
+    assert envelope["error"]["type"] == "invalid_arguments"
+    assert "Unknown vault 'work'" in envelope["error"]["message"]
+    assert envelope["error"]["details"]["known_vaults"] == ["Vault 14", "novo"]
+
+
+def test_every_tool_forwards_its_vault(monkeypatch) -> None:
+    seen: list[object] = []
+    monkeypatch.setattr(
+        mcp_server, "_run_cli", lambda arguments, vault=None: seen.append(vault) or {"ok": True}
+    )
+
+    mcp_server.read_note("A.md", vault="novo")
+    mcp_server.create_note("Inbox/A.md", vault="novo")
+    mcp_server.move_note("A.md", "Archive", vault="novo")
+    mcp_server.sync_index(vault="novo")
+    mcp_server.plan_enrichment("A.md", vault="novo")
+
+    assert seen == ["novo"] * 5

@@ -158,6 +158,10 @@ imported ones and treats `distilled` notes as pointers; retrieval filters on it
     mutations. Defaults to `stdio` for local clients such as Claude Desktop. Streamable HTTP serves
     `/mcp` for remote clients such as ChatGPT; it binds to `127.0.0.1:8000` by default and has no
     built-in application authentication. Mutation tools default to `dry_run: true`.
+  - Every tool takes an optional `vault` name. Omitted, it means the default config; otherwise
+    it selects `<name>.yaml` in `--vaults-dir` (default `~/.config/vault-spider`,
+    `VAULT_SPIDER_VAULTS_DIR`) by running the CLI with `VAULT_SPIDER_CONFIG` set to that file.
+    `list_vaults` reports the names.
 - `uv run pytest`
   - Network-free test suite (uses a fake provider; no API key required).
 
