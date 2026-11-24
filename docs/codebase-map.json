@@ -11,7 +11,7 @@
     "canonical_instructions": "AGENTS.md",
     "json_envelope": "{ok: true, action, result, meta} | {ok: false, action, error}; always check `ok`, not just the exit code"
   },
-  "generated": "2026-11-11",
+  "generated": "2026-11-24",
   "generator_note": "Regenerate with `uv run python tools/build_codebase_map.py`. Structure extracted from version-controlled source via Python ast; line numbers refer to the commit current on the generation date.",
   "architecture": {
     "data_flow": {
@@ -2509,11 +2509,11 @@
       ]
     },
     "vault_spider.llm": {
-      "role": "LLM client for the AI Marketplace gateway (OpenAI-compatible): embeddings, reranking, and chat completions. The only module that talks to the LLM provider.",
+      "role": "LLM client for the AI Marketplace gateway or OpenRouter (both OpenAI-compatible, picked by which API key is set): embeddings, reranking, and chat completions. The only module that talks to the LLM provider.",
       "modules": [
         {
           "path": "vault_spider/llm/openrouter.py",
-          "loc": 290,
+          "loc": 339,
           "summary": "OpenAI-compatible embedding, rerank, and chat helpers.",
           "internal_deps": [],
           "classes": [
@@ -2523,7 +2523,7 @@
                 "RuntimeError"
               ],
               "doc": "Raised when an OpenRouter request fails.",
-              "line": 36,
+              "line": 81,
               "fields": [],
               "methods": []
             },
@@ -2531,43 +2531,50 @@
               "name": "OpenRouterClient",
               "bases": [],
               "doc": null,
-              "line": 40,
+              "line": 85,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
                   "signature": "(self, api_key: str, embedding_model: str, chat_model: str, rerank_model: Optional[str]=None, context_model: Optional[str]=None, base_url: str=DEFAULT_BASE_URL, http_referer: Optional[str]=None, app_title: Optional[str]=None, timeout_seconds: float=60.0, drop_params: bool=False)",
                   "doc": null,
-                  "line": 41
+                  "line": 86
                 },
                 {
                   "name": "from_env",
                   "signature": "(cls) -> 'OpenRouterClient'",
                   "doc": null,
-                  "line": 68
+                  "line": 113
                 },
                 {
                   "name": "embed_texts",
                   "signature": "(self, texts: List[str], batch_size: int=32) -> List[List[float]]",
                   "doc": null,
-                  "line": 140
+                  "line": 189
                 },
                 {
                   "name": "rerank",
                   "signature": "(self, query: str, documents: List[str], ids: List[str]) -> pd.DataFrame",
                   "doc": null,
-                  "line": 193
+                  "line": 242
                 },
                 {
                   "name": "chat",
                   "signature": "(self, system_prompt: str, user_prompt: str, temperature: float=0.2, max_tokens: int=1024, model: Optional[str]=None) -> str",
                   "doc": null,
-                  "line": 249
+                  "line": 298
                 }
               ]
             }
           ],
-          "functions": [],
+          "functions": [
+            {
+              "name": "select_provider",
+              "signature": "() -> str",
+              "doc": "Name of the provider to use: ``LLM_PROVIDER``, else whichever API key is set.",
+              "line": 51
+            }
+          ],
           "constants": [
             "DEFAULT_BASE_URL",
             "DEFAULT_EMBEDDING_MODEL",
@@ -3271,7 +3278,7 @@
         },
         {
           "path": "tools/build_codebase_map.py",
-          "loc": 1057,
+          "loc": 1058,
           "summary": "Generate docs/codebase-map.json and docs/codebase-map.html.",
           "internal_deps": [],
           "classes": [],
@@ -3286,19 +3293,19 @@
               "name": "build_json",
               "signature": "(code_modules: list[dict], test_modules: list[dict]) -> dict",
               "doc": null,
-              "line": 419
+              "line": 420
             },
             {
               "name": "build_html",
               "signature": "(codebase_map: dict) -> str",
               "doc": null,
-              "line": 824
+              "line": 825
             },
             {
               "name": "main",
               "signature": "() -> None",
               "doc": null,
-              "line": 1040
+              "line": 1041
             }
           ],
           "constants": [
@@ -3346,7 +3353,7 @@
       },
       {
         "path": "tests/test_cli.py",
-        "loc": 321,
+        "loc": 323,
         "test_count": 22,
         "summary": "Tests for the vault-spider CLI, driven in-process with a fake provider.",
         "covers": [
@@ -3534,8 +3541,8 @@
       },
       {
         "path": "tests/test_openrouter.py",
-        "loc": 172,
-        "test_count": 13,
+        "loc": 229,
+        "test_count": 19,
         "summary": "Tests for vault_spider.llm.openrouter request/response hardening (no network).",
         "covers": [
           "vault_spider.llm",
@@ -3755,7 +3762,7 @@
     },
     {
       "path": ".env.example",
-      "role": "Template for secrets: AI Marketplace token and model ids."
+      "role": "Template for secrets: AI Marketplace or OpenRouter key and model ids."
     },
     {
       "path": "pyproject.toml",

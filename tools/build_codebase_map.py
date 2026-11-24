@@ -208,8 +208,9 @@ PACKAGES = {
     },
     "vault_spider.llm": {
         "match": lambda p: p.startswith("vault_spider/llm/"),
-        "role": "LLM client for the AI Marketplace gateway (OpenAI-compatible): embeddings, "
-                "reranking, and chat completions. The only module that talks to the LLM provider.",
+        "role": "LLM client for the AI Marketplace gateway or OpenRouter (both OpenAI-compatible, "
+                "picked by which API key is set): embeddings, reranking, and chat completions. "
+                "The only module that talks to the LLM provider.",
     },
     "vault_spider.web": {
         "match": lambda p: p.startswith("vault_spider/web/"),
@@ -389,7 +390,7 @@ OTHER_FILES = [
     {"path": "config.yaml.example",
      "role": "Template for installation settings (vault root, folders, tag rules, context "
              "summaries, timestamps). Real config.yaml is gitignored."},
-    {"path": ".env.example", "role": "Template for secrets: AI Marketplace token and model ids."},
+    {"path": ".env.example", "role": "Template for secrets: AI Marketplace or OpenRouter key and model ids."},
     {"path": "pyproject.toml", "role": "Package metadata and dependencies (uv-managed)."},
     {"path": ".github/workflows/ci.yml", "role": "CI workflow."},
     {"path": "docs/launchd.md",

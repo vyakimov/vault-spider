@@ -76,7 +76,8 @@ FILTERS (retrieve & synthesize):
   `related_candidates`, `suggested_path`, `confidence`, `warnings`). **enrich never mutates** —
   apply its output with the mutation commands below.
 - Env: `MARKETPLACE_API_KEY`, `MARKETPLACE_EMBEDDING_MODEL`, `MARKETPLACE_CHAT_MODEL`;
-  optional `MARKETPLACE_RERANK_MODEL` (enables reranking in `thorough`).
+  optional `MARKETPLACE_RERANK_MODEL` (enables reranking in `thorough`). Or the same names with
+  `OPENROUTER_` for OpenRouter; `LLM_PROVIDER` picks one when both keys are set.
 
 ## Mutation commands (same CLI; Obsidian app must be running)
 

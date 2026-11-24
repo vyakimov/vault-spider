@@ -1,9 +1,14 @@
 """OpenAI-compatible embedding, rerank, and chat helpers.
 
-Every LLM call in Vault Spider goes through this client. It defaults to the
-corporate AI Marketplace gateway (LiteLLM, OpenAI-compatible) -- the same
-gateway Claude Code uses -- with Marketplace model ids, configured through
-``MARKETPLACE_*`` environment variables. ``drop_params`` (default on) lets LiteLLM drop per-model unsupported
+Every LLM call in Vault Spider goes through this client. It speaks to one of two
+OpenAI-compatible providers, chosen by which API key the environment holds:
+
+- ``marketplace``: the corporate AI Marketplace gateway (LiteLLM), configured
+  through ``MARKETPLACE_*`` variables, with Marketplace model ids;
+- ``openrouter``: OpenRouter, configured through ``OPENROUTER_*`` variables.
+
+``LLM_PROVIDER`` forces the choice and is required only when both keys are set.
+``drop_params`` (Marketplace default on) lets LiteLLM drop per-model unsupported
 parameters (Claude 5.x rejects ``temperature``) instead of failing.
 """
 
@@ -21,9 +26,49 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-DEFAULT_BASE_URL = "https://api.marketplace.novo-genai.com/v1"
-DEFAULT_EMBEDDING_MODEL = "openai_text_embedding_3_small"
-DEFAULT_CHAT_MODEL = "anthropic_claude_sonnet_5_5"
+PROVIDERS: Dict[str, Dict[str, Any]] = {
+    "marketplace": {
+        "prefix": "MARKETPLACE_",
+        "base_url": "https://api.marketplace.novo-genai.com/v1",
+        "embedding_model": "openai_text_embedding_3_small",
+        "chat_model": "anthropic_claude_sonnet_5_5",
+        "drop_params": True,
+    },
+    "openrouter": {
+        "prefix": "OPENROUTER_",
+        "base_url": "https://openrouter.ai/api/v1",
+        "embedding_model": "openai/text-embedding-3-small",
+        "chat_model": "openai/gpt-4o-mini",
+        "drop_params": False,
+    },
+}
+
+DEFAULT_BASE_URL = PROVIDERS["marketplace"]["base_url"]
+DEFAULT_EMBEDDING_MODEL = PROVIDERS["marketplace"]["embedding_model"]
+DEFAULT_CHAT_MODEL = PROVIDERS["marketplace"]["chat_model"]
+
+
+def select_provider() -> str:
+    """Name of the provider to use: ``LLM_PROVIDER``, else whichever API key is set."""
+    forced = os.environ.get("LLM_PROVIDER", "").strip().lower()
+    if forced:
+        if forced not in PROVIDERS:
+            raise ValueError(
+                f"LLM_PROVIDER must be one of {sorted(PROVIDERS)}, got {forced!r}"
+            )
+        return forced
+    present = [
+        name for name, spec in PROVIDERS.items()
+        if os.environ.get(f"{spec['prefix']}API_KEY", "").strip()
+    ]
+    if len(present) == 1:
+        return present[0]
+    if not present:
+        raise ValueError("MARKETPLACE_API_KEY or OPENROUTER_API_KEY is required")
+    raise ValueError(
+        "Both MARKETPLACE_API_KEY and OPENROUTER_API_KEY are set; "
+        "set LLM_PROVIDER to marketplace or openrouter"
+    )
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -52,7 +97,7 @@ class OpenRouterClient:
         drop_params: bool = False,
     ):
         if not api_key:
-            raise ValueError("MARKETPLACE_API_KEY is required")
+            raise ValueError("An API key is required")
         self.api_key = api_key
         self.embedding_model = embedding_model
         self.chat_model = chat_model
@@ -66,18 +111,22 @@ class OpenRouterClient:
 
     @classmethod
     def from_env(cls) -> "OpenRouterClient":
+        spec = PROVIDERS[select_provider()]
+        prefix = spec["prefix"]
+
+        def env(name: str) -> Optional[str]:
+            return os.environ.get(prefix + name) or None
+
         return cls(
-            api_key=os.environ.get("MARKETPLACE_API_KEY", ""),
-            embedding_model=os.environ.get(
-                "MARKETPLACE_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL
-            ),
-            chat_model=os.environ.get("MARKETPLACE_CHAT_MODEL", DEFAULT_CHAT_MODEL),
-            rerank_model=os.environ.get("MARKETPLACE_RERANK_MODEL") or None,
-            context_model=os.environ.get("MARKETPLACE_CONTEXT_MODEL") or None,
-            base_url=os.environ.get("MARKETPLACE_BASE_URL") or DEFAULT_BASE_URL,
-            http_referer=os.environ.get("MARKETPLACE_HTTP_REFERER"),
-            app_title=os.environ.get("MARKETPLACE_APP_TITLE", "Vault Spider"),
-            drop_params=_env_flag("MARKETPLACE_DROP_PARAMS", default=True),
+            api_key=env("API_KEY") or "",
+            embedding_model=env("EMBEDDING_MODEL") or spec["embedding_model"],
+            chat_model=env("CHAT_MODEL") or spec["chat_model"],
+            rerank_model=env("RERANK_MODEL"),
+            context_model=env("CONTEXT_MODEL"),
+            base_url=env("BASE_URL") or spec["base_url"],
+            http_referer=env("HTTP_REFERER"),
+            app_title=env("APP_TITLE") or "Vault Spider",
+            drop_params=_env_flag(prefix + "DROP_PARAMS", default=spec["drop_params"]),
         )
 
     def _headers(self) -> Dict[str, str]:
