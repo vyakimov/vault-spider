@@ -177,20 +177,34 @@ command write?"); the optional `mutates` string qualifies what and when.
 
 ## Environment
 
-Required environment variables (loaded from `.env` via `python-dotenv`):
+All LLM calls (embeddings, rerank, chat) go through one OpenAI-compatible provider via
+`vault_spider/llm/openrouter.py`, chosen by which API key the environment holds
+(`select_provider`):
 
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_EMBEDDING_MODEL`
-- `OPENROUTER_CHAT_MODEL`
+- **AI Marketplace** (corporate LiteLLM gateway, `https://api.marketplace.novo-genai.com/v1`, the
+  same gateway Claude Code uses): `MARKETPLACE_*` variables, Marketplace model ids
+  (`GET /v1/models`; pin specific ids, not `_latest` aliases).
+- **OpenRouter**: `OPENROUTER_*` variables, OpenRouter model ids.
+
+`LLM_PROVIDER` (`marketplace` | `openrouter`) forces the choice and is required when both keys are
+set. Each provider reads only its own prefix. Environment variables (loaded from `.env` via
+`python-dotenv`), shown with the `MARKETPLACE_` prefix; `OPENROUTER_` takes the same names:
+
+- `MARKETPLACE_API_KEY` (required — the AI Marketplace token)
+- `MARKETPLACE_EMBEDDING_MODEL` (default `openai_text_embedding_3_small`; OpenRouter
+  `openai/text-embedding-3-small`)
+- `MARKETPLACE_CHAT_MODEL` (default `anthropic_claude_sonnet_5_5`; OpenRouter `openai/gpt-4o-mini`)
 
 Optional:
 
-- `OPENROUTER_RERANK_MODEL` (enables reranking in `thorough` mode)
-- `OPENROUTER_CONTEXT_MODEL` (OpenRouter context mode only; defaults to
-  `OPENROUTER_CHAT_MODEL`)
-- `OPENROUTER_BASE_URL`
-- `OPENROUTER_HTTP_REFERER`
-- `OPENROUTER_APP_TITLE`
+- `MARKETPLACE_RERANK_MODEL` (enables reranking in `thorough` mode, e.g. `cohere_rerank_3_5`)
+- `MARKETPLACE_CONTEXT_MODEL` (`openrouter` context source only; defaults to
+  `MARKETPLACE_CHAT_MODEL`)
+- `MARKETPLACE_BASE_URL` (defaults to the provider's own endpoint)
+- `MARKETPLACE_DROP_PARAMS` (default `true` for the Marketplace, `false` for OpenRouter; LiteLLM
+  drops per-model unsupported parameters such as `temperature` on Claude 5.x)
+- `MARKETPLACE_HTTP_REFERER`
+- `MARKETPLACE_APP_TITLE`
 
 Install dependencies with `uv sync`.
 

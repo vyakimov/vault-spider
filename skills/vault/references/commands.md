@@ -75,8 +75,9 @@ FILTERS (retrieve & synthesize):
 - `enrich` result = an enrichment plan (title, `frontmatter_patch`, `link_insertions`,
   `related_candidates`, `suggested_path`, `confidence`, `warnings`). **enrich never mutates** —
   apply its output with the mutation commands below.
-- Env: `OPENROUTER_API_KEY`, `OPENROUTER_EMBEDDING_MODEL`, `OPENROUTER_CHAT_MODEL`;
-  optional `OPENROUTER_RERANK_MODEL` (enables reranking in `thorough`).
+- Env: `MARKETPLACE_API_KEY`, `MARKETPLACE_EMBEDDING_MODEL`, `MARKETPLACE_CHAT_MODEL`;
+  optional `MARKETPLACE_RERANK_MODEL` (enables reranking in `thorough`). Or the same names with
+  `OPENROUTER_` for OpenRouter; `LLM_PROVIDER` picks one when both keys are set.
 
 ## Mutation commands (same CLI; Obsidian app must be running)
 

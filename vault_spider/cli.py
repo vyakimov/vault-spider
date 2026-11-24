@@ -36,7 +36,7 @@ def get_provider() -> OpenRouterClient:
     try:
         return OpenRouterClient.from_env()
     except ValueError as exc:
-        # Missing OPENROUTER_API_KEY should surface as provider_error, not
+        # A missing API key should surface as provider_error, not
         # internal_error.
         raise OpenRouterError(str(exc)) from exc
 
@@ -556,7 +556,7 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
                 f"{cache_info.get('contextual_state')}, this machine has {local_state}",
             )
     try:
-        result = store.sync(
+        result: Dict[str, Any] = store.sync(
             root,
             reset=args.reset,
             dry_run=args.dry_run,

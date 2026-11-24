@@ -29,7 +29,7 @@ reference only when you hit its topic:
   `ambiguous_target`, `config_mismatch`, or `contract_violation`.
 - Config (`config.yaml`) supplies the vault root and connection facts — omit `--root` unless the
   user targets a different directory.
-- Query commands need `.env` (OpenRouter). Mutations need the **Obsidian app running**
+- Query commands need `.env` (AI Marketplace token). Mutations need the **Obsidian app running**
   (`error.type: obsidian_not_running` → ask the user to open Obsidian, don't retry).
 - `./bin/vault-spider stats` — cheap "is the index alive?" check; needs no API key.
 - `./bin/vault-spider schema` — machine-readable contract for everything (version 2).

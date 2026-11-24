@@ -76,7 +76,7 @@ On each sync, Vault Spider resolves every note against the same canonical direct
 - A generation failure is reported in `context.failed_notes`; current source is still indexed
   without generated context, and the next sync retries.
 
-`OPENROUTER_CONTEXT_MODEL` selects the generator and defaults to `OPENROUTER_CHAT_MODEL`.
+`MARKETPLACE_CONTEXT_MODEL` selects the generator and defaults to `MARKETPLACE_CHAT_MODEL`.
 `sync --refresh-context` forces regeneration of every note summary. There is no separate context
 cache and no per-chunk generation.
 

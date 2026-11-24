@@ -1,4 +1,16 @@
-"""OpenRouter-backed embedding, rerank, and chat helpers."""
+"""OpenAI-compatible embedding, rerank, and chat helpers.
+
+Every LLM call in Vault Spider goes through this client. It speaks to one of two
+OpenAI-compatible providers, chosen by which API key the environment holds:
+
+- ``marketplace``: the corporate AI Marketplace gateway (LiteLLM), configured
+  through ``MARKETPLACE_*`` variables, with Marketplace model ids;
+- ``openrouter``: OpenRouter, configured through ``OPENROUTER_*`` variables.
+
+``LLM_PROVIDER`` forces the choice and is required only when both keys are set.
+``drop_params`` (Marketplace default on) lets LiteLLM drop per-model unsupported
+parameters (Claude 5.x rejects ``temperature``) instead of failing.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +26,58 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+PROVIDERS: Dict[str, Dict[str, Any]] = {
+    "marketplace": {
+        "prefix": "MARKETPLACE_",
+        "base_url": "https://api.marketplace.novo-genai.com/v1",
+        "embedding_model": "openai_text_embedding_3_small",
+        "chat_model": "anthropic_claude_sonnet_5_5",
+        "drop_params": True,
+    },
+    "openrouter": {
+        "prefix": "OPENROUTER_",
+        "base_url": "https://openrouter.ai/api/v1",
+        "embedding_model": "openai/text-embedding-3-small",
+        "chat_model": "openai/gpt-4o-mini",
+        "drop_params": False,
+    },
+}
+
+DEFAULT_BASE_URL = PROVIDERS["marketplace"]["base_url"]
+DEFAULT_EMBEDDING_MODEL = PROVIDERS["marketplace"]["embedding_model"]
+DEFAULT_CHAT_MODEL = PROVIDERS["marketplace"]["chat_model"]
+
+
+def select_provider() -> str:
+    """Name of the provider to use: ``LLM_PROVIDER``, else whichever API key is set."""
+    forced = os.environ.get("LLM_PROVIDER", "").strip().lower()
+    if forced:
+        if forced not in PROVIDERS:
+            raise ValueError(
+                f"LLM_PROVIDER must be one of {sorted(PROVIDERS)}, got {forced!r}"
+            )
+        return forced
+    present = [
+        name for name, spec in PROVIDERS.items()
+        if os.environ.get(f"{spec['prefix']}API_KEY", "").strip()
+    ]
+    if len(present) == 1:
+        return present[0]
+    if not present:
+        raise ValueError("MARKETPLACE_API_KEY or OPENROUTER_API_KEY is required")
+    raise ValueError(
+        "Both MARKETPLACE_API_KEY and OPENROUTER_API_KEY are set; "
+        "set LLM_PROVIDER to marketplace or openrouter"
+    )
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
 class OpenRouterError(RuntimeError):
     """Raised when an OpenRouter request fails."""
 
@@ -26,13 +90,14 @@ class OpenRouterClient:
         chat_model: str,
         rerank_model: Optional[str] = None,
         context_model: Optional[str] = None,
-        base_url: str = "https://openrouter.ai/api/v1",
+        base_url: str = DEFAULT_BASE_URL,
         http_referer: Optional[str] = None,
         app_title: Optional[str] = None,
         timeout_seconds: float = 60.0,
+        drop_params: bool = False,
     ):
         if not api_key:
-            raise ValueError("OPENROUTER_API_KEY is required")
+            raise ValueError("An API key is required")
         self.api_key = api_key
         self.embedding_model = embedding_model
         self.chat_model = chat_model
@@ -42,20 +107,26 @@ class OpenRouterClient:
         self.http_referer = http_referer
         self.app_title = app_title
         self.timeout_seconds = timeout_seconds
+        self.drop_params = drop_params
 
     @classmethod
     def from_env(cls) -> "OpenRouterClient":
+        spec = PROVIDERS[select_provider()]
+        prefix = spec["prefix"]
+
+        def env(name: str) -> Optional[str]:
+            return os.environ.get(prefix + name) or None
+
         return cls(
-            api_key=os.environ.get("OPENROUTER_API_KEY", ""),
-            embedding_model=os.environ.get(
-                "OPENROUTER_EMBEDDING_MODEL", "openai/text-embedding-3-small"
-            ),
-            chat_model=os.environ.get("OPENROUTER_CHAT_MODEL", "openai/gpt-4o-mini"),
-            rerank_model=os.environ.get("OPENROUTER_RERANK_MODEL") or None,
-            context_model=os.environ.get("OPENROUTER_CONTEXT_MODEL") or None,
-            base_url=os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-            http_referer=os.environ.get("OPENROUTER_HTTP_REFERER"),
-            app_title=os.environ.get("OPENROUTER_APP_TITLE", "Vault Spider"),
+            api_key=env("API_KEY") or "",
+            embedding_model=env("EMBEDDING_MODEL") or spec["embedding_model"],
+            chat_model=env("CHAT_MODEL") or spec["chat_model"],
+            rerank_model=env("RERANK_MODEL"),
+            context_model=env("CONTEXT_MODEL"),
+            base_url=env("BASE_URL") or spec["base_url"],
+            http_referer=env("HTTP_REFERER"),
+            app_title=env("APP_TITLE") or "Vault Spider",
+            drop_params=_env_flag(prefix + "DROP_PARAMS", default=spec["drop_params"]),
         )
 
     def _headers(self) -> Dict[str, str]:
@@ -242,6 +313,8 @@ class OpenRouterClient:
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
         }
+        if self.drop_params:
+            payload["drop_params"] = True
         response = self._post("/chat/completions", payload)
         choices = response.get("choices") or []
         if not isinstance(choices, list) or not choices:

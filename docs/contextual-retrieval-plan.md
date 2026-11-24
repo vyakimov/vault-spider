@@ -39,7 +39,7 @@ The one-line architectural shift: composed entry text stops being a pure functio
 - Add `"contextual": False` to `DEFAULTS["index"]` (validator rejects unknown keys, so this is required).
 - Accessor `contextual_enabled() -> bool`.
 - Document in `config.yaml.example` under `index:` (opt-in, cost implications, backfill command).
-- `.env.example`: `OPENROUTER_CONTEXT_MODEL` (optional; defaults to chat model). Wire in `OpenRouterClient.from_env` as `context_model` attribute, resolved `context_model or chat_model` at call time.
+- `.env.example`: `MARKETPLACE_CONTEXT_MODEL` (optional; defaults to chat model). Wire in `OpenRouterClient.from_env` as `context_model` attribute, resolved `context_model or chat_model` at call time.
 
 ### 4. Composition: `vault_spider/corpus/chunker.py` (minimal touch)
 
@@ -88,7 +88,7 @@ The one-line architectural shift: composed entry text stops being a pure functio
 
 1. `uv run pytest` — full suite green (network-free via FakeProvider).
 2. Upgrade no-op proof: existing test `test_second_sync_is_noop` must still pass unmodified with contextual disabled; add the same assertion with contextual *enabled* against a vault synced *before* enabling (no re-embeds until backfill).
-3. Manual eval A/B (user-run, needs real `OPENROUTER_API_KEY`; labels valid across the change per invariant 10):
+3. Manual eval A/B (user-run, needs real `MARKETPLACE_API_KEY`; labels valid across the change per invariant 10):
    ```
    ./bin/vault-spider sync --root eval-realistic/corpus --reset
    ./bin/vault-spider eval ... --granularity mixed   # baseline; record mean_ndcg_at_k, mean_group_recall_at_k, mrr

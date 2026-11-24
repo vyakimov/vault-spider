@@ -52,7 +52,7 @@ index:
 - `contextual_bm25` controls whether generated context participates in BM25. It defaults to
   `false`; dense retrieval and reranking still use context.
 - Reject `contextual_bm25: true` when `contextual` is false.
-- Add optional `OPENROUTER_CONTEXT_MODEL`; default it to `OPENROUTER_CHAT_MODEL`.
+- Add optional `MARKETPLACE_CONTEXT_MODEL`; default it to `MARKETPLACE_CHAT_MODEL`.
 - Context-off indexes remain network-compatible with today: no chat calls are made.
 
 Chunk-size and prompt limits are algorithm constants, not installation settings:
