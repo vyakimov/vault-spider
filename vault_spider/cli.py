@@ -556,7 +556,7 @@ def cmd_sync(args: argparse.Namespace) -> Dict[str, Any]:
                 f"{cache_info.get('contextual_state')}, this machine has {local_state}",
             )
     try:
-        result = store.sync(
+        result: Dict[str, Any] = store.sync(
             root,
             reset=args.reset,
             dry_run=args.dry_run,

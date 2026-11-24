@@ -928,7 +928,7 @@ class IndexStore:
             return {"written": 0, "deleted": 0, "total": 0, "skipped": "index is empty"}
         dimensions = len(next(iter(vectors.values())))
         cache = vector_cache_for_export(Path(cache_root), self.provider.embedding_model, dimensions)
-        report = cache.export(
+        report: Dict[str, Any] = cache.export(
             vectors,
             extra={
                 "chunk_schema_version": CHUNK_SCHEMA_VERSION,
