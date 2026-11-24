@@ -2513,7 +2513,7 @@
       "modules": [
         {
           "path": "vault_spider/llm/openrouter.py",
-          "loc": 339,
+          "loc": 361,
           "summary": "OpenAI-compatible embedding, rerank, and chat helpers.",
           "internal_deps": [],
           "classes": [
@@ -2523,7 +2523,7 @@
                 "RuntimeError"
               ],
               "doc": "Raised when an OpenRouter request fails.",
-              "line": 81,
+              "line": 91,
               "fields": [],
               "methods": []
             },
@@ -2531,38 +2531,38 @@
               "name": "OpenRouterClient",
               "bases": [],
               "doc": null,
-              "line": 85,
+              "line": 95,
               "fields": [],
               "methods": [
                 {
                   "name": "__init__",
-                  "signature": "(self, api_key: str, embedding_model: str, chat_model: str, rerank_model: Optional[str]=None, context_model: Optional[str]=None, base_url: str=DEFAULT_BASE_URL, http_referer: Optional[str]=None, app_title: Optional[str]=None, timeout_seconds: float=60.0, drop_params: bool=False)",
+                  "signature": "(self, api_key: str, embedding_model: str, chat_model: str, rerank_model: Optional[str]=None, context_model: Optional[str]=None, base_url: str=DEFAULT_BASE_URL, http_referer: Optional[str]=None, app_title: Optional[str]=None, timeout_seconds: float=60.0, drop_params: bool=False, embedding_batch_size: int=32)",
                   "doc": null,
-                  "line": 86
+                  "line": 96
                 },
                 {
                   "name": "from_env",
                   "signature": "(cls) -> 'OpenRouterClient'",
                   "doc": null,
-                  "line": 113
+                  "line": 130
                 },
                 {
                   "name": "embed_texts",
-                  "signature": "(self, texts: List[str], batch_size: int=32) -> List[List[float]]",
+                  "signature": "(self, texts: List[str], batch_size: Optional[int]=None) -> List[List[float]]",
                   "doc": null,
-                  "line": 189
+                  "line": 207
                 },
                 {
                   "name": "rerank",
                   "signature": "(self, query: str, documents: List[str], ids: List[str]) -> pd.DataFrame",
                   "doc": null,
-                  "line": 242
+                  "line": 264
                 },
                 {
                   "name": "chat",
                   "signature": "(self, system_prompt: str, user_prompt: str, temperature: float=0.2, max_tokens: int=1024, model: Optional[str]=None) -> str",
                   "doc": null,
-                  "line": 298
+                  "line": 320
                 }
               ]
             }
@@ -3541,8 +3541,8 @@
       },
       {
         "path": "tests/test_openrouter.py",
-        "loc": 229,
-        "test_count": 19,
+        "loc": 268,
+        "test_count": 23,
         "summary": "Tests for vault_spider.llm.openrouter request/response hardening (no network).",
         "covers": [
           "vault_spider.llm",

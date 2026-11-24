@@ -154,7 +154,7 @@ _PROVIDER_ENV = [
         for prefix in ("MARKETPLACE_", "OPENROUTER_")
         for name in (
             "API_KEY", "BASE_URL", "EMBEDDING_MODEL", "CHAT_MODEL", "RERANK_MODEL",
-            "CONTEXT_MODEL", "HTTP_REFERER", "APP_TITLE", "DROP_PARAMS",
+            "CONTEXT_MODEL", "HTTP_REFERER", "APP_TITLE", "DROP_PARAMS", "EMBEDDING_BATCH_SIZE",
         )
     ),
 ]
@@ -226,4 +226,43 @@ def test_llm_provider_picks_between_two_keys(clean_env):
 def test_llm_provider_rejects_unknown_names(clean_env):
     clean_env.setenv("LLM_PROVIDER", "anthropic")
     with pytest.raises(ValueError, match="LLM_PROVIDER must be one of"):
+        OpenRouterClient.from_env()
+
+
+def _fake_embeddings_post(calls):
+    def fake_post(path, payload):
+        calls.append(list(payload["input"]))
+        return {"data": [{"index": i, "embedding": [1.0, 0.0]} for i in range(len(payload["input"]))]}
+    return fake_post
+
+
+def test_embed_texts_uses_the_client_batch_size(monkeypatch):
+    client = OpenRouterClient(
+        api_key="key", embedding_model="e", chat_model="c", embedding_batch_size=1
+    )
+    calls = []
+    monkeypatch.setattr(client, "_post", _fake_embeddings_post(calls))
+    assert len(client.embed_texts(["a", "b", "c"])) == 3
+    assert calls == [["a"], ["b"], ["c"]]
+
+
+def test_embed_texts_defaults_to_batches_of_32(monkeypatch):
+    client = make_client()
+    calls = []
+    monkeypatch.setattr(client, "_post", _fake_embeddings_post(calls))
+    client.embed_texts([str(i) for i in range(40)])
+    assert [len(c) for c in calls] == [32, 8]
+
+
+def test_from_env_reads_embedding_batch_size(clean_env):
+    clean_env.setenv("MARKETPLACE_API_KEY", "key")
+    clean_env.setenv("MARKETPLACE_EMBEDDING_BATCH_SIZE", "1")
+    assert OpenRouterClient.from_env().embedding_batch_size == 1
+
+
+@pytest.mark.parametrize("value", ["0", "many"])
+def test_from_env_rejects_bad_embedding_batch_size(clean_env, value):
+    clean_env.setenv("MARKETPLACE_API_KEY", "key")
+    clean_env.setenv("MARKETPLACE_EMBEDDING_BATCH_SIZE", value)
+    with pytest.raises(ValueError, match="(?i)batch size|EMBEDDING_BATCH_SIZE"):
         OpenRouterClient.from_env()
