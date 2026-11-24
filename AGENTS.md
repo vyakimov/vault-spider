@@ -203,6 +203,8 @@ Optional:
 - `MARKETPLACE_BASE_URL` (defaults to the provider's own endpoint)
 - `MARKETPLACE_DROP_PARAMS` (default `true` for the Marketplace, `false` for OpenRouter; LiteLLM
   drops per-model unsupported parameters such as `temperature` on Claude 5.x)
+- `MARKETPLACE_EMBEDDING_BATCH_SIZE` (default `32`; texts per embeddings request. Set `1` for
+  `gemini_embedding_2` on the Marketplace, which returns one vector for a whole list)
 - `MARKETPLACE_HTTP_REFERER`
 - `MARKETPLACE_APP_TITLE`
 

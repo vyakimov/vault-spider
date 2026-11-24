@@ -854,7 +854,7 @@ class IndexStore:
                     f"offline sync had {len(missing_texts)} entries without vectors"
                 )
             if missing_texts:
-                computed = self.provider.embed_texts(missing_texts, batch_size=32)
+                computed = self.provider.embed_texts(missing_texts)
                 if len(computed) != len(missing_indexes):
                     raise OpenRouterError(
                         f"Embedding provider returned {len(computed)} vectors "

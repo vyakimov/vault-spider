@@ -78,6 +78,16 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from None
+
+
 class OpenRouterError(RuntimeError):
     """Raised when an OpenRouter request fails."""
 
@@ -95,6 +105,7 @@ class OpenRouterClient:
         app_title: Optional[str] = None,
         timeout_seconds: float = 60.0,
         drop_params: bool = False,
+        embedding_batch_size: int = 32,
     ):
         if not api_key:
             raise ValueError("An API key is required")
@@ -108,6 +119,12 @@ class OpenRouterClient:
         self.app_title = app_title
         self.timeout_seconds = timeout_seconds
         self.drop_params = drop_params
+        if embedding_batch_size < 1:
+            raise ValueError("embedding batch size must be at least 1")
+        # Texts per /embeddings request. Some gateway models (gemini_embedding_2 on
+        # the AI Marketplace) accept a list but return one vector for all of it,
+        # so they need 1.
+        self.embedding_batch_size = embedding_batch_size
 
     @classmethod
     def from_env(cls) -> "OpenRouterClient":
@@ -127,6 +144,7 @@ class OpenRouterClient:
             http_referer=env("HTTP_REFERER"),
             app_title=env("APP_TITLE") or "Vault Spider",
             drop_params=_env_flag(prefix + "DROP_PARAMS", default=spec["drop_params"]),
+            embedding_batch_size=_env_int(prefix + "EMBEDDING_BATCH_SIZE", default=32),
         )
 
     def _headers(self) -> Dict[str, str]:
@@ -186,7 +204,11 @@ class OpenRouterClient:
             raise OpenRouterError("Embedding response contained a non-normalizable vector")
         return [value / norm for value in embedding]
 
-    def embed_texts(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
+    def embed_texts(
+        self, texts: List[str], batch_size: Optional[int] = None
+    ) -> List[List[float]]:
+        if batch_size is None:
+            batch_size = self.embedding_batch_size
         if batch_size < 1:
             raise ValueError("batch_size must be at least 1")
         embeddings: List[List[float]] = []
