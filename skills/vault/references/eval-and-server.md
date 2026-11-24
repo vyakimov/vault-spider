@@ -12,6 +12,8 @@ If your harness speaks MCP, prefer the server over shelling out — same contrac
 Tools mirror the CLI: `vault_stats`, `sync_index` (defaults to dry-run), `search_vault`,
 `answer_from_vault` (both accept the same filters, including `provenance`), `lint_vault`,
 `plan_enrichment`, note reads, and the safe mutations (mutating tools default `dry_run: true`).
+Every tool takes an optional `vault` name: omit it for the default vault, call `list_vaults` for
+the others (one per `~/.config/vault-spider/<name>.yaml`).
 Every tool returns the CLI's JSON envelope — the same `"ok"` / `error.type` rules apply. The
 HTTP transport has **no built-in auth**; keep it on localhost or behind your own proxy.
 

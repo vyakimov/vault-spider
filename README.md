@@ -220,6 +220,23 @@ You can override the index location per server:
 vault-spider-mcp --chroma-path /other/chroma_db --collection other_notes
 ```
 
+### Several vaults from one server
+
+Every tool takes an optional `vault` argument. Leave it out for the default vault (the one in
+`config.yaml`, or `VAULT_SPIDER_CONFIG`). To make another vault addressable, give it its own
+config file in `~/.config/vault-spider/`:
+
+```
+~/.config/vault-spider/work.yaml     # a normal config.yaml with its own vault.root and chroma_path
+```
+
+That vault is then `vault: "work"`. A vault also answers to the folder name of its `vault.root`,
+matching ignores case and the word "vault" (so `"Vault Work"` and `"work vault"` both select
+it), and the `list_vaults` tool reports every name. An unknown name fails with
+`invalid_arguments` and runs nothing. Use `--vaults-dir` or `VAULT_SPIDER_VAULTS_DIR` to keep
+the configs elsewhere. The `--chroma-path` and `--collection` overrides apply to the default
+vault only. Mutations in another vault need that vault open in Obsidian.
+
 ## Agent skill
 
 `skills/vault/` is a skill file for AI agents. It teaches an agent when to search, when to ask
